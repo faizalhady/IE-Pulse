@@ -1,12 +1,11 @@
+import { StatusDot } from '@/components/StatusIndicator';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
+import { bays, currentUser, workcells } from '@/mocks/data';
+import { Activity, BarChart3, ChevronLeft, ChevronRight, Factory, FileText, LineChart, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { BarChart3, Factory, FileText, LineChart, Settings, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
-import { workcells, bays } from '@/mocks/data';
-import { StatusDot } from '@/components/StatusIndicator';
-import { cn } from '@/lib/utils';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { currentUser } from '@/mocks/data';
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -26,7 +25,7 @@ export default function Sidebar() {
         {!collapsed && (
           <span className="flex items-center gap-2 text-sidebar-primary-foreground font-bold text-lg tracking-tight">
             <Activity className="h-5 w-5 text-sidebar-primary" />
-            PULSE
+            IE PULSE
           </span>
         )}
         <button
@@ -43,7 +42,7 @@ export default function Sidebar() {
         {/* Workcells accordion */}
         <Collapsible defaultOpen>
           <CollapsibleTrigger asChild>
-            <SidebarLink to="#" icon={Factory} label="Workcells" collapsed={collapsed} isAccordion />
+            <SidebarLink to="/workcells" icon={Factory} label="Workcells" collapsed={collapsed} />
           </CollapsibleTrigger>
           {!collapsed && (
             <CollapsibleContent className="pl-9 space-y-0.5">
@@ -79,7 +78,7 @@ export default function Sidebar() {
           <div className="flex items-center gap-2 px-2 py-1.5">
             <Avatar className="h-7 w-7">
               <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                {currentUser.name.split(' ').map((n) => n[0]).join('')}
+                {currentUser.name.split(' ').filter(n => /^[a-zA-Z]/.test(n)).slice(0, 2).map(n => n[0].toUpperCase()).join('')}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col leading-none">
@@ -110,14 +109,14 @@ function SidebarLink({
   const props = isAccordion
     ? { className: cn('flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors', collapsed && 'justify-center') }
     : {
-        to,
-        className: ({ isActive }: { isActive: boolean }) =>
-          cn(
-            'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors',
-            isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-2 border-sidebar-primary',
-            collapsed && 'justify-center'
-          ),
-      };
+      to,
+      className: ({ isActive }: { isActive: boolean }) =>
+        cn(
+          'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors',
+          isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-2 border-sidebar-primary',
+          collapsed && 'justify-center'
+        ),
+    };
 
   return (
     // @ts-expect-error dynamic component
