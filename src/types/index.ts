@@ -26,6 +26,8 @@ export interface Bay {
   id: string;
   name: string;
   workcellId: string;
+  plant: string;
+  area: string;
   model: string;
   productivity: number;
   plan: number;
@@ -47,7 +49,7 @@ export interface Workcell {
   status: StatusLevel;
 }
 
-export type UserRole = 'operator' | 'supervisor' | 'admin';
+export type UserRole = 'operator' | 'supervisor' | 'engineer' | 'admin';
 
 export interface User {
   id: string;
