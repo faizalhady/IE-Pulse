@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background -->
+  <rect width="32" height="32" rx="8" fill="#1e40af"/>
+  <!-- Activity/pulse line — matches lucide Activity icon style -->
+  <polyline
+    points="3,16 8,16 11,8 14,22 17,12 20,18 23,16 29,16"
+    stroke="white"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>
