@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useBay } from '@/hooks/useBay';
 import { useMachines } from '@/hooks/useMachines';
+import { workcells } from '@/mocks/data';
 import MachineCard from '@/components/dashboard/MachineCard';
 import { statusText, statusBg } from '@/components/StatusIndicator';
 import { cn } from '@/lib/utils';
@@ -14,6 +15,27 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@
 import { ArrowLeft, Maximize2, ChevronUp, ChevronDown, Search } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import type { Machine, StatusLevel } from '@/types';
+
+const WORKCELL_LOGOS: Record<string, string> = {
+  arista:   '/workcell logo/Arista.png',
+  keysight: '/workcell logo/keyisght.png',
+  aop:      '/workcell logo/aop.png',
+  micron:   '/workcell logo/micron.png',
+};
+
+function WorkcellLogo({ workcellId }: { workcellId: string }) {
+  const [err, setErr] = useState(false);
+  const src = WORKCELL_LOGOS[workcellId];
+  if (!src || err) return null;
+  return (
+    <div
+      className="w-24 h-12 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center ring-1 ring-border"
+      style={{ background: '#ffffff' }}
+    >
+      <img src={src} alt={workcellId} onError={() => setErr(true)} className="w-full h-full object-contain p-1.5" />
+    </div>
+  );
+}
 
 const STATUS_PILL: Record<StatusLevel, { label: string; cls: string }> = {
   optimal: { label: 'Active', cls: 'bg-status-optimal text-white' },
@@ -121,13 +143,25 @@ export default function BayDetail() {
   return (
     <div className="space-y-0">
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-background border-b border-border pb-0">
+      <div className="sticky top-0 z-20 bg-background border-b border-border pb-0 px-6">
         {/* Top row */}
         <div className="flex items-center justify-between px-1 py-2">
-          <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
-          <span className="text-xs text-muted-foreground font-mono">{bay.id}</span>
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <button onClick={() => navigate(-1)} className="flex items-center gap-1 hover:text-foreground transition-colors mr-1">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </button>
+            <span className="text-border">|</span>
+            <Link to="/workcells" className="hover:text-foreground transition-colors">Workcells</Link>
+            <span>/</span>
+            {(() => {
+              const wc = workcells.find(w => w.id === bay.workcellId);
+              return wc ? (
+                <><Link to={`/workcell/${wc.id}`} className="hover:text-foreground transition-colors">{wc.name}</Link><span>/</span></>
+              ) : null;
+            })()}
+            <span className="text-foreground font-medium">{bay.name}</span>
+          </div>
           <Button variant="outline" size="sm" onClick={() => navigate(`/kiosk/${bay.id}`)}>
             <Maximize2 className="h-3.5 w-3.5 mr-1" /> Kiosk
           </Button>
@@ -135,6 +169,7 @@ export default function BayDetail() {
 
         {/* Title row */}
         <div className="flex items-center gap-3 px-1 pb-2">
+          <WorkcellLogo workcellId={bay.workcellId} />
           <h1 className="text-xl font-semibold text-foreground">{bay.name}</h1>
           <Badge className={cn('text-xs', statusBg(bay.status) === 'bg-status-optimal' ? 'bg-status-optimal' : '', {
             'bg-status-optimal text-white': bay.status === 'optimal',
@@ -175,7 +210,7 @@ export default function BayDetail() {
       </div>
 
       {/* Tab content */}
-      <div className="pt-4">
+      <div className="pt-4 px-6 pb-6">
         {activeTab === 'overview' && (
           <div className="space-y-3">
             {/* Controls */}
