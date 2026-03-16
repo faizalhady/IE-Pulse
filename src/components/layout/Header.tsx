@@ -5,7 +5,14 @@ import { Button } from '@/components/ui/button';
 
 export default function Header() {
   const location = useLocation();
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const [dark, setDark] = useState(() => {
+    const stored = localStorage.getItem('pulse-theme');
+    return stored ? stored === 'dark' : true; // default dark
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pulse-theme', dark ? 'dark' : 'light');
+  }, [dark]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
