@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { bays, currentUser, workcells } from '@/mocks/data';
-import { Activity, BarChart3, ChevronLeft, ChevronRight, Factory, FileText, LineChart, Settings } from 'lucide-react';
+import { Activity, BarChart3, ChevronLeft, ChevronRight, Factory, FileText, LineChart, MapPin, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
@@ -41,6 +41,7 @@ export default function Sidebar() {
 
         {/* Workcells accordion */}
         <Collapsible defaultOpen>
+          <SidebarLink to="/plants" icon={MapPin} label="Plants" collapsed={collapsed} />
           <CollapsibleTrigger asChild>
             <SidebarLink to="/workcells" icon={Factory} label="Workcells" collapsed={collapsed} />
           </CollapsibleTrigger>
@@ -68,8 +69,9 @@ export default function Sidebar() {
           )}
         </Collapsible>
 
-        <SidebarLink to="/documents" icon={FileText} label="Documents" collapsed={collapsed} />
+
         <SidebarLink to="/reports" icon={LineChart} label="Reports" collapsed={collapsed} />
+        <SidebarLink to="/documents" icon={FileText} label="Documents" collapsed={collapsed} />
       </nav>
 
       <div className="border-t border-sidebar-border p-2 space-y-1">

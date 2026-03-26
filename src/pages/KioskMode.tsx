@@ -94,7 +94,7 @@ export default function KioskMode() {
       {/* Hero productivity */}
       <div className="flex items-center justify-center gap-16 px-8 py-6 border-b border-white/10">
         <div className="flex items-center gap-6">
-          {WORKCELL_LOGOS[bay.workcellId] && (
+          {/* {WORKCELL_LOGOS[bay.workcellId] && (
             <div
               className="h-20 w-48 rounded-2xl overflow-hidden flex items-center justify-center flex-shrink-0"
               style={{ background: '#ffffff' }}
@@ -105,7 +105,7 @@ export default function KioskMode() {
                 className="w-full h-full object-contain p-3"
               />
             </div>
-          )}
+          )} */}
           <div className="text-center">
             <p className="text-zinc-500 text-xs uppercase tracking-widest mb-1">Productivity</p>
             <p className={cn('text-8xl font-mono font-black tracking-tight', statusText(bay.status))}>

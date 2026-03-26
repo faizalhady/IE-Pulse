@@ -15,6 +15,7 @@ import Documents from "@/pages/Documents";
 import WorkcellsTable from "@/pages/WorkcellsTable";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
+import Plants from "@/pages/Plants";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ function AppShell() {
             <Route path="/bay/:id" element={<BayDetail />} />
             <Route path="/documents" element={<div className="p-6"><Documents /></div>} />
             <Route path="/reports" element={<div className="p-6"><Reports /></div>} />
+            <Route path="/plants" element={<Plants />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
