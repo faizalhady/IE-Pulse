@@ -1,10 +1,9 @@
-import { useState, useMemo } from 'react';
-import { useBays } from '@/hooks/useBay';
-import { totalWip } from '@/mocks/data';
 import BayCard from '@/components/dashboard/BayCard';
 import MachineDrawer from '@/components/dashboard/MachineDrawer';
-import type { Bay } from '@/types';
+import { useBays } from '@/hooks/useBay';
 import { workcells } from '@/mocks/data';
+import type { Bay } from '@/types';
+import { useMemo, useState } from 'react';
 
 const WORKCELL_FILTERS = ['All', ...workcells.map(w => w.name)];
 const SHIFT_FILTERS = ['All Shifts', 'Day', 'Night'];
@@ -21,7 +20,7 @@ export default function GlobalOverview() {
 
   const activeBays = bayList.filter(b => b.status !== 'idle').length;
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
+  const totalWip = bayList.reduce((s, b) => s + b.overallWip, 0);
   const filteredBays = useMemo(() => {
     if (workcellFilter === 'All') return bayList;
     const wc = workcells.find(w => w.name === workcellFilter);
@@ -46,11 +45,10 @@ export default function GlobalOverview() {
           <button
             key={f}
             onClick={() => setWorkcellFilter(f)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-              workcellFilter === f
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-transparent text-muted-foreground border-border hover:border-foreground/30'
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${workcellFilter === f
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-transparent text-muted-foreground border-border hover:border-foreground/30'
+              }`}
           >
             {f}
           </button>
@@ -60,11 +58,10 @@ export default function GlobalOverview() {
           <button
             key={f}
             onClick={() => setShiftFilter(f)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-              shiftFilter === f
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-transparent text-muted-foreground border-border hover:border-foreground/30'
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${shiftFilter === f
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-transparent text-muted-foreground border-border hover:border-foreground/30'
+              }`}
           >
             {f}
           </button>
