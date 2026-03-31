@@ -24,10 +24,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // ---------------------------------------------------------------------------
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Vite will bundle the worker as a URL via the ?url suffix
-// (requires pdfjs-dist ≥ 4.x which ships an ESM worker)
-import PdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-pdfjsLib.GlobalWorkerOptions.workerSrc = PdfjsWorkerUrl;
+// Worker is copied to /public/pdf.worker.min.mjs by setup-pdfjs-worker.js
+// so it is always served as a plain static file in both dev and production.
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 // ---------------------------------------------------------------------------
 // Constants
