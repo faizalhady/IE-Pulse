@@ -23,10 +23,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // We import the ESM build.  The worker must point to the same version bundle.
 // ---------------------------------------------------------------------------
 import * as pdfjsLib from 'pdfjs-dist';
-
-// Worker is copied to /public/pdf.worker.min.mjs by setup-pdfjs-worker.js
-// so it is always served as a plain static file in both dev and production.
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// Import the worker source as a raw string and turn it into a Blob URL.
+// This avoids all fetch / MIME-type / CORS issues on corporate Nginx servers
+// that may block or misserve .mjs files as a dynamic import.
+import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?raw';
+const workerBlob = new Blob([workerSrc], { type: 'application/javascript' });
+pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
 
 // ---------------------------------------------------------------------------
 // Constants
