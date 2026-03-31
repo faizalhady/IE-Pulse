@@ -1,6 +1,7 @@
 import { StatusDot } from '@/components/StatusIndicator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { bays, currentUser, workcells } from '@/mocks/data';
 import { Activity, BarChart3, ChevronLeft, ChevronRight, Factory, FileText, LineChart, MapPin, Settings } from 'lucide-react';
@@ -37,7 +38,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2 space-y-1">
-        <SidebarLink to="/" icon={BarChart3} label="Global Overview" collapsed={collapsed} />
+        <SidebarLink to="/" icon={BarChart3} label="Overview" collapsed={collapsed} />
 
         {/* Workcells accordion */}
         <Collapsible defaultOpen>
@@ -120,11 +121,26 @@ function SidebarLink({
         ),
     };
 
-  return (
-    // @ts-expect-error dynamic component
+  // @ts-expect-error dynamic component
+  const link = (
     <Component {...props}>
       <Icon className="h-4 w-4 shrink-0" />
       {!collapsed && <span>{label}</span>}
     </Component>
+  );
+
+  if (!collapsed) return link;
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex">{link}</div>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="text-xs font-medium">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
