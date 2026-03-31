@@ -1,7 +1,7 @@
-import { useLocation } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { useLocation } from 'react-router-dom';
 
 export default function Header() {
   const location = useLocation();
@@ -33,7 +33,7 @@ export default function Header() {
 }
 
 function getTitle(path: string): string {
-  if (path === '/') return 'Global Overview';
+  if (path === '/') return 'Overview';
   if (path.startsWith('/workcell')) return 'Workcell View';
   if (path.startsWith('/bay')) return 'Bay Detail';
   if (path.startsWith('/reports')) return 'Reports';
