@@ -1,5 +1,6 @@
-import { Factory, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
-import { useState } from 'react';
+import PdfViewer from '@/components/PdfViewer';
+import { ChevronDown, ChevronLeft, Factory, LayoutDashboard, Map } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ComposableMap,
@@ -11,6 +12,23 @@ import {
 // world-atlas countries-50m.json copied to /public by setup-map.js
 // Malaysia id in world-atlas numeric ISO: "458"
 const GEO_URL = '/world-countries.json';
+
+// ─── PDF layout files available in /public/layouts ──────────────────────────
+const LAYOUT_PDFS = [
+  'P1A L1.pdf',
+  'P1B L1.pdf',
+  'P1B L2.pdf',
+  'P1B L3.pdf',
+  'P1C L1.pdf',
+];
+
+// Randomly assign a PDF to each plant (deterministic per plant id)
+function pdfForPlant(plantId: string): string {
+  // Use a simple hash of the plantId to pick a PDF
+  let hash = 0;
+  for (let i = 0; i < plantId.length; i++) hash = (hash * 31 + plantId.charCodeAt(i)) & 0xffff;
+  return LAYOUT_PDFS[hash % LAYOUT_PDFS.length];
+}
 
 // ─── Plants ───────────────────────────────────────────────────────────────────
 // Coordinates: [longitude, latitude] (GeoJSON convention)
@@ -27,6 +45,7 @@ const PLANTS = [
     status: 'operational' as const,
     bays: 4,
     productivity: 87,
+    layouts: ['P1A L1.pdf', 'P1B L1.pdf', 'P1B L2.pdf', 'P1B L3.pdf', 'P1C L1.pdf'],
   },
   {
     id: 'plant-2',
@@ -37,6 +56,7 @@ const PLANTS = [
     status: 'warning' as const,
     bays: 6,
     productivity: 63,
+    layouts: [],
   },
   {
     id: 'batu-kawan',
@@ -47,6 +67,7 @@ const PLANTS = [
     status: 'operational' as const,
     bays: 8,
     productivity: 71,
+    layouts: [],
   },
   {
     id: 'plant-chupping',
@@ -57,6 +78,7 @@ const PLANTS = [
     status: 'operational' as const,
     bays: 5,
     productivity: 79,
+    layouts: [],
   },
   // {
   //   id: 'sg-petani',
@@ -91,13 +113,44 @@ export default function Plants() {
   const navigate = useNavigate();
   const [zoom, setZoom] = useState(1);
   const [hoveredPlant, setHoveredPlant] = useState<string | null>(null);
+  const [selectedPlant, setSelectedPlant] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{
     plant: (typeof PLANTS)[0];
     x: number;
     y: number;
   } | null>(null);
+  const [popupPlant, setPopupPlant] = useState<{
+    plant: (typeof PLANTS)[0];
+    x: number;
+    y: number;
+  } | null>(null);
+  const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
+  const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handlePlantClick = () => navigate('/workcells');
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!layoutDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setLayoutDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [layoutDropdownOpen]);
+
+  const handlePlantClick = (plantId: string, e: React.MouseEvent) => {
+    const plant = PLANTS.find(p => p.id === plantId)!;
+    const svg = (e.currentTarget as Element).closest('svg');
+    const rect = svg?.getBoundingClientRect();
+    setPopupPlant({
+      plant,
+      x: e.clientX - (rect?.left ?? 0),
+      y: e.clientY - (rect?.top ?? 0),
+    });
+    setTooltip(null);
+  };
   const zoomIn = () => setZoom((z) => Math.min(z * 1.5, 12));
   const zoomOut = () => setZoom((z) => Math.max(z / 1.5, 1));
   const reset = () => setZoom(1);
@@ -134,11 +187,102 @@ export default function Plants() {
       {/* ── Main layout ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── Map ── */}
+        {/* ── Main content: Map or PDF viewer ── */}
         <div className="relative flex-1 overflow-hidden bg-[hsl(var(--muted)/0.2)]">
 
+          {/* PDF viewer panel */}
+          {selectedPlant && (() => {
+            const plant = PLANTS.find(p => p.id === selectedPlant)!;
+            const plantLayouts = plant.layouts;
+            const hasLayouts = plantLayouts.length > 0;
+            const hasMultipleLayouts = plantLayouts.length > 1;
+            const activePdf = selectedPdf ?? plantLayouts[0];
+            const layoutName = activePdf?.trim().replace('.pdf', '') ?? '';
+            return (
+              <div className="absolute inset-0 z-10 bg-background flex flex-col">
+                {/* Left — back to map */}
+                <button
+                  onClick={() => { setSelectedPlant(null); setSelectedPdf(null); setLayoutDropdownOpen(false); }}
+                  className="absolute top-3 left-3 z-20 flex items-center justify-center w-9 h-9 rounded-xl bg-card/80 backdrop-blur-sm border border-border shadow-sm hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                {/* Centre — layout name / picker */}
+                <div
+                  ref={dropdownRef}
+                  className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center"
+                >
+                  {hasMultipleLayouts ? (
+                    /* Clickable picker for plants with multiple layouts */
+                    <button
+                      onClick={() => setLayoutDropdownOpen(o => !o)}
+                      className="flex items-center gap-2 bg-card/80 backdrop-blur-sm border border-border shadow-sm rounded-xl px-4 py-1.5 hover:bg-accent transition-colors"
+                    >
+                      <p className="text-xs font-semibold text-foreground leading-tight whitespace-nowrap">
+                        {plant.name} — {layoutName}
+                      </p>
+                      <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${layoutDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  ) : hasLayouts ? (
+                    /* Static pill for single-layout plants */
+                    <div className="flex items-center bg-card/80 backdrop-blur-sm border border-border shadow-sm rounded-xl px-4 py-1.5 pointer-events-none">
+                      <p className="text-xs font-semibold text-foreground leading-tight whitespace-nowrap">
+                        {plant.name} — {layoutName}
+                      </p>
+                    </div>
+                  ) : (
+                    /* No layouts — just show plant name */
+                    <div className="flex items-center bg-card/80 backdrop-blur-sm border border-border shadow-sm rounded-xl px-4 py-1.5 pointer-events-none">
+                      <p className="text-xs font-semibold text-foreground leading-tight whitespace-nowrap">
+                        {plant.name}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Dropdown list — only for multi-layout plants */}
+                  {hasMultipleLayouts && layoutDropdownOpen && (
+                    <div className="absolute top-full mt-1.5 min-w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+                      {plantLayouts.map((pdf) => {
+                        const name = pdf.trim().replace('.pdf', '');
+                        const isActive = pdf === activePdf;
+                        return (
+                          <button
+                            key={pdf}
+                            onClick={() => { setSelectedPdf(pdf); setLayoutDropdownOpen(false); }}
+                            className={`w-full px-4 py-2 text-left text-xs font-medium whitespace-nowrap transition-colors ${isActive
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-foreground hover:bg-accent'
+                              }`}
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* PDF canvas or empty state */}
+                {hasLayouts ? (
+                  <PdfViewer src={`/layouts/${encodeURIComponent(activePdf!)}`} />
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                    <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-muted">
+                      <LayoutDashboard className="h-6 w-6 opacity-40" />
+                    </div>
+                    <p className="text-sm font-medium">No Layouts Available</p>
+                    <p className="text-xs opacity-60">No floor plan files have been added for {plant.name}.</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Map ── */}
+
           {/* Zoom controls */}
-          <div className="absolute top-4 right-4 z-10 flex flex-col gap-1.5">
+          {/* <div className="absolute top-4 right-4 z-10 flex flex-col gap-1.5">
             {[
               { Icon: ZoomIn, fn: zoomIn, title: 'Zoom in' },
               { Icon: ZoomOut, fn: zoomOut, title: 'Zoom out' },
@@ -153,10 +297,61 @@ export default function Plants() {
                 <Icon className="h-4 w-4" />
               </button>
             ))}
-          </div>
+          </div> */}
 
-          {/* Tooltip */}
-          {tooltip && (
+          {/* Plant action popup — shown on map marker click */}
+          {!selectedPlant && popupPlant && (
+            <>
+              {/* backdrop to dismiss */}
+              <div
+                className="absolute inset-0 z-30"
+                onClick={() => setPopupPlant(null)}
+              />
+              <div
+                className="absolute z-40 pointer-events-auto"
+                style={{ left: popupPlant.x + 16, top: popupPlant.y - 16 }}
+              >
+                <div className="bg-card border border-border rounded-2xl shadow-2xl overflow-hidden min-w-[200px]">
+                  {/* Plant name header */}
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ background: STATUS_COLOR[popupPlant.plant.status] }}
+                    />
+                    <span className="text-sm font-semibold text-foreground">
+                      {popupPlant.plant.name}
+                    </span>
+                  </div>
+                  {/* Buttons */}
+                  <div className="flex flex-col p-2 gap-1.5">
+                    <button
+                      onClick={() => {
+                        setSelectedPlant(popupPlant.plant.id);
+                        setPopupPlant(null);
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-accent transition-colors text-left"
+                    >
+                      <LayoutDashboard className="h-4 w-4 text-primary flex-shrink-0" />
+                      View Layouts
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPopupPlant(null);
+                        navigate('/workcells');
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-accent transition-colors text-left"
+                    >
+                      <Map className="h-4 w-4 text-primary flex-shrink-0" />
+                      Plant Details
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Tooltip (only when no plant selected and no popup) */}
+          {!selectedPlant && !popupPlant && tooltip && (
             <div
               className="absolute z-20 pointer-events-none"
               style={{ left: tooltip.x + 14, top: tooltip.y - 12 }}
@@ -187,7 +382,7 @@ export default function Plants() {
             </div>
           )}
 
-          {/*
+          {/* ── Composable map ──
             ── KEY PROJECTION SETTINGS (from react-simple-maps docs) ──
             
             projection: "geoMercator"
@@ -200,6 +395,7 @@ export default function Plants() {
             scale: 8500 — tight enough to read labels, loose enough to see
             the full corridor from Perlis down to just below Batu Kawan.
           */}
+          {/* </ZoomableGroup> already removed above */}
           <ComposableMap
             projection="geoMercator"
             projectionConfig={{
@@ -282,7 +478,7 @@ export default function Plants() {
                 <Marker
                   key={plant.id}
                   coordinates={plant.coordinates}
-                  onClick={() => handlePlantClick()}
+                  onClick={(e) => handlePlantClick(plant.id, e)}
                   onMouseEnter={(e: React.MouseEvent) => {
                     setHoveredPlant(plant.id);
                     const svg = (e.currentTarget as Element).closest('svg');
@@ -395,40 +591,66 @@ export default function Plants() {
         {/* ── Right panel ── */}
         <div className="w-56 border-l border-border bg-card flex flex-col gap-3 p-4 overflow-y-auto flex-shrink-0">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            Plant Locations
+            Plants
           </p>
           {PLANTS.map((plant) => (
             <button
               key={plant.id}
-              onClick={() => handlePlantClick()}
+              onClick={() => { setSelectedPlant(plant.id); setPopupPlant(null); }}
               onMouseEnter={() => setHoveredPlant(plant.id)}
               onMouseLeave={() => setHoveredPlant(null)}
-              className="flex flex-col gap-2 p-3 rounded-xl border border-border bg-background hover:bg-accent transition-colors text-left group w-full"
+              className={`flex flex-col gap-2 p-3 rounded-xl border transition-colors text-left group w-full ${selectedPlant === plant.id
+                ? 'border-primary bg-primary/10'
+                : 'border-border bg-background hover:bg-accent'
+                }`}
             >
               <div className="flex items-center gap-2">
                 <span
                   className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                   style={{ background: STATUS_COLOR[plant.status] }}
                 />
-                <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+                <span className={`text-sm font-semibold leading-tight transition-colors ${selectedPlant === plant.id ? 'text-primary' : 'text-foreground group-hover:text-primary'
+                  }`}>
                   {plant.name}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                <StatCell label="Bays" value={String(plant.bays)} />
-                <StatCell label="Prod." value={`${plant.productivity}%`} />
+              <div className="flex items-center justify-between">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                  <StatCell label="Bays" value={String(plant.bays)} />
+                  <StatCell label="Prod." value={`${plant.productivity}%`} />
+                </div>
+                <div
+                  className="text-[10px] font-semibold capitalize px-2 py-0.5 rounded-md"
+                  style={{
+                    background: `${STATUS_COLOR[plant.status]}1a`,
+                    color: STATUS_COLOR[plant.status],
+                  }}
+                >
+                  {plant.status}
+                </div>
               </div>
-              <div
-                className="text-[10px] font-semibold capitalize px-2 py-0.5 rounded-md w-fit"
-                style={{
-                  background: `${STATUS_COLOR[plant.status]}1a`,
-                  color: STATUS_COLOR[plant.status],
-                }}
-              >
-                {plant.status}
-              </div>
-              <div className="text-[10px] text-muted-foreground group-hover:text-primary transition-colors">
-                View workcell →
+              {/* Footer action buttons */}
+              <div className="flex gap-1.5 pt-1 mt-0.5 border-t border-border">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedPlant(plant.id);
+                    setPopupPlant(null);
+                  }}
+                  className="flex-1 py-1 rounded-md text-[11px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                >
+                  Layout
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPopupPlant(null);
+                    navigate('/workcells');
+                  }}
+                  className="flex-1 py-1 rounded-md text-[11px] font-medium bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  Details
+                </button>
               </div>
             </button>
           ))}
