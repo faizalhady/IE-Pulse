@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useBay } from '@/hooks/useBay';
-import { useMachines } from '@/hooks/useMachines';
-import { workcells } from '@/mocks/data';
+import { useProductionSummary } from '@/hooks/useMesData';
+import { generateMachines, generateHourlyData, generateDowntimeLog, operators } from '@/mocks/data';
 import MachineCard from '@/components/dashboard/MachineCard';
 import { statusText, statusBg } from '@/components/StatusIndicator';
 import { cn } from '@/lib/utils';
@@ -82,10 +81,62 @@ function PlanActualBar({ plan, actual, status }: { plan: number; actual: number;
 }
 
 export default function BayDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();   // format: WORKCELL__BAY
   const navigate = useNavigate();
-  const { data: bay, isLoading } = useBay(id!);
-  const { data: machines = [] } = useMachines(id!);
+
+  // Parse workcell + bay from compound ID
+  const [workcellName, bayName] = useMemo(() => {
+    if (!id) return ['', ''];
+    const parts = decodeURIComponent(id).split('__');
+    return [parts[0] ?? '', parts[1] ?? ''];
+  }, [id]);
+
+  const { data: apiProduction, loading: apiLoading } = useProductionSummary();
+
+  // Find matching production row
+  const apiRow = useMemo(
+    () => apiProduction?.find(p => p.workcell_name === workcellName && p.bay === bayName) ?? null,
+    [apiProduction, workcellName, bayName]
+  );
+
+  // Build a synthetic bay object:
+  // ─ Real API data: productivity, plan, cumm, delta, overallWip, pendingWip
+  // ─ Mock generators (seeded by bayName so same bay = same data every visit):
+  //   machines, hourlyData, downtimeLog, operatorOnDuty
+  const bay = useMemo(() => {
+    if (!apiRow) return null;
+    const pct = apiRow.total_steps
+      ? Math.min(100, Math.round((apiRow.total_output / apiRow.total_steps) * 100))
+      : 0;
+    const seed = `${workcellName}__${bayName}`;
+    // Hash seed to a stable operator index
+    let opHash = 0;
+    for (let i = 0; i < seed.length; i++) opHash = (opHash * 31 + seed.charCodeAt(i)) & 0xffff;
+    return {
+      id,
+      name:           bayName,
+      workcellId:     workcellName.toLowerCase(),
+      plant:          (apiRow as any).plant ?? 'P1',
+      area:           bayName,
+      model:          'SMT Line',
+      productivity:   pct,
+      status:         pct > 85 ? 'optimal' : pct >= 50 ? 'warning' : pct > 0 ? 'critical' : 'idle',
+      // ─ Real numbers from API ─
+      plan:           apiRow.total_steps   ?? 0,
+      cumm:           apiRow.total_output  ?? 0,
+      delta:          (apiRow.total_output ?? 0) - (apiRow.total_steps ?? 0),
+      overallWip:     apiRow.total_assemblies ?? 0,
+      pendingWip:     apiRow.total_batches    ?? 0,
+      // ─ Mock-generated but deterministic per bay ─
+      operatorOnDuty: operators[opHash % operators.length],
+      hourlyData:     generateHourlyData(seed),
+      downtimeLog:    generateDowntimeLog(seed),
+      machines:       generateMachines(seed),
+    };
+  }, [apiRow, id, bayName, workcellName]);
+
+  const isLoading = apiLoading && !bay;
+  const machines = (bay as any)?.machines ?? [];
 
   const [activeTab, setActiveTab] = useState<'overview' | 'downtime' | 'history' | 'machines'>('overview');
   const [search, setSearch] = useState('');
@@ -154,12 +205,9 @@ export default function BayDetail() {
             <span className="text-border">|</span>
             <Link to="/workcells" className="hover:text-foreground transition-colors">Workcells</Link>
             <span>/</span>
-            {(() => {
-              const wc = workcells.find(w => w.id === bay.workcellId);
-              return wc ? (
-                <><Link to={`/workcell/${wc.id}`} className="hover:text-foreground transition-colors">{wc.name}</Link><span>/</span></>
-              ) : null;
-            })()}
+            {workcellName && (
+              <><Link to={`/workcell/${encodeURIComponent(workcellName)}`} className="hover:text-foreground transition-colors">{workcellName}</Link><span>/</span></>
+            )}
             <span className="text-foreground font-medium">{bay.name}</span>
           </div>
           <Button variant="outline" size="sm" onClick={() => navigate(`/kiosk/${bay.id}`)}>
