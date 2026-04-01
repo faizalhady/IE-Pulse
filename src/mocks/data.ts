@@ -7,42 +7,55 @@ const MACHINE_NAMES = [
   'HOUSING ASY', 'POWER CHECK', 'DC COMBINE', 'SMSR TEST', 'HS TEST',
 ];
 
-function generateHourlyData(): HourlyRecord[] {
+// Simple deterministic pseudo-random seeded by a string
+function seededRand(seed: string, index: number): number {
+  let h = index + 1;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 0x9e3779b9);
+    h ^= h >>> 16;
+  }
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+export function generateHourlyData(seed = 'default'): HourlyRecord[] {
   const hours: HourlyRecord[] = [];
   for (let i = 11; i >= 0; i--) {
     const h = new Date();
     h.setHours(h.getHours() - i);
-    const plan = Math.floor(Math.random() * 20) + 30;
-    const actual = Math.floor(plan * (0.5 + Math.random() * 0.6));
+    const plan = Math.floor(seededRand(seed, i * 2) * 20) + 30;
+    const actual = Math.floor(plan * (0.5 + seededRand(seed, i * 2 + 1) * 0.6));
     hours.push({ hour: `${h.getHours()}:00`, plan, actual });
   }
   return hours;
 }
 
-function generateMachines(bayId: string): Machine[] {
+export function generateMachines(bayId: string): Machine[] {
   return MACHINE_NAMES.map((name, i) => {
-    const uph = Math.floor(Math.random() * 100);
+    const uph = Math.floor(seededRand(bayId, i * 3) * 100);
     return {
       id: `${bayId}-m${i}`,
       name,
       bayId,
       uph,
       status: getStatusLevel(uph),
-      wipCount: Math.floor(Math.random() * 50),
-      sparklineData: Array.from({ length: 12 }, () => Math.floor(Math.random() * 100)),
+      wipCount: Math.floor(seededRand(bayId, i * 3 + 1) * 50),
+      sparklineData: Array.from({ length: 12 }, (_, j) =>
+        Math.floor(seededRand(bayId + name, j) * 100)
+      ),
     };
   });
 }
 
-function generateDowntimeLog(): DowntimeEntry[] {
+export function generateDowntimeLog(seed = 'default'): DowntimeEntry[] {
+  const reasons = ['Feeder jam', 'Nozzle change', 'PCB misfeed', 'Conveyor stop', 'Vision error'];
   return [
-    { timestamp: '08:14', duration: '12m', reason: 'Feeder jam' },
-    { timestamp: '10:32', duration: '5m', reason: 'Nozzle change' },
-    { timestamp: '13:01', duration: '22m', reason: 'PCB misfeed' },
+    { timestamp: '08:14', duration: `${Math.floor(seededRand(seed, 0) * 20 + 2)}m`, reason: reasons[Math.floor(seededRand(seed, 1) * reasons.length)] },
+    { timestamp: '10:32', duration: `${Math.floor(seededRand(seed, 2) * 10 + 1)}m`, reason: reasons[Math.floor(seededRand(seed, 3) * reasons.length)] },
+    { timestamp: '13:01', duration: `${Math.floor(seededRand(seed, 4) * 30 + 5)}m`, reason: reasons[Math.floor(seededRand(seed, 5) * reasons.length)] },
   ];
 }
 
-const operators = ['J. Santos', 'M. Rivera', 'K. Chen', 'A. Patel'];
+export const operators = ['J. Santos', 'M. Rivera', 'K. Chen', 'A. Patel'];
 
 export const bays: Bay[] = [
   { id: 'bay-211-top', name: 'Bay 211 AOI_TOP', workcellId: 'arista', plant: 'Plant 1', area: 'P1A', model: 'DR4 400G', productivity: 89.4, plan: 50, cumm: 35, delta: -15, status: getStatusLevel(89.4), hourlyData: generateHourlyData(), machines: generateMachines('bay-211-top'), overallWip: 380, pendingWip: 42, downtimeLog: generateDowntimeLog(), operatorOnDuty: operators[0] },
