@@ -39,8 +39,9 @@ const PLANTS = [
   {
     id: 'plant-1',
     name: 'Plant 1',
+    plantCode: 'P1',
     coordinates: [100.29174229999985, 5.303891949783533] as [number, number],
-    labelOffset: [-110, -55] as [number, number], // branch left
+    labelOffset: [-110, -55] as [number, number],
     workcellId: 'arista',
     status: 'operational' as const,
     bays: 4,
@@ -50,8 +51,9 @@ const PLANTS = [
   {
     id: 'plant-2',
     name: 'Plant 2',
+    plantCode: 'P2',
     coordinates: [100.29589037997687, 5.320837923159554] as [number, number],
-    labelOffset: [110, -55] as [number, number],  // branch right
+    labelOffset: [110, -55] as [number, number],
     workcellId: 'keysight',
     status: 'warning' as const,
     bays: 6,
@@ -61,8 +63,9 @@ const PLANTS = [
   {
     id: 'batu-kawan',
     name: 'Batu Kawan',
+    plantCode: 'BK',
     coordinates: [100.43451413785162, 5.218109834099721] as [number, number],
-    labelOffset: [110, -45] as [number, number],  // branch right
+    labelOffset: [110, -45] as [number, number],
     workcellId: 'micron',
     status: 'operational' as const,
     bays: 8,
@@ -72,8 +75,9 @@ const PLANTS = [
   {
     id: 'plant-chupping',
     name: 'Chuping',
+    plantCode: 'P3',
     coordinates: [100.28478092859105, 6.604283113109734] as [number, number],
-    labelOffset: [110, -45] as [number, number],  // branch right
+    labelOffset: [110, -45] as [number, number],
     workcellId: 'chupping',
     status: 'operational' as const,
     bays: 5,
@@ -337,7 +341,7 @@ export default function Plants() {
                     <button
                       onClick={() => {
                         setPopupPlant(null);
-                        navigate('/workcells');
+                        navigate(`/workcells?plant=${popupPlant.plant.plantCode}`);
                       }}
                       className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-accent transition-colors text-left"
                     >
@@ -645,7 +649,7 @@ export default function Plants() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setPopupPlant(null);
-                    navigate('/workcells');
+                    navigate(`/workcells?plant=${plant.plantCode}`);
                   }}
                   className="flex-1 py-1 rounded-md text-[11px] font-medium bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                 >
