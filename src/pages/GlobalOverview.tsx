@@ -1,7 +1,6 @@
 import BayCard from '@/components/dashboard/BayCard';
 import MachineDrawer from '@/components/dashboard/MachineDrawer';
-import { useBays } from '@/hooks/useBay';
-import { workcells } from '@/mocks/data';
+import { bays, workcells } from '@/mocks/data';
 import type { Bay } from '@/types';
 import { useMemo, useState } from 'react';
 
@@ -9,23 +8,26 @@ const WORKCELL_FILTERS = ['All', ...workcells.map(w => w.name)];
 const SHIFT_FILTERS = ['All Shifts', 'Day', 'Night'];
 
 export default function GlobalOverview() {
-  const { data: bayList = [] } = useBays();
+  // Still on mock data — API migration TBD
+  const bayList: Bay[] = bays as unknown as Bay[];
+
   const [selectedBay, setSelectedBay] = useState<Bay | null>(null);
   const [workcellFilter, setWorkcellFilter] = useState('All');
   const [shiftFilter, setShiftFilter] = useState('All Shifts');
 
   const avgProductivity = bayList.length
-    ? (bayList.reduce((s, b) => s + b.productivity, 0) / bayList.length).toFixed(1)
+    ? (bayList.reduce((s, b) => s + (b as any).productivity, 0) / bayList.length).toFixed(1)
     : '0';
 
   const activeBays = bayList.filter(b => b.status !== 'idle').length;
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const totalWip = bayList.reduce((s, b) => s + b.overallWip, 0);
+  const totalWip = bayList.reduce((s, b) => s + ((b as any).overallWip ?? 0), 0);
+
   const filteredBays = useMemo(() => {
     if (workcellFilter === 'All') return bayList;
     const wc = workcells.find(w => w.name === workcellFilter);
     if (!wc) return bayList;
-    return bayList.filter(b => wc.bayIds.includes(b.id));
+    return bayList.filter(b => (wc as any).bayIds?.includes((b as any).id));
   }, [bayList, workcellFilter]);
 
   return (
@@ -71,7 +73,7 @@ export default function GlobalOverview() {
       {/* Bay cards bento grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filteredBays.map((bay) => (
-          <BayCard key={bay.id} bay={bay} onClick={() => setSelectedBay(bay)} />
+          <BayCard key={(bay as any).id} bay={bay} onClick={() => setSelectedBay(bay)} />
         ))}
       </div>
 
