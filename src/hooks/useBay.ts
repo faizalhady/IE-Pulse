@@ -1,16 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
-import { fetchBay, fetchBays } from '@/lib/api';
-
-export function useBay(id: string) {
-  return useQuery({
-    queryKey: ['bay', id],
-    queryFn: () => fetchBay(id),
-  });
-}
-
-export function useBays() {
-  return useQuery({
-    queryKey: ['bays'],
-    queryFn: fetchBays,
-  });
-}
+// useBay.ts — re-exports from useMesData so any page importing useBay still works.
+// fetchBay / fetchBays never existed in api.ts — this replaces the stale stub.
+export { useWorkcellBays as useBays, useProductionByBay as useBay } from './useMesData';
