@@ -165,11 +165,13 @@ export const api = {
     },
   },
 
-  assemblies: {
-    /** All assemblies for a workcell */
-    list: (workcell_id: number, offset = 0) =>
-      get<ApiAssembly[]>(`/assemblies?workcell_id=${workcell_id}&offset=${offset}`),
-  },
+assemblies: {
+  /** * Fetches assemblies for a workcell. 
+   * Passing limit='all' triggers the 999999 limit in your Elysia backend.
+   */
+  list: (workcell_id: number, limit: string | number = 'all', offset = 0) =>
+    get<ApiAssembly[]>(`/assemblies?workcell_id=${workcell_id}&limit=${limit}&offset=${offset}`),
+},
 
   locations: {
     /** All plants with step counts */
