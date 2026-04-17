@@ -1,5 +1,5 @@
 import PdfViewer from '@/components/PdfViewer';
-import { ChevronDown, ChevronLeft, Factory, LayoutDashboard, Map } from 'lucide-react';
+import { ChevronDown, ChevronLeft, LayoutDashboard, Map } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -165,9 +165,9 @@ export default function Plants() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10">
+          {/* <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10">
             <Factory className="h-5 w-5 text-primary" />
-          </div>
+          </div> */}
           <div>
             <h1 className="text-xl font-semibold text-foreground">Plants</h1>
             <p className="text-xs text-muted-foreground">
@@ -330,8 +330,8 @@ export default function Plants() {
                   <div className="flex flex-col p-2 gap-1.5">
                     <button
                       onClick={() => {
-                        setSelectedPlant(popupPlant.plant.id);
                         setPopupPlant(null);
+                        navigate(`/floor-map?from=plants`);
                       }}
                       className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-accent transition-colors text-left"
                     >
@@ -600,7 +600,11 @@ export default function Plants() {
           {PLANTS.map((plant) => (
             <button
               key={plant.id}
-              onClick={() => { setSelectedPlant(plant.id); setPopupPlant(null); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setPopupPlant(null);
+                navigate(`/floor-map?from=plants`);
+              }}
               onMouseEnter={() => setHoveredPlant(plant.id)}
               onMouseLeave={() => setHoveredPlant(null)}
               className={`flex flex-col gap-2 p-3 rounded-xl border transition-colors text-left group w-full ${selectedPlant === plant.id
@@ -638,8 +642,8 @@ export default function Plants() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedPlant(plant.id);
                     setPopupPlant(null);
+                    navigate(`/floor-map?from=plants`);
                   }}
                   className="flex-1 py-1 rounded-md text-[11px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                 >
