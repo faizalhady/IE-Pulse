@@ -16,6 +16,7 @@ import WorkcellsTable from "@/pages/WorkcellsTable";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import Plants from "@/pages/Plants";
+import FloorMap from "@/pages/FloorMap";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ function AppShell() {
             <Route path="/documents" element={<div className="p-6"><Documents /></div>} />
             <Route path="/reports" element={<div className="p-6"><Reports /></div>} />
             <Route path="/plants" element={<Plants />} />
+            <Route path="/floor-map" element={<FloorMap />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
