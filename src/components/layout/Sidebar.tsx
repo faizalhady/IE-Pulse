@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils';
 import { currentUser } from '@/mocks/data';
 import {
   Activity, BarChart3, ChevronDown, ChevronLeft,
-  ChevronRight, Factory, FileText, LineChart, MapPin, Settings,
+  ChevronRight, Factory, FileText,
+  LineChart, MapPin, Settings
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -56,7 +57,8 @@ export default function Sidebar() {
       {/* ── Nav ── */}
       <nav className="flex-1 overflow-y-auto py-2 space-y-0.5">
         <SidebarLink to="/" icon={BarChart3} label="Overview" collapsed={collapsed} />
-        <SidebarLink to="/plants" icon={MapPin} label="Plants" collapsed={collapsed} />
+        <SidebarLink to="/plants" icon={MapPin} label="Plants / Layouts" collapsed={collapsed} />
+        {/* <SidebarLink to="/floor-map" icon={Grid2x2} label="Floor Map" collapsed={collapsed} /> */}
 
         {/* ── Workcells ──
              Collapsed → plain SidebarLink (no Collapsible, no wrappers)
