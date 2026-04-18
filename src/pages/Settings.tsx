@@ -77,17 +77,12 @@ export default function Settings() {
     <div className="space-y-0">
 
       {/* ── Sticky header — identical structure to BayDetail ── */}
-      <div className="sticky top-0 z-20 bg-background border-b border-border px-6 ">
+      <div className="sticky top-0 z-20 bg-background border-b border-border px-6">
         <div className="pt-4 pb-3">
-          <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage your preferences, roles, and system configuration</p>
+          <h1 className="text-xl font-semibold text-foreground">Settings</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Manage your preferences, roles, and system configuration</p>
         </div>
-
-        {/* separator — identical to BayDetail stats row border */}
-        <div className="border-b border-border" />
-
-        {/* Tab bar */}
-        <div className="flex gap-0">
+        <div className="flex gap-0 -mb-px">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -107,7 +102,7 @@ export default function Settings() {
       </div>
 
       {/* ── Tab content — px-6 pb-8 same as BayDetail content area ── */}
-      <div className="px-6 pt-6 mt-6 pb-8 space-y-4">
+      <div className="px-6 pt-5 pb-8 space-y-4">
 
         {/* ── PROFILE ── */}
         {tab === 'profile' && (

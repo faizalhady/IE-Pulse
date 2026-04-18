@@ -46,43 +46,34 @@ export default function Documents() {
   });
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Documents & SOPs</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Standard operating procedures, training materials, and reference documents</p>
+    <div className="space-y-0">
+      <div className="sticky top-0 z-20 bg-background border-b border-border px-6">
+        <div className="pt-4 pb-3">
+          <h1 className="text-xl font-semibold text-foreground">Documents & SOPs</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Standard operating procedures, training materials, and reference documents</p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Filters — in body */}
+      <div className="px-6 pt-4 pb-3 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search documents…"
-            className="pl-8 h-9"
-          />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search documents…" className="pl-8 h-9" />
         </div>
         <div className="flex flex-wrap gap-2">
           {CATEGORIES.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setCategory(key)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                category === key
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
+            <button key={key} onClick={() => setCategory(key)}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                category === key ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
               )}
-            >
-              <Icon className="w-3 h-3" />
-              {label}
-            </button>
+            ><Icon className="w-3 h-3" />{label}</button>
           ))}
         </div>
         <span className="text-xs text-muted-foreground ml-auto">{filtered.length} documents</span>
       </div>
 
-      <div className="rounded-xl border border-border overflow-hidden bg-card">
+      <div className="px-6 pb-8">
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
         {filtered.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground text-sm">No documents found</div>
         ) : filtered.map(doc => (
@@ -111,6 +102,7 @@ export default function Documents() {
             <ChevronRight className="w-4 h-4 text-muted-foreground/30 flex-shrink-0" />
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

@@ -169,8 +169,8 @@ export default function Plants() {
             <Factory className="h-5 w-5 text-primary" />
           </div> */}
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Plants</h1>
-            <p className="text-xs text-muted-foreground">
+            <h1 className="text-2xl font-bold text-foreground">Plants</h1>
+            <p className="text-sm text-muted-foreground">
               Map view of plants — Click a plant marker to view workcell
             </p>
           </div>

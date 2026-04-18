@@ -58,34 +58,16 @@ export default function Reports() {
     <div className="space-y-0">
       {/* Sticky header */}
       <div className="sticky top-0 z-20 bg-background border-b border-border px-6 pb-0">
-        <div className="pb-3">
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Reports & History</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">Production analytics, downtime logs, and trend analysis</p>
-            </div>
-            <button className="flex items-center gap-1.5 text-xs border border-border px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all">
-              <Download className="w-3.5 h-3.5" /> Export
-            </button>
+        <div className="pt-4 pb-3 flex items-start justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Reports & History</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Production analytics, downtime logs, and trend analysis</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-            {RANGES.map(r => (
-              <button key={r} onClick={() => setRange(r)}
-                className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all',
-                  range === r ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:text-foreground'
-                )}>{r}</button>
-            ))}
-            <span className="w-px h-4 bg-border mx-1" />
-            {SHIFTS.map(s => (
-              <button key={s} onClick={() => setShift(s)}
-                className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all',
-                  shift === s ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:text-foreground'
-                )}>{s}</button>
-            ))}
-          </div>
+          <button className="flex items-center gap-1.5 text-xs border border-border px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all">
+            <Download className="w-3.5 h-3.5" /> Export
+          </button>
         </div>
-        <div className="flex gap-0">
+        <div className="flex gap-0 -mb-px">
           {TABS.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={cn('px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
@@ -93,6 +75,24 @@ export default function Reports() {
               )}>{t.label}</button>
           ))}
         </div>
+      </div>
+
+      {/* Filters — in body */}
+      <div className="px-6 pt-4 pb-3 flex flex-wrap items-center gap-2">
+        <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+        {RANGES.map(r => (
+          <button key={r} onClick={() => setRange(r)}
+            className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all',
+              range === r ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:text-foreground'
+            )}>{r}</button>
+        ))}
+        <span className="w-px h-4 bg-border mx-1" />
+        {SHIFTS.map(s => (
+          <button key={s} onClick={() => setShift(s)}
+            className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all',
+              shift === s ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:text-foreground'
+            )}>{s}</button>
+        ))}
       </div>
 
       <div className="px-6 pt-5 pb-8 space-y-5">

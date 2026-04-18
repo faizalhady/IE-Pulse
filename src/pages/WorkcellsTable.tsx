@@ -203,73 +203,53 @@ export default function WorkcellsTable() {
     <div className="space-y-0">
 
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-background border-b border-border px-6 mb-6">
-        <div className="pt-4 pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Workcells</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {loading ? 'Loading live data…' : wcError ? 'Using cached data — API unreachable' : 'List of workcells with real-time status and productivity'}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              {wcError && (
-                <span className="flex items-center gap-1.5 text-xs text-destructive">
-                  <WifiOff className="h-3.5 w-3.5" /> API offline
-                </span>
-              )}
-              <button
-                onClick={refetch}
-                disabled={loading}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-                Refresh
-              </button>
-              <div className="hidden md:flex items-center gap-6 text-sm font-mono">
-                <span className="text-muted-foreground">Active <span className="text-foreground font-semibold">{totalActive}/{rows.length}</span></span>
-                <span className="text-muted-foreground">Avg Prod. <span className="text-foreground font-semibold">{avgAll}%</span></span>
-                <span className="text-muted-foreground">Output <span className="text-foreground font-semibold">{totalOutput.toLocaleString()}</span></span>
-              </div>
+      <div className="sticky top-0 z-20 bg-background border-b border-border px-6">
+        <div className="pt-4 pb-3 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Workcells</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {loading ? 'Loading…' : wcError ? 'API unreachable' : 'Real-time status and productivity'}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            {wcError && <span className="flex items-center gap-1.5 text-xs text-destructive"><WifiOff className="h-3.5 w-3.5" /> API offline</span>}
+            <button onClick={refetch} disabled={loading} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40">
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+            </button>
+            <div className="hidden md:flex items-center gap-6 text-sm font-mono">
+              <span className="text-muted-foreground">Active <span className="text-foreground font-semibold">{totalActive}/{rows.length}</span></span>
+              <span className="text-muted-foreground">Avg Prod. <span className="text-foreground font-semibold">{avgAll}%</span></span>
+              <span className="text-muted-foreground">Output <span className="text-foreground font-semibold">{totalOutput.toLocaleString()}</span></span>
             </div>
           </div>
-        </div>
-
-        {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-3 pb-3">
-          <div className="relative min-w-[200px] max-w-xs flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search workcells…"
-              className="pl-8 h-9"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {PLANT_OPTIONS.map(p => (
-              <button
-                key={p.value}
-                onClick={() => setPlantFilter(p.value)}
-                className={cn(
-                  'px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                  plantFilter === p.value
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
-                )}
-              >{p.label}</button>
-            ))}
-          </div>
-          <span className="text-xs text-muted-foreground ml-auto">{filtered.length} workcells</span>
         </div>
       </div>
 
       {/* Loading skeleton */}
       {loading && rows.length === 0 && (
-        <div className="px-6 pb-8 space-y-2">
+        <div className="px-6 pb-4 space-y-2">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-muted/40 animate-pulse" />
           ))}
+        </div>
+      )}
+
+      {/* Filters */}
+      {(!loading || rows.length > 0) && (
+        <div className="px-6 pt-4 pb-3 flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[200px] max-w-xs flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search workcells…" className="pl-8 h-9" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {PLANT_OPTIONS.map(p => (
+              <button key={p.value} onClick={() => setPlantFilter(p.value)}
+                className={cn('px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                  plantFilter === p.value ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
+                )}>{p.label}</button>
+            ))}
+          </div>
+          <span className="text-xs text-muted-foreground ml-auto">{filtered.length} workcells</span>
         </div>
       )}
 

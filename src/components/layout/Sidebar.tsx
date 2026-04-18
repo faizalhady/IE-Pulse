@@ -7,10 +7,10 @@ import { cn } from '@/lib/utils';
 import { currentUser } from '@/mocks/data';
 import {
   Activity, BarChart3, ChevronDown, ChevronLeft,
-  ChevronRight, Factory, FileText,
-  LineChart, MapPin, Settings
+  ChevronRight, Database, Factory, FileText,
+  LineChart, MapPin, Moon, Settings, Sun, TrendingUp
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
 export default function Sidebar() {
@@ -18,6 +18,16 @@ export default function Sidebar() {
   const [workcellsOpen, setWorkcellsOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
+
+  const [dark, setDark] = useState(() => {
+    const stored = localStorage.getItem('pulse-theme');
+    return stored ? stored === 'dark' : true;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('pulse-theme', dark ? 'dark' : 'light');
+  }, [dark]);
 
   const { data: apiWorkcells } = useWorkcells();
   const { data: apiProduction } = useProductionSummary();
@@ -115,11 +125,41 @@ export default function Sidebar() {
         }
 
         <SidebarLink to="/reports" icon={LineChart} label="Reports" collapsed={collapsed} />
+        <SidebarLink to="/ole" icon={TrendingUp} label="OLE Analyzer" collapsed={collapsed} />
         <SidebarLink to="/documents" icon={FileText} label="Documents" collapsed={collapsed} />
+        <SidebarLink to="/ole-mart-api" icon={Database} label="API Test" collapsed={collapsed} />
       </nav>
 
       {/* ── Footer ── */}
       <div className="border-t border-sidebar-border p-2 space-y-1">
+        {/* Dark mode toggle */}
+        {collapsed ? (
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex">
+                  <button
+                    onClick={() => setDark(!dark)}
+                    className="flex w-full items-center justify-center rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                  >
+                    {dark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                  </button>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs font-medium">
+                {dark ? 'Light mode' : 'Dark mode'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <button
+            onClick={() => setDark(!dark)}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            {dark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+            <span>{dark ? 'Light mode' : 'Dark mode'}</span>
+          </button>
+        )}
         <SidebarLink to="/settings" icon={Settings} label="Settings" collapsed={collapsed} />
         {!collapsed && (
           <div className="flex items-center gap-2 px-2 py-1.5">
