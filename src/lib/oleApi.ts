@@ -1,0 +1,180 @@
+/**
+ * oleApi.ts — typed client for the OLE Analyzer backend
+ *
+ * All calls go to /ole-api/* which Vite proxies → http://localhost:8000 in dev.
+ *
+ * Usage:
+ *   import { oleApi } from '@/lib/oleApi';
+ *   const summary = await oleApi.ole.summary();
+ */
+
+const BASE = '/ole-api';
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`OLE API ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+// ─── Response shapes (mirrors FastAPI responses) ──────────────────────────────
+
+export interface OleWorkcellConfig {
+  workcell:    string;
+  scan_stage:  string;
+  stage_label: string;
+  smh_column:  string;
+}
+
+export interface OleResult {
+  workcell:               string;
+  date:                   string;
+  shift:                  number;
+  stage_label:            string;
+  scan_stage:             string;
+  assembly_count:         number;
+  total_qty:              number;
+  effective_output_smh:   number;
+  qty_missing_smh:        number;
+  assemblies_missing_smh: number;
+  hc_direct:              number;
+  tph_direct:             number;
+  hc_support:             number;
+  tph_support:            number;
+  total_input_hours:      number;
+  ole_pct:                number | null;
+  data_quality:           'OK' | 'PARTIAL_SMH' | 'NO_INPUT_HOURS' | 'NO_OUTPUT_SMH';
+  smh_coverage_pct:       number | null;
+}
+
+export interface OleSummary {
+  workcell:          string;
+  stage_label:       string;
+  scan_stage:        string;
+  total_shifts:      number;
+  avg_ole_pct:       number | null;
+  min_ole_pct:       number | null;
+  max_ole_pct:       number | null;
+  latest_date:       string;
+  total_qty:         number;
+  total_output_smh:  number;
+  total_input_hours: number;
+  flagged_shifts:    number;
+}
+
+export interface OleProduction {
+  site:         string;
+  workcell:     string;
+  sub_workcell: string;
+  assembly:     string;
+  qty:          number;
+  date:         string;
+  shift:        number;
+}
+
+export interface OlePaidHours {
+  site:               string;
+  workcell:           string;
+  sub_workcell:       string;
+  thc_direct:         number;
+  tph_direct:         number;
+  thc_support:        number;
+  tph_support:        number;
+  total_input_hours:  number;
+  date:               string;
+  shift:              number;
+}
+
+export interface SmhLookup {
+  workcell:     string;
+  assembly:     string;
+  smh_value:    number;
+  scan_stage:   string;
+  stage_label:  string;
+  last_updated: string;
+}
+
+export interface SmhStatus {
+  workcell:          string;
+  assembly:          string;
+  smh_value:         number;
+  total_qty_produced: number;
+  first_seen_date:   string;
+  last_seen_date:    string;
+  active_days:       number;
+  smh_status:        'OK' | 'MISSING_SMH' | 'NOT_IN_SMH_DB';
+}
+
+export interface OleHealth {
+  status:     string;
+  mart_ready: boolean;
+  timestamp:  string;
+  mart_files: Record<string, boolean>;
+}
+
+// ─── API client ───────────────────────────────────────────────────────────────
+
+export const oleApi = {
+  health: {
+    check: () => get<OleHealth>('/api/health'),
+  },
+
+  workcells: {
+    list: () => get<OleWorkcellConfig[]>('/api/workcells'),
+  },
+
+  ole: {
+    /** Full OLE results — filterable by workcell, date range, shift */
+    list: (params?: { workcell?: string; date_from?: string; date_to?: string; shift?: number }) => {
+      const p = new URLSearchParams();
+      if (params?.workcell)   p.set('workcell',  params.workcell);
+      if (params?.date_from)  p.set('date_from', params.date_from);
+      if (params?.date_to)    p.set('date_to',   params.date_to);
+      if (params?.shift)      p.set('shift',     String(params.shift));
+      return get<OleResult[]>(`/api/ole${p.toString() ? `?${p}` : ''}`);
+    },
+
+    /** Per-workcell OLE summary */
+    summary: () => get<OleSummary[]>('/api/ole/summary'),
+  },
+
+  production: {
+    list: (params?: { workcell?: string; date_from?: string; date_to?: string }) => {
+      const p = new URLSearchParams();
+      if (params?.workcell)  p.set('workcell',  params.workcell);
+      if (params?.date_from) p.set('date_from', params.date_from);
+      if (params?.date_to)   p.set('date_to',   params.date_to);
+      return get<OleProduction[]>(`/api/production${p.toString() ? `?${p}` : ''}`);
+    },
+  },
+
+  paidHours: {
+    list: (params?: { workcell?: string; date_from?: string; date_to?: string }) => {
+      const p = new URLSearchParams();
+      if (params?.workcell)  p.set('workcell',  params.workcell);
+      if (params?.date_from) p.set('date_from', params.date_from);
+      if (params?.date_to)   p.set('date_to',   params.date_to);
+      return get<OlePaidHours[]>(`/api/paid-hours${p.toString() ? `?${p}` : ''}`);
+    },
+  },
+
+  smh: {
+    list: (params?: { workcell?: string; assembly?: string }) => {
+      const p = new URLSearchParams();
+      if (params?.workcell) p.set('workcell', params.workcell);
+      if (params?.assembly) p.set('assembly', params.assembly);
+      return get<SmhLookup[]>(`/api/smh${p.toString() ? `?${p}` : ''}`);
+    },
+
+    status: (params?: { workcell?: string; status?: SmhStatus['smh_status'] }) => {
+      const p = new URLSearchParams();
+      if (params?.workcell) p.set('workcell', params.workcell);
+      if (params?.status)   p.set('status',   params.status);
+      return get<SmhStatus[]>(`/api/smh-status${p.toString() ? `?${p}` : ''}`);
+    },
+  },
+
+  refresh: {
+    run: () =>
+      fetch(`${BASE}/api/refresh`, { method: 'POST' }).then(r => r.json()),
+  },
+};
