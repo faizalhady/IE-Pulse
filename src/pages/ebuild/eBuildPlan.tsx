@@ -11,10 +11,10 @@ import { useEffect, useMemo, useState } from 'react';
 // ─── Customer badge ─────────────────────────────────────────────────────────────
 
 const CUSTOMER_LOGOS: Record<string, string> = {
-  arista:   '/workcell logo/Arista.png',
+  arista: '/workcell logo/Arista.png',
   keysight: '/workcell logo/keyisght.png',
-  aop:      '/workcell logo/aop.png',
-  micron:   '/workcell logo/micron.png',
+  aop: '/workcell logo/aop.png',
+  micron: '/workcell logo/micron.png',
 };
 
 function CustomerBadge({ name }: { name: string }) {
@@ -110,8 +110,8 @@ interface BuildPlanRow {
   JobNumber: string;
   BatchNumber: string;
   Quantity: number;
-  SMT_Assembly:      string;
-  Final_Assembly:    string;
+  SMT_Assembly: string;
+  Final_Assembly: string;
   // ── fields below fetched but not yet displayed ──
   // Hours:              number;
   // PanelSize:          number;
@@ -164,18 +164,18 @@ function badgeStyle(bg: string, fg: string): React.CSSProperties {
   return { backgroundColor: bg, color: fg || '#000', border: 'none' };
 }
 
-const GRID = '2.5rem 1fr 5rem 6rem 5rem 9rem 9rem 8rem 7rem 5rem';
+const GRID = '2.5rem 20rem 4.5rem 11rem 5rem 12rem 10rem 8rem 8rem 1fr';
 
 const COLS: [SortKey | null, string][] = [
-  ['Customer',      'Customer'],
-  ['Plant',         'Plant'],
-  ['Bay',           'Bay'],
-  ['Status',        'Status'],
-  ['SMT_Assembly',  'SMT Assembly'],
-  ['Final_Assembly','Final Assembly'],
-  ['JobNumber',     'Job No.'],
-  ['BatchNumber',   'Batch Number'],
-  ['Quantity',      'Qty'],
+  ['Customer', 'Customer'],
+  ['Plant', 'Plant'],
+  ['Bay', 'Bay'],
+  ['Status', 'Status'],
+  ['SMT_Assembly', 'SMT Assembly'],
+  ['Final_Assembly', 'Final Assembly'],
+  ['JobNumber', 'Job No.'],
+  ['BatchNumber', 'Batch Number'],
+  ['Quantity', 'Qty'],
   // removed: BayType, Mode, Sub_Status, Order_ID
 ];
 
