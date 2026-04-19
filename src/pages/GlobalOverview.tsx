@@ -4,6 +4,7 @@ import { bays, workcells } from '@/mocks/data';
 import type { Bay } from '@/types';
 import { useMemo, useState } from 'react';
 
+
 const WORKCELL_FILTERS = ['All', ...workcells.map(w => w.name)];
 const SHIFT_FILTERS = ['All Shifts', 'Day', 'Night'];
 
