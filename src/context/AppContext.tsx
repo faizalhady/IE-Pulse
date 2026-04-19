@@ -14,7 +14,18 @@ interface AppContextValue {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function detectAppFromPath(pathname: string): AppId {
+function detectAppFromPath(pathname: string, currentAppId?: AppId): AppId {
+  // If we already have an active app, check if it owns the current route first
+  if (currentAppId) {
+    const currentApp = APPS.find(a => a.id === currentAppId);
+    if (currentApp) {
+      for (const item of currentApp.navItems) {
+        if (item.to !== '/' && pathname.startsWith(item.to)) return currentAppId;
+      }
+    }
+  }
+
+  // Otherwise, find the first app that owns the route
   for (const app of APPS) {
     for (const item of app.navItems) {
       if (item.to !== '/' && pathname.startsWith(item.to)) return app.id;
@@ -35,15 +46,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [activeAppId, setActiveAppId] = useState<AppId>(() =>
-    detectAppFromPath(window.location.pathname)
+    detectAppFromPath(window.location.pathname, (localStorage.getItem('pulse-active-app') as AppId) || undefined)
   );
 
   // Sync active app whenever the route changes
   useEffect(() => {
-    const detected = detectAppFromPath(location.pathname);
-    setActiveAppId(detected);
-    localStorage.setItem('pulse-active-app', detected);
-  }, [location.pathname]);
+    const detected = detectAppFromPath(location.pathname, activeAppId);
+    if (detected !== activeAppId) {
+      setActiveAppId(detected);
+      localStorage.setItem('pulse-active-app', detected);
+    }
+  }, [location.pathname, activeAppId]);
 
   const setActiveApp = (id: AppId) => {
     localStorage.setItem('pulse-active-app', id);

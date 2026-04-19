@@ -1,8 +1,15 @@
-import { useApp } from '@/context/AppContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { AppConfig, AppId } from '@/config/apps';
+import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface AppSwitcherProps {
@@ -11,92 +18,84 @@ interface AppSwitcherProps {
 
 export default function AppSwitcher({ collapsed }: AppSwitcherProps) {
   const { activeApp, apps, setActiveApp } = useApp();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   const Icon = activeApp.icon;
 
   const handleSelectApp = (app: AppConfig) => {
     setActiveApp(app.id as AppId);
     navigate(app.navItems[0].to);
-    setOpen(false);
   };
 
   return (
-    <div ref={ref} className="relative">
-      <div className="flex items-center border-b border-sidebar-border">
-        <button
-          onClick={() => setOpen(o => !o)}
-          className={cn(
-            'flex flex-1 items-center gap-2.5 px-3 py-3',
-            'hover:bg-sidebar-accent transition-colors',
-            collapsed && 'justify-center px-0'
-          )}
-        >
-          <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md', activeApp.iconBg)}>
-            <Icon className={cn('h-4 w-4', activeApp.color)} />
-          </div>
-          {!collapsed && (
-            <>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <div className="flex items-center border-b border-zinc-800 bg-zinc-950 outline-none cursor-pointer text-zinc-100">
+          <button
+            className={cn(
+              'flex flex-1 items-center gap-2.5 px-3 py-3 outline-none',
+              'hover:bg-zinc-800/50 transition-colors',
+              collapsed && 'justify-center px-0 py-4'
+            )}
+          >
+            <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-sm', activeApp.iconBg)}>
+              <Icon className={cn('h-4 w-4', activeApp.color)} />
+            </div>
+            {!collapsed && (
+              <>
+                <div className="flex flex-col items-start leading-none flex-1 min-w-0">
+                  <span className="text-sm font-bold text-zinc-100 truncate">
+                    {activeApp.label}
+                  </span>
+                </div>
+                <ChevronsUpDown className="h-4 w-4 shrink-0 text-zinc-400" />
+              </>
+            )}
+          </button>
+        </div>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent
+        className="w-[260px] rounded-xl bg-zinc-950 border border-zinc-800 shadow-xl p-1.5"
+        align={collapsed ? 'center' : 'start'}
+        side={collapsed ? 'right' : 'bottom'}
+        sideOffset={8}
+      >
+        <DropdownMenuLabel className="text-[10px] text-zinc-400 font-bold px-2 py-1.5 uppercase tracking-wider">
+          Switch Module
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-zinc-800 mx-1 mb-1" />
+
+        {apps.map((app: AppConfig) => {
+          const AppIcon = app.icon;
+          const isActive = app.id === activeApp.id;
+          return (
+            <DropdownMenuItem
+              key={app.id}
+              onClick={() => handleSelectApp(app)}
+              className={cn(
+                'flex items-center gap-3 px-2.5 py-2 cursor-pointer transition-all rounded-lg',
+                isActive 
+                  ? 'bg-zinc-800 text-zinc-100 focus:bg-zinc-800 focus:text-zinc-100' 
+                  : 'text-zinc-300 focus:bg-zinc-800/50 focus:text-zinc-100'
+              )}
+            >
+              <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md shadow-sm', app.iconBg)}>
+                <AppIcon className={cn('h-3.5 w-3.5', app.color)} />
+              </div>
               <div className="flex flex-col items-start leading-none flex-1 min-w-0">
-                <span className="text-sm font-semibold text-sidebar-accent-foreground truncate">
-                  {activeApp.label}
+                <span className={cn('font-semibold text-sm', isActive ? 'text-primary' : 'text-zinc-100')}>
+                  {app.label}
                 </span>
-                <span className="text-[10px] text-sidebar-foreground/50 truncate">
-                  {activeApp.description}
+                <span className="text-[10px] text-zinc-500 truncate mt-1">
+                  {app.description}
                 </span>
               </div>
-              <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40" />
-            </>
-          )}
-        </button>
-      </div>
-
-      {open && (
-        <div className={cn(
-          'absolute z-50 top-full mt-1 w-56 rounded-lg border border-sidebar-border',
-          'bg-sidebar shadow-lg py-1',
-          collapsed ? 'left-full ml-2 top-0 mt-0' : 'left-2 right-2 w-auto'
-        )}>
-          {apps.map((app: AppConfig) => {
-            const AppIcon = app.icon;
-            const isActive = app.id === activeApp.id;
-            return (
-              <button
-                key={app.id}
-                onClick={() => handleSelectApp(app)}
-                className={cn(
-                  'flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors',
-                  'hover:bg-sidebar-accent',
-                  isActive && 'bg-sidebar-accent/60'
-                )}
-              >
-                <div className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md', app.iconBg)}>
-                  <AppIcon className={cn('h-3.5 w-3.5', app.color)} />
-                </div>
-                <div className="flex flex-col items-start leading-none flex-1 min-w-0">
-                  <span className={cn('font-medium text-sidebar-accent-foreground', isActive && 'font-semibold')}>
-                    {app.label}
-                  </span>
-                  <span className="text-[10px] text-sidebar-foreground/50 truncate">{app.description}</span>
-                </div>
-                {isActive && <Check className="h-3.5 w-3.5 text-sidebar-primary shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+              {isActive && <Check className="h-4 w-4 text-primary shrink-0 ml-auto" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
