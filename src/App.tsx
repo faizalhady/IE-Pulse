@@ -13,7 +13,7 @@ import NotFound from "@/pages/NotFound";
 import OLEOverview from "@/pages/ole/OLEOverview";
 import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import SMHStatus from "@/pages/ole/SMHStatus";
-import eBuildPlan from "@/pages/ebuild/eBuildPlan";
+import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import LayoutEditor from "@/pages/fsms/LayoutEditor";
 import BayManagement from "@/pages/fsms/BayManagement";
 import OleMartApiTest from "@/pages/OleMartApiTest";
@@ -29,19 +29,19 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-  <AppProvider>
   <TooltipProvider>
   <Toaster />
   <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/kiosk/:bayId" element={<KioskMode />} />
-          <Route path="/*" element={<AppShell />} />
-        </Routes>
+        <AppProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/kiosk/:bayId" element={<KioskMode />} />
+            <Route path="/*" element={<AppShell />} />
+          </Routes>
+        </AppProvider>
       </BrowserRouter>
     </TooltipProvider>
-    </AppProvider>
   </QueryClientProvider>
 );
 
@@ -66,7 +66,7 @@ function AppShell() {
             <Route path="/ole/:workcell" element={<OLEWorkcell />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ole-mart-api" element={<OleMartApiTest />} />
-            <Route path="/ebuild" element={<eBuildPlan />} />
+            <Route path="/ebuild" element={<EBuildPlan />} />
             <Route path="/fsms/editor" element={<LayoutEditor />} />
             <Route path="/fsms/bays" element={<BayManagement />} />
             <Route path="*" element={<NotFound />} />
