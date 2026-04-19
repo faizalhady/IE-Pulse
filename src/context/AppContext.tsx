@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { APPS, AppConfig, AppId, getApp } from '@/config/apps';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -11,6 +12,19 @@ interface AppContextValue {
   setCollapsed: (val: boolean) => void;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function detectAppFromPath(pathname: string): AppId {
+  for (const app of APPS) {
+    for (const item of app.navItems) {
+      if (item.to !== '/' && pathname.startsWith(item.to)) return app.id;
+    }
+  }
+  // fallback: exact match for root
+  if (pathname === '/') return 'pulse';
+  return (localStorage.getItem('pulse-active-app') as AppId) ?? 'pulse';
+}
+
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -18,11 +32,18 @@ const AppContext = createContext<AppContextValue | null>(null);
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const [activeAppId, setActiveAppId] = useState<AppId>(() => {
-    const stored = localStorage.getItem('pulse-active-app');
-    return (stored as AppId) ?? 'pulse';
-  });
+  const [activeAppId, setActiveAppId] = useState<AppId>(() =>
+    detectAppFromPath(window.location.pathname)
+  );
+
+  // Sync active app whenever the route changes
+  useEffect(() => {
+    const detected = detectAppFromPath(location.pathname);
+    setActiveAppId(detected);
+    localStorage.setItem('pulse-active-app', detected);
+  }, [location.pathname]);
 
   const setActiveApp = (id: AppId) => {
     localStorage.setItem('pulse-active-app', id);
