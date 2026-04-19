@@ -1,4 +1,5 @@
 import Sidebar from "@/components/layout/Sidebar";
+import { AppProvider } from "@/context/AppContext";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,6 +13,9 @@ import NotFound from "@/pages/NotFound";
 import OLEOverview from "@/pages/ole/OLEOverview";
 import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import SMHStatus from "@/pages/ole/SMHStatus";
+import eBuildPlan from "@/pages/ebuild/eBuildPlan";
+import LayoutEditor from "@/pages/fsms/LayoutEditor";
+import BayManagement from "@/pages/fsms/BayManagement";
 import OleMartApiTest from "@/pages/OleMartApiTest";
 import Plants from "@/pages/Plants";
 import Reports from "@/pages/Reports";
@@ -25,9 +29,10 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
+  <AppProvider>
+  <TooltipProvider>
+  <Toaster />
+  <Sonner />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -36,6 +41,7 @@ const App = () => (
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
+    </AppProvider>
   </QueryClientProvider>
 );
 
@@ -56,10 +62,13 @@ function AppShell() {
             <Route path="/plants" element={<Plants />} />
             <Route path="/floor-map" element={<FloorMap />} />
             <Route path="/ole" element={<OLEOverview />} />
-            <Route path="/ole/smh-status" element={<div className="p-6"><SMHStatus /></div>} />
+            <Route path="/ole/smh-status" element={<SMHStatus />} />
             <Route path="/ole/:workcell" element={<OLEWorkcell />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ole-mart-api" element={<OleMartApiTest />} />
+            <Route path="/ebuild" element={<eBuildPlan />} />
+            <Route path="/fsms/editor" element={<LayoutEditor />} />
+            <Route path="/fsms/bays" element={<BayManagement />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
