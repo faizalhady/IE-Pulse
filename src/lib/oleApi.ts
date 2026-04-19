@@ -134,7 +134,12 @@ export const oleApi = {
     },
 
     /** Per-workcell OLE summary */
-    summary: () => get<OleSummary[]>('/api/ole/summary'),
+    summary: (params?: { date_from?: string; date_to?: string }) => {
+      const p = new URLSearchParams();
+      if (params?.date_from) p.set('date_from', params.date_from);
+      if (params?.date_to)   p.set('date_to',   params.date_to);
+      return get<OleSummary[]>(`/api/ole/summary${p.toString() ? `?${p}` : ''}`);
+    },
   },
 
   production: {

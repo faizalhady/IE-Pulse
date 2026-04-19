@@ -11,6 +11,7 @@ import KioskMode from "@/pages/KioskMode";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
 import OLEOverview from "@/pages/ole/OLEOverview";
+import FourQGenerator from "@/pages/ole/FourQGenerator";
 import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import SMHStatus from "@/pages/ole/SMHStatus";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
@@ -63,6 +64,7 @@ function AppShell() {
             <Route path="/floor-map" element={<FloorMap />} />
             <Route path="/ole" element={<OLEOverview />} />
             <Route path="/ole/smh-status" element={<SMHStatus />} />
+            <Route path="/ole/4q" element={<FourQGenerator />} />
             <Route path="/ole/:workcell" element={<OLEWorkcell />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ole-mart-api" element={<OleMartApiTest />} />

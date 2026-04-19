@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OLEReport from './OLEReport';
+import OLEWorkcellTab from './OLEWorkcellTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ const ALL = '__all__';
 const TABS = [
   { id: 'report',     label: 'OLE Report' },
   { id: 'summary',    label: 'OLE Summary' },
+  { id: 'workcell',   label: 'OLE Workcell' },
   { id: 'shifts',     label: 'Shift Detail' },
   { id: 'production', label: 'Production' },
   { id: 'paid_hours', label: 'Paid Hours' },
@@ -294,7 +296,10 @@ export default function OLEOverview() {
   }, []);
 
   // ── Data ─────────────────────────────────────────────────────────────────
-  const summaryHook = useOleSummary();
+  const summaryHook = useOleSummary({
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  });
   const shiftsHook = useOleResults({
     workcell: workcell || undefined,
     date_from: dateFrom || undefined,
@@ -370,6 +375,7 @@ export default function OLEOverview() {
   const rowCounts: Record<TabId, number> = {
     report:     0,
     summary:    filteredSummary.length,
+    workcell:   0,
     shifts:     filteredShifts.length,
     production: filteredProd.length,
     paid_hours: filteredHours.length,
@@ -379,7 +385,7 @@ export default function OLEOverview() {
   // ── Paginated slices ──────────────────────────────────────────────────────
   const slice = <T,>(arr: T[]) => arr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const showDateFilters = ['shifts', 'production', 'paid_hours'].includes(activeTab);
+  const showDateFilters = ['summary', 'workcell', 'shifts', 'production', 'paid_hours'].includes(activeTab);
   const showShiftFilter  = activeTab === 'shifts';
   const showSmhFilter    = activeTab === 'smh';
   const showFilters      = activeTab !== 'report';
@@ -457,6 +463,8 @@ export default function OLEOverview() {
         <OLEReport onNavigateTab={onNavigateTab} />
       )}
 
+
+
       {/* ── Filters + content for data tabs ── */}
       {showFilters && (<>
       <div className="px-6 pt-4 pb-3 flex flex-wrap items-end gap-3">
@@ -527,13 +535,18 @@ export default function OLEOverview() {
           </div>
         )}
 
+        {/* ── WORKCELL tab ── */}
+        {activeTab === 'workcell' && (
+          <OLEWorkcellTab workcell={workcell} dateFrom={dateFrom} dateTo={dateTo} />
+        )}
+
         {/* ── SUMMARY tab ── */}
         {activeTab === 'summary' && (() => {
           // real rows first, mock rows below — mock rows are not navigatable
           const liveWorkcells = new Set(filteredSummary.map(r => r.workcell));
           const mockRows = MOCK_SUMMARY.filter(r => !liveWorkcells.has(r.workcell));
           const allRows = [...filteredSummary, ...mockRows];
-          const GT = '2.5rem 1fr 5rem 5rem 8rem 5rem 7rem 7rem 5.5rem';
+          const GT = '2.5rem minmax(10rem, 1fr) 7.5rem 6.5rem 9.5rem 7.5rem 9rem 9rem 7.5rem';
           return (
             <div className="rounded-xl border border-border overflow-hidden">
               {/* table header */}

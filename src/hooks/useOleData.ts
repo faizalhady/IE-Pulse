@@ -87,10 +87,14 @@ export function useOleWorkcells() {
 }
 
 /** OLE summary per workcell — refreshes every 5 minutes */
-export function useOleSummary() {
+export function useOleSummary(params?: {
+  date_from?: string;
+  date_to?: string;
+}) {
   return usePolling<OleSummary[]>(
-    () => oleApi.ole.summary(),
-    5 * 60 * 1000
+    () => oleApi.ole.summary(params),
+    5 * 60 * 1000,
+    [params?.date_from, params?.date_to]
   );
 }
 

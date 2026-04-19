@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Database,
   Factory,
+  FileSpreadsheet,
   FileText,
   FlaskConical,
   LayoutDashboard,
@@ -68,6 +69,7 @@ export const APPS: AppConfig[] = [
     iconBg: 'bg-emerald-500/15',
     navItems: [
       { label: 'OLE Overview',  to: '/ole',            icon: LayoutDashboard },
+      { label: '4Q Generator',  to: '/ole/4q',         icon: FileSpreadsheet },
       { label: 'SMH Status',    to: '/ole/smh-status', icon: FlaskConical },
       { label: 'API Test',      to: '/ole-mart-api',   icon: Database },
     ],
