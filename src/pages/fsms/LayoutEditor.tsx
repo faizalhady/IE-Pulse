@@ -5,6 +5,7 @@ import {
   Pencil, Settings, Trash2, Upload, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { BayEditModal, type Bay } from './BayManagement';
 
 const WORKCELL_OPTIONS = [
   'Arista', 'Keysight', 'Aop', 'Micron',
@@ -54,8 +55,9 @@ export default function LayoutEditor() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [layoutName, setLayoutName] = useState('Untitled Layout');
-  const [bottomOpen, setBottomOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
 
   // ── Viewport: zoom + pan ─────────────────────────────────────────────────
   const [zoom, setZoom] = useState(1);
@@ -201,7 +203,7 @@ export default function LayoutEditor() {
         };
         setZones(prev => [...prev, newZone]);
         setSelectedId(newZone.id);
-        setBottomOpen(true);
+        setRightPanelOpen(true);
       }
       setDrawing(false);
       setDrawStart(null);
@@ -282,7 +284,7 @@ export default function LayoutEditor() {
     if (!raw) return null;
     try {
       const data = JSON.parse(raw);
-      return data.zones ?? null;
+      return data.zones ? data.zones.map((z: any) => ({ ...z, locked: true })) : null;
     } catch { return null; }
   };
 
@@ -292,7 +294,7 @@ export default function LayoutEditor() {
       if (!res.ok) return null;
       const data = await res.json();
       // Map bay_number back to bayNumber for frontend
-      return (data.zones ?? []).map((z: any) => ({ ...z, bayNumber: z.bay_number ?? z.bayNumber ?? '' }));
+      return (data.zones ?? []).map((z: any) => ({ ...z, bayNumber: z.bay_number ?? z.bayNumber ?? '', locked: true }));
     } catch { return null; }
   };
 
@@ -374,6 +376,13 @@ export default function LayoutEditor() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (selectedId && rightPanelOpen) {
+      const el = document.getElementById(`zone-card-${selectedId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedId, rightPanelOpen]);
+
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -450,7 +459,8 @@ export default function LayoutEditor() {
       </div>
 
       {/* ── Main: toolbar + viewport ── */}
-      <div className="flex-1 min-h-0 overflow-hidden relative">
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+        <div className="flex-1 min-h-0 overflow-hidden relative">
 
         {/* ── Left toolbar — floating over canvas ── */}
         <div className="absolute left-3 top-3 z-10 flex flex-col items-center gap-1 py-2 px-1.5 bg-card/90 backdrop-blur-sm rounded-xl border border-border shadow-md">
@@ -586,25 +596,26 @@ export default function LayoutEditor() {
             </div>
           )}
         </div>
+        </div>
 
-        {/* ── Bottom zones panel — floats over canvas ── */}
-        <div className={cn('absolute bottom-0 left-0 right-0 z-10 border-t border-border bg-card/95 backdrop-blur-sm transition-all duration-200', bottomOpen ? 'h-64' : 'h-9')}>
+        {/* ── Right zones panel ── */}
+        <div className={cn('flex-shrink-0 border-l border-border bg-card transition-all duration-200 flex flex-col', rightPanelOpen ? 'w-80' : 'w-12')}>
           <div
-            className="flex items-center justify-between px-4 h-9 cursor-pointer hover:bg-muted/40 transition-colors"
-            onClick={() => setBottomOpen(o => !o)}
+            className="flex items-center justify-between px-3 h-12 border-b border-border cursor-pointer hover:bg-muted/40 transition-colors"
+            onClick={() => setRightPanelOpen(o => !o)}
           >
-            <div className="flex items-center gap-2">
-              <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', bottomOpen && 'rotate-180')} />
+            <div className={cn("flex items-center gap-2", !rightPanelOpen && "hidden")}>
               <span className="text-xs font-semibold text-foreground">Zones</span>
               <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-mono">{zones.length}</span>
             </div>
-
+            <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform flex-shrink-0', rightPanelOpen ? '-rotate-90' : 'rotate-90', !rightPanelOpen && 'mx-auto')} />
           </div>
-          {bottomOpen && (
-            <div className="flex gap-2 px-4 pb-3 pt-1 overflow-x-auto h-[calc(100%-2.25rem)]">
+          {rightPanelOpen && (
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
               {zones.length === 0 ? (
-                <div className="flex items-center justify-center w-full text-xs text-muted-foreground">
-                  No zones yet — press <kbd className="mx-1 px-1.5 py-0.5 rounded bg-muted text-foreground font-mono text-[10px]">D</kbd> and drag on the canvas
+                <div className="flex flex-col items-center justify-center text-center h-full text-xs text-muted-foreground">
+                  <p>No zones yet</p>
+                  <p className="mt-1">Press <kbd className="mx-1 px-1.5 py-0.5 rounded bg-muted text-foreground font-mono text-[10px]">D</kbd> and drag on the canvas</p>
                 </div>
               ) : zones.map(zone => (
                 <ZoneCard
@@ -614,12 +625,50 @@ export default function LayoutEditor() {
                   onClick={() => setSelectedId(zone.id)}
                   onUpdate={patch => updateZone(zone.id, patch)}
                   onDelete={() => deleteZone(zone.id)}
+                  onEdit={() => setEditingZoneId(zone.id)}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* ── Bay Edit Modal ── */}
+      {editingZoneId && (() => {
+        const zone = zones.find(z => z.id === editingZoneId);
+        if (!zone) return null;
+        const bayDraft: Bay = {
+          _id: zone.id,
+          bay_number: zone.bayNumber,
+          workcell: zone.workcell,
+          status: zone.status,
+          description: zone.description,
+          plant: '',
+          floor: '',
+          length_m: 0,
+          width_m: 0,
+          rate_per_sqm: 0,
+          line_manager: '',
+          pic: '',
+          area_sqm: 0,
+          monthly_cost: 0
+        };
+        return (
+          <BayEditModal
+            open={true}
+            bay={bayDraft}
+            onClose={() => setEditingZoneId(null)}
+            onSave={async (updated: Bay) => {
+              updateZone(zone.id, {
+                bayNumber: updated.bay_number,
+                workcell: updated.workcell,
+                status: updated.status,
+                description: updated.description
+              });
+            }}
+          />
+        );
+      })()}
 
       {/* ── Image picker modal ── */}
       {showImagePicker && (
@@ -676,7 +725,7 @@ export default function LayoutEditor() {
 
 // ─── Workcell Combobox ───────────────────────────────────────────────────────
 
-function WorkcellCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function WorkcellCombobox({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -696,9 +745,10 @@ function WorkcellCombobox({ value, onChange }: { value: string; onChange: (v: st
     <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
       <input
         value={value}
+        disabled={disabled}
         onChange={e => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
-        className="w-full text-xs bg-muted/50 border border-border rounded-md px-2 py-1.5 text-foreground outline-none focus:ring-1 focus:ring-ring"
+        onFocus={() => { if (!disabled) setOpen(true); }}
+        className={cn("w-full text-xs bg-muted/50 border border-border rounded-md px-2 py-1.5 text-foreground outline-none focus:ring-1 focus:ring-ring", disabled && "opacity-50 cursor-not-allowed")}
         placeholder="Type or select..."
       />
       {open && filtered.length > 0 && (
@@ -721,7 +771,7 @@ function WorkcellCombobox({ value, onChange }: { value: string; onChange: (v: st
   );
 }
 
-function StatusCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function StatusCombobox({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const STATUS_OPTIONS = ['Active', 'Reserved', 'Idle', 'Under Maintenance'];
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -742,9 +792,10 @@ function StatusCombobox({ value, onChange }: { value: string; onChange: (v: stri
     <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
       <input
         value={value}
+        disabled={disabled}
         onChange={e => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
-        className="w-full text-xs bg-muted/50 border border-border rounded-md px-2 py-1.5 text-foreground outline-none focus:ring-1 focus:ring-ring"
+        onFocus={() => { if (!disabled) setOpen(true); }}
+        className={cn("w-full text-xs bg-muted/50 border border-border rounded-md px-2 py-1.5 text-foreground outline-none focus:ring-1 focus:ring-ring", disabled && "opacity-50 cursor-not-allowed")}
         placeholder="Type or select..."
       />
       {open && filtered.length > 0 && (
@@ -795,14 +846,14 @@ function ToolBtn({ icon: Icon, label, active, onClick, disabled, danger }: {
 
 // ─── Zone card ────────────────────────────────────────────────────────────────
 
-function ZoneCard({ zone, selected, onClick, onUpdate, onDelete }: {
+function ZoneCard({ zone, selected, onClick, onUpdate, onDelete, onEdit }: {
   zone: Zone; selected: boolean;
-  onClick: () => void; onUpdate: (p: Partial<Zone>) => void; onDelete: () => void;
+  onClick: () => void; onUpdate: (p: Partial<Zone>) => void; onDelete: () => void; onEdit: () => void;
 }) {
   return (
-    <div onClick={onClick}
+    <div onClick={onClick} id={`zone-card-${zone.id}`}
       className={cn(
-        'flex-shrink-0 w-64 rounded-xl border p-3 cursor-pointer transition-all space-y-2.5',
+        'flex-shrink-0 w-full rounded-xl border p-3 cursor-pointer transition-all space-y-2.5',
         selected ? 'border-primary bg-primary/5 shadow-sm' : 'border-border bg-background hover:bg-accent/40',
       )}
     >
@@ -811,9 +862,10 @@ function ZoneCard({ zone, selected, onClick, onUpdate, onDelete }: {
           <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: zone.color }} />
           <input
             value={zone.bayNumber}
+            disabled={zone.locked}
             onClick={e => e.stopPropagation()}
             onChange={e => onUpdate({ bayNumber: e.target.value, label: e.target.value })}
-            className="text-sm font-semibold bg-transparent border-none outline-none text-foreground min-w-0 flex-1 focus:ring-1 focus:ring-ring rounded px-0.5"
+            className={cn("text-sm font-semibold bg-transparent border-none outline-none text-foreground min-w-0 flex-1 focus:ring-1 focus:ring-ring rounded px-0.5", zone.locked && "opacity-50 cursor-not-allowed")}
             placeholder="Bay 1"
           />
         </div>
@@ -828,7 +880,7 @@ function ZoneCard({ zone, selected, onClick, onUpdate, onDelete }: {
           </button>
           {/* Gear — disabled when locked */}
           <button
-            onClick={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onEdit(); }}
             disabled={zone.locked}
             className={cn('p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground', zone.locked && 'opacity-30 pointer-events-none')}
             title="Settings"
@@ -852,6 +904,7 @@ function ZoneCard({ zone, selected, onClick, onUpdate, onDelete }: {
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Workcell</p>
           <WorkcellCombobox
             value={zone.workcell}
+            disabled={zone.locked}
             onChange={v => onUpdate({ workcell: v })}
           />
         </div>
@@ -859,21 +912,23 @@ function ZoneCard({ zone, selected, onClick, onUpdate, onDelete }: {
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Status</p>
           <StatusCombobox
             value={zone.status}
+            disabled={zone.locked}
             onChange={v => onUpdate({ status: v })}
           />
         </div>
       </div>
       <input
         value={zone.description}
+        disabled={zone.locked}
         onClick={e => e.stopPropagation()}
         onChange={e => onUpdate({ description: e.target.value })}
-        className="w-full text-xs bg-muted/50 border border-border rounded-md px-2 py-1.5 text-muted-foreground outline-none focus:ring-1 focus:ring-ring"
+        className={cn("w-full text-xs bg-muted/50 border border-border rounded-md px-2 py-1.5 text-muted-foreground outline-none focus:ring-1 focus:ring-ring", zone.locked && "opacity-50 cursor-not-allowed")}
         placeholder="Description (optional)"
       />
       <div className="flex gap-1.5 flex-nowrap overflow-x-auto pb-1 pt-2">
         {ZONE_COLORS.map(c => (
-          <button key={c} onClick={e => { e.stopPropagation(); onUpdate({ color: c }); }}
-            className={cn('w-4 h-4 rounded-sm transition-transform hover:scale-110', zone.color === c && 'ring-2 ring-offset-1 ring-foreground')}
+          <button key={c} disabled={zone.locked} onClick={e => { e.stopPropagation(); onUpdate({ color: c }); }}
+            className={cn('w-4 h-4 rounded-sm transition-transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100', zone.color === c && 'ring-2 ring-offset-1 ring-foreground')}
             style={{ background: c }} />
         ))}
       </div>

@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Bay {
+export interface Bay {
   _id?: string;
   bay_number: string;
   workcell: string;
@@ -60,7 +60,7 @@ const ACTIONS_W = '5.5rem';
 
 // ─── BayEditModal ─────────────────────────────────────────────────────────────
 
-function BayEditModal({
+export function BayEditModal({
   bay, open, onClose, onSave,
 }: {
   bay: Bay;
