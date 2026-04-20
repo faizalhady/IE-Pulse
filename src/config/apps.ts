@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  BookOpen,
   Building2,
   CalendarDays,
   ClipboardList,
@@ -9,6 +10,7 @@ import {
   FileSpreadsheet,
   FileText,
   FlaskConical,
+  Home,
   LayoutDashboard,
   LineChart,
   LucideIcon,
@@ -20,7 +22,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild';
+export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline';
 
 export interface NavItem {
   label: string;
@@ -53,7 +55,7 @@ export const APPS: AppConfig[] = [
     color: 'text-blue-500',
     iconBg: 'bg-blue-500/15',
     navItems: [
-      { label: 'Overview',        to: '/',           icon: BarChart3 },
+      { label: 'Overview',        to: '/',           icon: Home },
       { label: 'Plants / Layouts', to: '/plants',    icon: MapPin },
       { label: 'Workcells',       to: '/workcells',  icon: Factory },
       { label: 'Reports',         to: '/reports',    icon: LineChart },
@@ -68,7 +70,7 @@ export const APPS: AppConfig[] = [
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     navItems: [
-      { label: 'OLE Overview',  to: '/ole',            icon: LayoutDashboard },
+      { label: 'OLE Overview',  to: '/ole',            icon: Home },
       { label: '4Q Generator',  to: '/ole/4q',         icon: FileSpreadsheet },
       { label: 'SMH Status',    to: '/ole/smh-status', icon: FlaskConical },
       { label: 'API Test',      to: '/ole-mart-api',   icon: Database },
@@ -96,7 +98,19 @@ export const APPS: AppConfig[] = [
     color: 'text-orange-500',
     iconBg: 'bg-orange-500/15',
     navItems: [
-      { label: 'Build Plan', to: '/ebuild', icon: CalendarDays },
+      { label: 'Build Plan', to: '/ebuild', icon: Home },
+    ],
+  },
+  {
+    id: 'iebaseline',
+    label: 'IE Baseline',
+    description: 'Learn everything about IE Baseline',
+    icon: BookOpen,
+    color: 'text-orange-500',
+    iconBg: 'bg-orange-500/15',
+    navItems: [
+      { label: 'Overview', to: '/iebaseline', icon: Home },
+      { label: 'Edit', to: '/iebaseline/edit', icon: Pencil },
     ],
   },
 ];

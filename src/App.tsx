@@ -15,6 +15,10 @@ import FourQGenerator from "@/pages/ole/FourQGenerator";
 import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import SMHStatus from "@/pages/ole/SMHStatus";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
+import IEBaseline from "@/pages/iebaseline/IEBaseline";
+import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
+import ModuleOverview from "@/pages/iebaseline/ModuleOverview";
+import ModuleAdmin from "@/pages/iebaseline/ModuleAdmin";
 import LayoutEditor from "@/pages/fsms/LayoutEditor";
 import BayManagement from "@/pages/fsms/BayManagement";
 import OleMartApiTest from "@/pages/OleMartApiTest";
@@ -69,6 +73,10 @@ function AppShell() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/ole-mart-api" element={<OleMartApiTest />} />
             <Route path="/ebuild" element={<EBuildPlan />} />
+            <Route path="/iebaseline" element={<IEBaseline />} />
+            <Route path="/iebaseline/edit" element={<IEBaselineEdit />} />
+            <Route path="/iebaseline/module/:moduleId" element={<ModuleOverview />} />
+            <Route path="/iebaseline/admin/:moduleId" element={<ModuleAdmin />} />
             <Route path="/fsms/editor" element={<LayoutEditor />} />
             <Route path="/fsms/bays" element={<BayManagement />} />
             <Route path="*" element={<NotFound />} />
