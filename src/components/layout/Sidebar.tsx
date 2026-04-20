@@ -81,6 +81,7 @@ export default function Sidebar() {
                       <NavLink
                         key={wc.customer_id}
                         to={`/workcell/${encodeURIComponent(wc.workcell_name)}`}
+                        end
                         className={({ isActive }) =>
                           cn(
                             'flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent transition-colors',
@@ -194,6 +195,7 @@ function SidebarLink({
   const link = (
     <NavLink
       to={to}
+      end
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors',
