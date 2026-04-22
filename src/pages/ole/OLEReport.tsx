@@ -44,44 +44,117 @@ const LOGOS: Record<string, string> = {
     micron: '/workcell logo/micron.png',
 };
 
-// ─── static data ──────────────────────────────────────────────────────────────
+// ─── plant filter ─────────────────────────────────────────────────────────────
 
-const WEEKLY = [
-    { w: 'W05', ole: 49.9, va: 74.6 }, { w: 'W06', ole: 54.1, va: 80.9 },
-    { w: 'W07', ole: 55.1, va: 82.8 }, { w: 'W08', ole: 55.6, va: 82.0 },
-    { w: 'W09', ole: 54.0, va: 82.4 }, { w: 'W10', ole: 57.1, va: 86.4 },
-    { w: 'W11', ole: 55.7, va: 84.5 }, { w: 'W12', ole: 50.5, va: 77.7 },
-    { w: 'W13', ole: 57.3, va: 87.4 }, { w: 'W14', ole: 57.2, va: 88.0 },
-    { w: 'W15', ole: 60.2, va: 92.1 }, { w: 'W16', ole: 61.8, va: 94.8 },
+type PlantId = 'all' | 'plant1' | 'batu_kawan' | 'plant2';
+
+const PLANTS: { id: PlantId; label: string }[] = [
+    { id: 'all',       label: 'All' },
+    { id: 'plant1',    label: 'Plant 1' },
+    { id: 'batu_kawan',label: 'Batu Kawan' },
+    { id: 'plant2',    label: 'Plant 2' },
 ];
 
-const PARETO = [
-    { c: 'Arista', ole: 39.0, va: 51.1, cum: 17.0 },
-    { c: 'AOP1', ole: 74.1, va: 100.1, cum: 32.7 },
-    { c: 'MSI', ole: 60.8, va: 69.2, cum: 44.4 },
-    { c: 'ARISTA PCA', ole: 89.4, va: 117.2, cum: 52.8 },
-    { c: 'MED', ole: 119.3, va: 185.4, cum: 59.8 },
-    { c: 'REINERA', ole: 74.3, va: 107.1, cum: 73.3 },
-    { c: 'Photonics', ole: 39.2, va: 62.1, cum: 79.5 },
-    { c: 'MSI PCA', ole: 70.2, va: 104.5, cum: 83.7 },
-    { c: 'LAMKEY', ole: 78.4, va: 116.2, cum: 87.7 },
-    { c: 'KEYSIGHT', ole: 45.6, va: 74.4, cum: 91.5 },
-    { c: 'MAN COUL', ole: 89.1, va: 245.0, cum: 95.3 },
-    { c: 'WABTEC', ole: 6.5, va: 8.5, cum: 96.6 },
-    { c: 'Tellabs', ole: 295.1, va: 377.0, cum: 99.8 },
-];
+// ─── static data per plant ────────────────────────────────────────────────────
 
-const DONUT = [
-    { name: 'Output SMH', value: 59.32, color: '#22c55e' },
-    { name: 'NVA Input', value: 24.63, color: '#ef4444' },
-    { name: 'NVA Warehouse P1', value: 6.96, color: '#f87171' },
-    { name: 'Lunch / Break', value: 7.07, color: '#94a3b8' },
-    { name: 'NVA Warehouse P2', value: 2.33, color: '#fca5a5' },
-    { name: 'MFG DT', value: 1.36, color: '#f59e0b' },
-    { name: 'NVA Support P1', value: 0.73, color: '#fcd34d' },
-    { name: 'TE DT', value: 0.03, color: '#e2e8f0' },
-    { name: 'NVA Support P2', value: 0.12, color: '#fecaca' },
-];
+const WEEKLY_DATA: Record<PlantId, { w: string; ole: number; va: number }[]> = {
+    all: [
+        { w: 'W05', ole: 49.9, va: 74.6 }, { w: 'W06', ole: 54.1, va: 80.9 },
+        { w: 'W07', ole: 55.1, va: 82.8 }, { w: 'W08', ole: 55.6, va: 82.0 },
+        { w: 'W09', ole: 54.0, va: 82.4 }, { w: 'W10', ole: 57.1, va: 86.4 },
+        { w: 'W11', ole: 55.7, va: 84.5 }, { w: 'W12', ole: 50.5, va: 77.7 },
+        { w: 'W13', ole: 57.3, va: 87.4 }, { w: 'W14', ole: 57.2, va: 88.0 },
+        { w: 'W15', ole: 60.2, va: 92.1 }, { w: 'W16', ole: 61.8, va: 94.8 },
+    ],
+    plant1: [
+        { w: 'W05', ole: 52.1, va: 76.3 }, { w: 'W06', ole: 56.4, va: 83.1 },
+        { w: 'W07', ole: 57.8, va: 85.2 }, { w: 'W08', ole: 58.0, va: 84.7 },
+        { w: 'W09', ole: 56.3, va: 84.9 }, { w: 'W10', ole: 59.4, va: 88.1 },
+        { w: 'W11', ole: 58.2, va: 86.3 }, { w: 'W12', ole: 53.1, va: 79.4 },
+        { w: 'W13', ole: 60.0, va: 89.7 }, { w: 'W14', ole: 59.8, va: 90.2 },
+        { w: 'W15', ole: 63.5, va: 94.3 }, { w: 'W16', ole: 65.1, va: 96.7 },
+    ],
+    batu_kawan: [
+        { w: 'W05', ole: 44.2, va: 68.1 }, { w: 'W06', ole: 48.7, va: 74.5 },
+        { w: 'W07', ole: 49.3, va: 76.0 }, { w: 'W08', ole: 50.1, va: 75.2 },
+        { w: 'W09', ole: 48.9, va: 76.8 }, { w: 'W10', ole: 51.6, va: 80.3 },
+        { w: 'W11', ole: 50.2, va: 79.1 }, { w: 'W12', ole: 45.8, va: 71.3 },
+        { w: 'W13', ole: 52.0, va: 81.4 }, { w: 'W14', ole: 51.9, va: 82.7 },
+        { w: 'W15', ole: 55.4, va: 87.2 }, { w: 'W16', ole: 57.1, va: 89.9 },
+    ],
+    plant2: [
+        { w: 'W05', ole: 47.3, va: 71.0 }, { w: 'W06', ole: 51.2, va: 77.8 },
+        { w: 'W07', ole: 52.4, va: 79.5 }, { w: 'W08', ole: 53.0, va: 78.9 },
+        { w: 'W09', ole: 51.7, va: 79.2 }, { w: 'W10', ole: 54.8, va: 83.7 },
+        { w: 'W11', ole: 53.1, va: 81.9 }, { w: 'W12', ole: 48.2, va: 74.6 },
+        { w: 'W13', ole: 55.0, va: 85.1 }, { w: 'W14', ole: 54.7, va: 86.3 },
+        { w: 'W15', ole: 58.6, va: 90.4 }, { w: 'W16', ole: 60.2, va: 93.0 },
+    ],
+};
+
+const PARETO_DATA: Record<PlantId, { c: string; ole: number; va: number; cum: number }[]> = {
+    all: [
+        { c: 'Arista', ole: 39.0, va: 51.1, cum: 17.0 }, { c: 'AOP1', ole: 74.1, va: 100.1, cum: 32.7 },
+        { c: 'MSI', ole: 60.8, va: 69.2, cum: 44.4 },    { c: 'ARISTA PCA', ole: 89.4, va: 117.2, cum: 52.8 },
+        { c: 'MED', ole: 119.3, va: 185.4, cum: 59.8 },  { c: 'REINERA', ole: 74.3, va: 107.1, cum: 73.3 },
+        { c: 'Photonics', ole: 39.2, va: 62.1, cum: 79.5 }, { c: 'MSI PCA', ole: 70.2, va: 104.5, cum: 83.7 },
+        { c: 'LAMKEY', ole: 78.4, va: 116.2, cum: 87.7 }, { c: 'KEYSIGHT', ole: 45.6, va: 74.4, cum: 91.5 },
+        { c: 'MAN COUL', ole: 89.1, va: 245.0, cum: 95.3 }, { c: 'WABTEC', ole: 6.5, va: 8.5, cum: 96.6 },
+        { c: 'Tellabs', ole: 295.1, va: 377.0, cum: 99.8 },
+    ],
+    plant1: [
+        { c: 'Arista', ole: 42.1, va: 55.0, cum: 20.0 }, { c: 'AOP1', ole: 78.3, va: 105.4, cum: 36.0 },
+        { c: 'ARISTA PCA', ole: 91.2, va: 120.1, cum: 50.0 }, { c: 'MED', ole: 122.0, va: 188.0, cum: 61.0 },
+        { c: 'REINERA', ole: 76.1, va: 109.4, cum: 74.5 }, { c: 'MSI PCA', ole: 72.5, va: 107.0, cum: 85.0 },
+        { c: 'KEYSIGHT', ole: 48.3, va: 77.2, cum: 92.0 }, { c: 'Tellabs', ole: 300.0, va: 381.0, cum: 100.0 },
+    ],
+    batu_kawan: [
+        { c: 'MSI', ole: 58.0, va: 66.5, cum: 22.0 }, { c: 'Photonics', ole: 37.4, va: 59.8, cum: 42.0 },
+        { c: 'LAMKEY', ole: 76.0, va: 113.4, cum: 59.0 }, { c: 'WABTEC', ole: 5.8, va: 7.9, cum: 68.0 },
+        { c: 'MAN COUL', ole: 87.3, va: 241.0, cum: 82.0 }, { c: 'AOP1', ole: 71.2, va: 97.3, cum: 100.0 },
+    ],
+    plant2: [
+        { c: 'Arista', ole: 36.8, va: 48.4, cum: 18.0 }, { c: 'MSI', ole: 62.1, va: 70.8, cum: 35.0 },
+        { c: 'REINERA', ole: 72.5, va: 104.2, cum: 52.0 }, { c: 'Photonics', ole: 40.3, va: 63.8, cum: 67.0 },
+        { c: 'LAMKEY', ole: 79.8, va: 118.0, cum: 80.0 }, { c: 'MAN COUL', ole: 90.4, va: 248.0, cum: 92.0 },
+        { c: 'WABTEC', ole: 7.2, va: 9.1, cum: 97.0 }, { c: 'KEYSIGHT', ole: 43.8, va: 71.2, cum: 100.0 },
+    ],
+};
+
+const DONUT_DATA: Record<PlantId, { name: string; value: number; color: string }[]> = {
+    all: [
+        { name: 'Output SMH', value: 59.32, color: '#22c55e' }, { name: 'NVA Input', value: 24.63, color: '#ef4444' },
+        { name: 'NVA Warehouse P1', value: 6.96, color: '#f87171' }, { name: 'Lunch / Break', value: 7.07, color: '#94a3b8' },
+        { name: 'NVA Warehouse P2', value: 2.33, color: '#fca5a5' }, { name: 'MFG DT', value: 1.36, color: '#f59e0b' },
+        { name: 'NVA Support P1', value: 0.73, color: '#fcd34d' }, { name: 'TE DT', value: 0.03, color: '#e2e8f0' },
+        { name: 'NVA Support P2', value: 0.12, color: '#fecaca' },
+    ],
+    plant1: [
+        { name: 'Output SMH', value: 62.4, color: '#22c55e' }, { name: 'NVA Input', value: 21.8, color: '#ef4444' },
+        { name: 'NVA Warehouse P1', value: 7.1, color: '#f87171' }, { name: 'Lunch / Break', value: 6.9, color: '#94a3b8' },
+        { name: 'NVA Warehouse P2', value: 1.8, color: '#fca5a5' }, { name: 'MFG DT', value: 1.1, color: '#f59e0b' },
+        { name: 'NVA Support P1', value: 0.5, color: '#fcd34d' }, { name: 'TE DT', value: 0.02, color: '#e2e8f0' },
+    ],
+    batu_kawan: [
+        { name: 'Output SMH', value: 54.1, color: '#22c55e' }, { name: 'NVA Input', value: 28.4, color: '#ef4444' },
+        { name: 'NVA Warehouse P1', value: 7.8, color: '#f87171' }, { name: 'Lunch / Break', value: 7.2, color: '#94a3b8' },
+        { name: 'NVA Warehouse P2', value: 3.1, color: '#fca5a5' }, { name: 'MFG DT', value: 1.9, color: '#f59e0b' },
+        { name: 'NVA Support P1', value: 0.9, color: '#fcd34d' }, { name: 'NVA Support P2', value: 0.2, color: '#fecaca' },
+    ],
+    plant2: [
+        { name: 'Output SMH', value: 57.8, color: '#22c55e' }, { name: 'NVA Input', value: 26.0, color: '#ef4444' },
+        { name: 'NVA Warehouse P1', value: 6.5, color: '#f87171' }, { name: 'Lunch / Break', value: 7.3, color: '#94a3b8' },
+        { name: 'NVA Warehouse P2', value: 2.6, color: '#fca5a5' }, { name: 'MFG DT', value: 1.5, color: '#f59e0b' },
+        { name: 'NVA Support P1', value: 0.6, color: '#fcd34d' }, { name: 'NVA Support P2', value: 0.15, color: '#fecaca' },
+    ],
+};
+
+const KPI_DATA: Record<PlantId, { avgOleOverride: number; inputHrs: number; shifts: number; flagged: number; qty: number }> = {
+    all:       { avgOleOverride: 0, inputHrs: 0, shifts: 0, flagged: 0, qty: 0 }, // driven by API
+    plant1:    { avgOleOverride: 63.5, inputHrs: 18400, shifts: 142, flagged: 3, qty: 72000 },
+    batu_kawan:{ avgOleOverride: 55.2, inputHrs: 11200, shifts: 88,  flagged: 7, qty: 43500 },
+    plant2:    { avgOleOverride: 58.9, inputHrs: 14600, shifts: 110, flagged: 5, qty: 57800 },
+};
 
 // ─── active donut shape ───────────────────────────────────────────────────────
 
@@ -159,20 +232,30 @@ export default function OLEReport({ onNavigateTab }: {
 }) {
     const navigate = useNavigate();
     const [slice, setSlice] = useState(0);
+    const [plant, setPlant] = useState<PlantId>('all');
     const { data, loading } = useOleSummary();
 
     // Safely fallback to an empty array if data is null OR undefined
     const raw = data ?? [];
 
-    const avgOle = useMemo(() => {
+    // ── derive values based on selected plant ──────────────────────────────
+    const WEEKLY = WEEKLY_DATA[plant];
+    const PARETO = PARETO_DATA[plant];
+    const DONUT  = DONUT_DATA[plant];
+
+    const apiAvgOle = useMemo(() => {
         const v = raw.filter(r => r.avg_ole_pct !== null);
         return v.length ? v.reduce((s, r) => s + (r.avg_ole_pct ?? 0), 0) / v.length : null;
     }, [raw]);
 
-    const totalShifts = raw.reduce((s, r) => s + r.total_shifts, 0);
-    const totalQty = raw.reduce((s, r) => s + r.total_qty, 0);
-    const flagged = raw.reduce((s, r) => s + r.flagged_shifts, 0);
-    const totalInputHrs = raw.reduce((s, r) => s + r.total_input_hours, 0);
+    const kpi = KPI_DATA[plant];
+    const isAll = plant === 'all';
+
+    const avgOleVal   = isAll ? apiAvgOle                          : kpi.avgOleOverride;
+    const totalInputHrs = isAll ? raw.reduce((s, r) => s + r.total_input_hours, 0) : kpi.inputHrs;
+    const totalShifts   = isAll ? raw.reduce((s, r) => s + r.total_shifts, 0)      : kpi.shifts;
+    const flagged       = isAll ? raw.reduce((s, r) => s + r.flagged_shifts, 0)    : kpi.flagged;
+    const totalQty      = isAll ? raw.reduce((s, r) => s + r.total_qty, 0)         : kpi.qty;
 
     const last2 = WEEKLY.slice(-2);
     const trendUp = last2.length === 2 && last2[1].ole > last2[0].ole;
@@ -181,11 +264,28 @@ export default function OLEReport({ onNavigateTab }: {
     return (
         <div className="px-6 pt-5 pb-16 space-y-6">
 
+            {/* ── Plant filter buttons ── */}
+            <div className="flex flex-wrap gap-2">
+                {PLANTS.map(p => (
+                    <button key={p.id}
+                        onClick={() => { setPlant(p.id); setSlice(0); }}
+                        className={cn(
+                            'px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                            plant === p.id
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
+                        )}
+                    >
+                        {p.label}
+                    </button>
+                ))}
+            </div>
+
             {/* ── KPI strip ── */}
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
                 <Kpi label="Plant OLE" icon={Activity} accent="bg-primary/15 text-primary"
-                    value={avgOle !== null ? `${avgOle.toFixed(1)}%` : '—'}
-                    sub="Avg across all workcells"
+                    value={avgOleVal !== null ? `${(avgOleVal as number).toFixed(1)}%` : '—'}
+                    sub={isAll ? 'Avg across all workcells' : `Avg — ${PLANTS.find(p => p.id === plant)?.label}`}
                     trend={trendDiff ? `${trendDiff}% vs prev week` : undefined} up={trendUp}
                     onClick={() => onNavigateTab('summary')} />
                 <Kpi label="Total Input Hrs" icon={Clock} accent="bg-violet-500/15 text-violet-400"
