@@ -462,140 +462,140 @@ export default function LayoutEditor() {
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         <div className="flex-1 min-h-0 overflow-hidden relative">
 
-        {/* ── Left toolbar — floating over canvas ── */}
-        <div className="absolute left-3 top-3 z-10 flex flex-col items-center gap-1 py-2 px-1.5 bg-card/90 backdrop-blur-sm rounded-xl border border-border shadow-md">
-          <ToolBtn icon={MousePointer2} label="Select / Pan (S)" active={tool === 'select'} onClick={() => setTool('select')} />
-          <ToolBtn icon={Pencil} label="Draw zone (D)" active={tool === 'draw'} onClick={() => setTool('draw')} />
-          <div className="w-6 h-px bg-border my-1" />
-          <ToolBtn icon={Trash2} label="Delete selected" onClick={() => { if (selectedId) deleteZone(selectedId); }} disabled={!selectedId} danger />
-          <div className="w-6 h-px bg-border my-1" />
-          <ToolBtn icon={ImagePlus} label="Change image" onClick={() => setShowImagePicker(true)} />
-        </div>
+          {/* ── Left toolbar — floating over canvas ── */}
+          <div className="absolute left-3 top-3 z-10 flex flex-col items-center gap-1 py-2 px-1.5 bg-card/90 backdrop-blur-sm rounded-xl border border-border shadow-md">
+            <ToolBtn icon={MousePointer2} label="Select / Pan (S)" active={tool === 'select'} onClick={() => setTool('select')} />
+            <ToolBtn icon={Pencil} label="Draw zone (D)" active={tool === 'draw'} onClick={() => setTool('draw')} />
+            <div className="w-6 h-px bg-border my-1" />
+            <ToolBtn icon={Trash2} label="Delete selected" onClick={() => { if (selectedId) deleteZone(selectedId); }} disabled={!selectedId} danger />
+            <div className="w-6 h-px bg-border my-1" />
+            <ToolBtn icon={ImagePlus} label="Change image" onClick={() => setShowImagePicker(true)} />
+          </div>
 
-        {/* ── Viewport ── */}
-        <div
-          ref={viewportRef}
-          className="w-full h-full overflow-hidden bg-muted/30 flex items-center justify-center"
-          onWheel={handleWheel}
-        >
-          {!imageSrc ? (
-            <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                <ImagePlus className="h-8 w-8 opacity-40" />
+          {/* ── Viewport ── */}
+          <div
+            ref={viewportRef}
+            className="w-full h-full overflow-hidden bg-muted/30 flex items-center justify-center"
+            onWheel={handleWheel}
+          >
+            {!imageSrc ? (
+              <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                  <ImagePlus className="h-8 w-8 opacity-40" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-foreground">No floor plan loaded</p>
+                  <p className="text-xs mt-1">Load an image to start drawing zones</p>
+                </div>
+                <button onClick={() => setShowImagePicker(true)}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+                  Load Floor Plan
+                </button>
               </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-foreground">No floor plan loaded</p>
-                <p className="text-xs mt-1">Load an image to start drawing zones</p>
-              </div>
-              <button onClick={() => setShowImagePicker(true)}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-                Load Floor Plan
-              </button>
-            </div>
-          ) : (
-            /* Canvas — transformed for zoom + pan */
-            <div
-              style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                transformOrigin: 'center center',
-                transition: panning || dragging || resizing ? 'none' : 'transform 0.05s ease-out',
-              }}
-            >
+            ) : (
+              /* Canvas — transformed for zoom + pan */
               <div
-                ref={canvasRef}
-                className="relative shadow-xl rounded-lg overflow-hidden"
-                style={{ width: BASE_W, height: BASE_H, cursor: canvasCursor }}
-                onMouseDown={handleCanvasMouseDown}
-                onMouseMove={handleCanvasMouseMove}
-                onMouseUp={handleCanvasMouseUp}
-                onMouseLeave={handleCanvasMouseUp}
+                style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: 'center center',
+                  transition: panning || dragging || resizing ? 'none' : 'transform 0.05s ease-out',
+                }}
               >
-                {/* Background image */}
-                <img
-                  src={imageSrc}
-                  alt="Floor plan"
-                  className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                  draggable={false}
-                />
+                <div
+                  ref={canvasRef}
+                  className="relative shadow-xl rounded-lg overflow-hidden"
+                  style={{ width: BASE_W, height: BASE_H, cursor: canvasCursor }}
+                  onMouseDown={handleCanvasMouseDown}
+                  onMouseMove={handleCanvasMouseMove}
+                  onMouseUp={handleCanvasMouseUp}
+                  onMouseLeave={handleCanvasMouseUp}
+                >
+                  {/* Background image */}
+                  <img
+                    src={imageSrc}
+                    alt="Floor plan"
+                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                    draggable={false}
+                  />
 
-                {/* SVG overlay */}
-                <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
-                  {zones.map(zone => {
-                    const isSelected = zone.id === selectedId;
-                    const px = zone.x * 100;
-                    const py = zone.y * 100;
-                    const pw = zone.w * 100;
-                    const ph = zone.h * 100;
-                    const cx = (zone.x + zone.w / 2) * 100;
-                    const cy = (zone.y + zone.h / 2) * 100;
-                    return (
-                      <g key={zone.id}>
-                        <rect
-                          x={`${px}%`} y={`${py}%`}
-                          width={`${pw}%`} height={`${ph}%`}
-                          fill={zone.color} fillOpacity={isSelected ? 0.35 : 0.2}
-                          stroke={zone.color} strokeWidth={isSelected ? 2 : 1.5}
-                          strokeDasharray={isSelected ? 'none' : '4 2'}
-                          rx={3}
-                          style={{ pointerEvents: 'all', cursor: tool === 'select' ? 'move' : 'default' }}
-                          onMouseDown={e => {
-                            if (tool !== 'select') return;
-                            e.stopPropagation();
-                            const rel = toRel(e.clientX, e.clientY);
-                            setSelectedId(zone.id);
-                            setDragging(true);
-                            setDragOffset({ x: rel.x - zone.x, y: rel.y - zone.y });
-                          }}
-                        />
-                        <text
-                          x={`${cx}%`} y={`${cy}%`}
-                          textAnchor="middle" dominantBaseline="middle"
-                          fill={zone.color}
-                          fontSize={Math.max(10, Math.min(14, zone.w * BASE_W * 0.12))}
-                          fontWeight={600}
-                          style={{ pointerEvents: 'none', userSelect: 'none' }}
-                        >
-                          {zone.label}
-                        </text>
-                        {/* Resize handles */}
-                        {isSelected && [
-                          { corner: 'nw', cx: px, cy: py },
-                          { corner: 'ne', cx: px + pw, cy: py },
-                          { corner: 'sw', cx: px, cy: py + ph },
-                          { corner: 'se', cx: px + pw, cy: py + ph },
-                        ].map(({ corner, cx, cy }) => (
+                  {/* SVG overlay */}
+                  <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
+                    {zones.map(zone => {
+                      const isSelected = zone.id === selectedId;
+                      const px = zone.x * 100;
+                      const py = zone.y * 100;
+                      const pw = zone.w * 100;
+                      const ph = zone.h * 100;
+                      const cx = (zone.x + zone.w / 2) * 100;
+                      const cy = (zone.y + zone.h / 2) * 100;
+                      return (
+                        <g key={zone.id}>
                           <rect
-                            key={corner}
-                            x={`calc(${cx}% - 5px)`} y={`calc(${cy}% - 5px)`}
-                            width={10} height={10}
-                            fill="white" stroke={zone.color} strokeWidth={2} rx={2}
-                            style={{
-                              pointerEvents: 'all',
-                              cursor: corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize',
+                            x={`${px}%`} y={`${py}%`}
+                            width={`${pw}%`} height={`${ph}%`}
+                            fill={zone.color} fillOpacity={isSelected ? 0.35 : 0.2}
+                            stroke={zone.color} strokeWidth={isSelected ? 2 : 1.5}
+                            strokeDasharray={isSelected ? 'none' : '4 2'}
+                            rx={3}
+                            style={{ pointerEvents: 'all', cursor: tool === 'select' ? 'move' : 'default' }}
+                            onMouseDown={e => {
+                              if (tool !== 'select') return;
+                              e.stopPropagation();
+                              const rel = toRel(e.clientX, e.clientY);
+                              setSelectedId(zone.id);
+                              setDragging(true);
+                              setDragOffset({ x: rel.x - zone.x, y: rel.y - zone.y });
                             }}
-                            onMouseDown={e => { e.stopPropagation(); handleResizeMouseDown(e as any, corner, zone); }}
                           />
-                        ))}
-                      </g>
-                    );
-                  })}
+                          <text
+                            x={`${cx}%`} y={`${cy}%`}
+                            textAnchor="middle" dominantBaseline="middle"
+                            fill={zone.color}
+                            fontSize={Math.max(10, Math.min(14, zone.w * BASE_W * 0.12))}
+                            fontWeight={600}
+                            style={{ pointerEvents: 'none', userSelect: 'none' }}
+                          >
+                            {zone.label}
+                          </text>
+                          {/* Resize handles */}
+                          {isSelected && [
+                            { corner: 'nw', cx: px, cy: py },
+                            { corner: 'ne', cx: px + pw, cy: py },
+                            { corner: 'sw', cx: px, cy: py + ph },
+                            { corner: 'se', cx: px + pw, cy: py + ph },
+                          ].map(({ corner, cx, cy }) => (
+                            <rect
+                              key={corner}
+                              x={`calc(${cx}% - 5px)`} y={`calc(${cy}% - 5px)`}
+                              width={10} height={10}
+                              fill="white" stroke={zone.color} strokeWidth={2} rx={2}
+                              style={{
+                                pointerEvents: 'all',
+                                cursor: corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize',
+                              }}
+                              onMouseDown={e => { e.stopPropagation(); handleResizeMouseDown(e as any, corner, zone); }}
+                            />
+                          ))}
+                        </g>
+                      );
+                    })}
 
-                  {/* Live draw preview */}
-                  {drawing && drawRect && drawRect.w > 0 && drawRect.h > 0 && (
-                    <rect
-                      x={`${drawRect.x * 100}%`} y={`${drawRect.y * 100}%`}
-                      width={`${drawRect.w * 100}%`} height={`${drawRect.h * 100}%`}
-                      fill={ZONE_COLORS[zones.length % ZONE_COLORS.length]} fillOpacity={0.2}
-                      stroke={ZONE_COLORS[zones.length % ZONE_COLORS.length]}
-                      strokeWidth={2} strokeDasharray="6 3" rx={3}
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  )}
-                </svg>
+                    {/* Live draw preview */}
+                    {drawing && drawRect && drawRect.w > 0 && drawRect.h > 0 && (
+                      <rect
+                        x={`${drawRect.x * 100}%`} y={`${drawRect.y * 100}%`}
+                        width={`${drawRect.w * 100}%`} height={`${drawRect.h * 100}%`}
+                        fill={ZONE_COLORS[zones.length % ZONE_COLORS.length]} fillOpacity={0.2}
+                        stroke={ZONE_COLORS[zones.length % ZONE_COLORS.length]}
+                        strokeWidth={2} strokeDasharray="6 3" rx={3}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    )}
+                  </svg>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
         </div>
 
         {/* ── Right zones panel ── */}
