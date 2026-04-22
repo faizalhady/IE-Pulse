@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   BookOpen,
   Building2,
@@ -70,10 +71,11 @@ export const APPS: AppConfig[] = [
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     navItems: [
-      { label: 'OLE Overview',  to: '/ole',            icon: Home },
-      { label: '4Q Generator',  to: '/ole/4q',         icon: FileSpreadsheet },
-      { label: 'SMH Status',    to: '/ole/smh-status', icon: FlaskConical },
-      { label: 'API Test',      to: '/ole-mart-api',   icon: Database },
+      { label: 'OLE Overview',         to: '/ole',              icon: Home },
+      { label: '4Q Generator',         to: '/ole/4q',           icon: FileSpreadsheet },
+      { label: 'SMH Status',           to: '/ole/smh-status',   icon: FlaskConical },
+      { label: 'Downtime Management',  to: '/ole/downtime',     icon: AlertTriangle },
+      { label: 'API Test',             to: '/ole-mart-api',     icon: Database },
     ],
   },
   {

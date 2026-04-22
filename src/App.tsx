@@ -14,6 +14,7 @@ import OLEOverview from "@/pages/ole/OLEOverview";
 import FourQGenerator from "@/pages/ole/FourQGenerator";
 import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import SMHStatus from "@/pages/ole/SMHStatus";
+import DowntimeManagement from "@/pages/ole/DowntimeManagement";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import IEBaseline from "@/pages/iebaseline/IEBaseline";
 import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
@@ -69,6 +70,7 @@ function AppShell() {
             <Route path="/ole" element={<OLEOverview />} />
             <Route path="/ole/smh-status" element={<SMHStatus />} />
             <Route path="/ole/4q" element={<FourQGenerator />} />
+            <Route path="/ole/downtime" element={<DowntimeManagement />} />
             <Route path="/ole/:workcell" element={<OLEWorkcell />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ole-mart-api" element={<OleMartApiTest />} />
