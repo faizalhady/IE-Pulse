@@ -19,6 +19,7 @@ import {
   Pencil,
   TableProperties,
   TrendingUp,
+  Users,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ export const APPS: AppConfig[] = [
       { label: '4Q Generator',         to: '/ole/4q',           icon: FileSpreadsheet },
       { label: 'SMH Status',           to: '/ole/smh-status',   icon: FlaskConical },
       { label: 'Downtime Management',  to: '/ole/downtime',     icon: AlertTriangle },
+      { label: 'WC Transfer Man-Hour', to: '/ole/transfer',     icon: Users },
       { label: 'API Test',             to: '/ole-mart-api',     icon: Database },
     ],
   },
