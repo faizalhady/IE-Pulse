@@ -4,6 +4,9 @@ import {
   Clock, Plus, Users, X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DatePickerField } from './OLEFilters';
 import { DT_CATEGORIES, MOCK_LOGS, WEEKLY_DT, type DtLog } from './downtime-data';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -219,7 +222,7 @@ function TrendBar({ data }: { data: typeof WEEKLY_DT }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function DowntimeManagement() {
-  const [tab, setTab] = useState<'dashboard' | 'logs'>('dashboard');
+  const [tab, setTab] = useState<'overview' | 'logs'>('overview');
   const [logs, setLogs] = useState<DtLog[]>(MOCK_LOGS);
   const [showDialog, setShowDialog] = useState(false);
 
@@ -262,7 +265,7 @@ export default function DowntimeManagement() {
 
         {/* tabs */}
         <div className="flex items-center gap-0 -mb-px">
-          <button className={tabCls('dashboard')} onClick={() => setTab('dashboard')}>Dashboard</button>
+          <button className={tabCls('overview')} onClick={() => setTab('overview')}>Overview</button>
           <button className={tabCls('logs')} onClick={() => setTab('logs')}>
             Downtime Logs
             <span className="ml-2 text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{logs.length}</span>
@@ -270,8 +273,8 @@ export default function DowntimeManagement() {
         </div>
       </div>
 
-      {/* ── DASHBOARD tab ── */}
-      {tab === 'dashboard' && (
+      {/* ── OVERVIEW tab ── */}
+      {tab === 'overview' && (
         <div className="px-6 py-6 space-y-6">
 
           {/* KPI strip */}
@@ -357,31 +360,39 @@ export default function DowntimeManagement() {
 
           {/* filters */}
           <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Department</p>
-              <select className={selectCls} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
-                <option value="">All departments</option>
-                {DT_CATEGORIES.map(d => <option key={d.dept} value={d.dept}>{d.dept}</option>)}
-              </select>
+            <div className="min-w-[180px]">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Department</Label>
+              <Select value={filterDept || '__all__'} onValueChange={v => setFilterDept(v === '__all__' ? '' : v)}>
+                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All departments" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All departments</SelectItem>
+                  {DT_CATEGORIES.map(d => <SelectItem key={d.dept} value={d.dept}>{d.dept}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Shift</p>
-              <select className={selectCls} value={filterShift} onChange={e => setFilterShift(e.target.value)}>
-                <option value="">All shifts</option>
-                <option>Shift A</option><option>Shift B</option><option>Shift C</option>
-              </select>
+            
+            <div className="min-w-[140px]">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Shift</Label>
+              <Select value={filterShift || '__all__'} onValueChange={v => setFilterShift(v === '__all__' ? '' : v)}>
+                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All shifts" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All shifts</SelectItem>
+                  <SelectItem value="Shift A">Shift A</SelectItem>
+                  <SelectItem value="Shift B">Shift B</SelectItem>
+                  <SelectItem value="Shift C">Shift C</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Date</p>
-              <input type="date" className={selectCls} value={filterDate} onChange={e => setFilterDate(e.target.value)} />
-            </div>
+
+            <DatePickerField id="dt-date" label="Date" value={filterDate} onChange={setFilterDate} />
+
             {(filterDept || filterShift || filterDate) && (
               <button onClick={() => { setFilterDept(''); setFilterShift(''); setFilterDate(''); }}
                 className="h-9 px-3 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors">
                 Clear
               </button>
             )}
-            <span className="ml-auto text-xs text-muted-foreground">{filteredLogs.length} records</span>
+            <span className="ml-auto text-xs text-muted-foreground mb-2">{filteredLogs.length} records</span>
           </div>
 
           {/* table */}
