@@ -1,12 +1,18 @@
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOleWeekly } from '@/hooks/useOleData';
 import type { OleWeeklyResult } from '@/lib/oleApi';
 import { cn } from '@/lib/utils';
 import { useMemo, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ReferenceArea, ResponsiveContainer, Cell,
+  Bar,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Line,
+  ReferenceArea, ResponsiveContainer,
+  Tooltip,
+  XAxis, YAxis,
 } from 'recharts';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -14,20 +20,20 @@ import {
 const ALL = '__all__';
 
 const FORMULA_COLORS: Record<string, string> = {
-  sma3:       '#3b82f6',
-  sma5:       '#6366f1',
-  wma3:       '#f59e0b',
-  ema_fast:   '#10b981',
-  ema_slow:   '#06b6d4',
+  sma3: '#3b82f6',
+  sma5: '#6366f1',
+  wma3: '#f59e0b',
+  ema_fast: '#10b981',
+  ema_slow: '#06b6d4',
   linear_reg: '#f43f5e',
 };
 
 const FORMULA_LABELS: Record<string, string> = {
-  sma3:       'SMA (3w)',
-  sma5:       'SMA (5w)',
-  wma3:       'WMA (3w)',
-  ema_fast:   'EMA Fast (3)',
-  ema_slow:   'EMA Slow (9)',
+  sma3: 'SMA (3w)',
+  sma5: 'SMA (5w)',
+  wma3: 'WMA (3w)',
+  ema_fast: 'EMA Fast (3)',
+  ema_slow: 'EMA Slow (9)',
   linear_reg: 'Linear Reg',
 };
 
@@ -75,15 +81,15 @@ function linearReg(values: number[]): number | null {
 // ─── Build chart data ──────────────────────────────────────────────────────────
 
 interface ChartPoint {
-  week_label:  string;
-  actual:      number | null;
-  sma3?:       number | null;
-  sma5?:       number | null;
-  wma3?:       number | null;
-  ema_fast?:   number | null;
-  ema_slow?:   number | null;
+  week_label: string;
+  actual: number | null;
+  sma3?: number | null;
+  sma5?: number | null;
+  wma3?: number | null;
+  ema_fast?: number | null;
+  ema_slow?: number | null;
   linear_reg?: number | null;
-  projected?:  boolean;
+  projected?: boolean;
 }
 
 function buildChartData(rows: OleWeeklyResult[], projectionWeeks: number): ChartPoint[] {
@@ -94,19 +100,19 @@ function buildChartData(rows: OleWeeklyResult[], projectionWeeks: number): Chart
 
   const points: ChartPoint[] = valid.map((r, i) => ({
     week_label: r.week_label,
-    actual:     r.ole_pct,
-    sma3:       i >= 2 ? sma(actuals.slice(0, i + 1), 3)            : null,
-    sma5:       i >= 4 ? sma(actuals.slice(0, i + 1), 5)            : null,
-    wma3:       i >= 2 ? wma(actuals.slice(0, i + 1), 3)            : null,
-    ema_fast:   i >= 1 ? ema(actuals.slice(0, i + 1), 3)            : null,
-    ema_slow:   i >= 1 ? ema(actuals.slice(0, i + 1), 9)            : null,
-    linear_reg: i >= 1 ? linearReg(actuals.slice(0, i + 1))         : null,
-    projected:  false,
+    actual: r.ole_pct,
+    sma3: i >= 2 ? sma(actuals.slice(0, i + 1), 3) : null,
+    sma5: i >= 4 ? sma(actuals.slice(0, i + 1), 5) : null,
+    wma3: i >= 2 ? wma(actuals.slice(0, i + 1), 3) : null,
+    ema_fast: i >= 1 ? ema(actuals.slice(0, i + 1), 3) : null,
+    ema_slow: i >= 1 ? ema(actuals.slice(0, i + 1), 9) : null,
+    linear_reg: i >= 1 ? linearReg(actuals.slice(0, i + 1)) : null,
+    projected: false,
   }));
 
-  const lastRow  = valid[valid.length - 1];
-  let projYear   = lastRow.iso_year;
-  let projWeek   = lastRow.iso_week;
+  const lastRow = valid[valid.length - 1];
+  let projYear = lastRow.iso_year;
+  let projWeek = lastRow.iso_week;
 
   for (let p = 1; p <= projectionWeeks; p++) {
     projWeek++;
@@ -114,14 +120,14 @@ function buildChartData(rows: OleWeeklyResult[], projectionWeeks: number): Chart
     const label = `${projYear}-W${String(projWeek).padStart(2, '0')}`;
     points.push({
       week_label: label,
-      actual:     null,
-      sma3:       sma(actuals, 3),
-      sma5:       sma(actuals, 5),
-      wma3:       wma(actuals, 3),
-      ema_fast:   ema(actuals, 3),
-      ema_slow:   ema(actuals, 9),
+      actual: null,
+      sma3: sma(actuals, 3),
+      sma5: sma(actuals, 5),
+      wma3: wma(actuals, 3),
+      ema_fast: ema(actuals, 3),
+      ema_slow: ema(actuals, 9),
       linear_reg: linearReg(actuals),
-      projected:  true,
+      projected: true,
     });
   }
 
@@ -198,9 +204,9 @@ function FormulaToggle({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OLEProjection() {
-  const [workcell,        setWorkcell]        = useState('');
+  const [workcell, setWorkcell] = useState('');
   const [projectionWeeks, setProjectionWeeks] = useState(3);
-  const [activeFormulas,  setActiveFormulas]  = useState<Set<FormulaKey>>(
+  const [activeFormulas, setActiveFormulas] = useState<Set<FormulaKey>>(
     new Set(ALL_FORMULA_KEYS)
   );
 
@@ -213,10 +219,10 @@ export default function OLEProjection() {
   }
 
   const weeklyHook = useOleWeekly({ workcell: workcell || undefined });
-  const allRows    = weeklyHook.data ?? [];
-  const workcells  = useMemo(() =>
+  const allRows = weeklyHook.data ?? [];
+  const workcells = useMemo(() =>
     Array.from(new Set(allRows.map(r => r.workcell))).sort()
-  , [allRows]);
+    , [allRows]);
 
   const byWorkcell = useMemo(() => {
     const map: Record<string, OleWeeklyResult[]> = {};
@@ -261,10 +267,8 @@ export default function OLEProjection() {
   );
 
   return (
-    <div className="px-6 pb-10 space-y-8 pt-6">
-
-      {/* ── Top controls ── */}
-      <div className="flex flex-wrap items-end gap-4">
+    <div className="px-6 pt-4 pb-10">
+      <div className="flex flex-wrap items-end gap-4 mb-3">
         <div className="min-w-[180px]">
           <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Workcell</Label>
           <Select value={workcell || ALL} onValueChange={v => setWorkcell(v === ALL ? '' : v)}>
@@ -303,17 +307,18 @@ export default function OLEProjection() {
           ))}
         </div>
 
-        <div className="ml-auto text-xs text-muted-foreground">
+        {/* <div className="ml-auto text-xs text-muted-foreground">
           {allRows.length > 0
             ? `${allRows.length} weekly records · ${workcells.length} workcells`
             : 'No data'}
-        </div>
+        </div> */}
       </div>
 
       {/* ── Charts ── */}
-      {targetWorkcells.map(([wc, rows]) => {
-        const chartData          = buildChartData(rows, projectionWeeks);
-        const firstProjected     = chartData.find(p => p.projected)?.week_label;
+      <div className="space-y-6">
+        {targetWorkcells.map(([wc, rows]) => {
+        const chartData = buildChartData(rows, projectionWeeks);
+        const firstProjected = chartData.find(p => p.projected)?.week_label;
         if (chartData.length === 0) return null;
 
         // Best formula by lowest MAE
@@ -362,30 +367,30 @@ export default function OLEProjection() {
             <div className="p-5">
               <ResponsiveContainer width="100%" height={280}>
                 <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 4, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.4} vertical={false} />
-                <XAxis
-                dataKey="week_label"
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                domain={[0, 130]}
-                tickFormatter={v => `${v}%`}
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                tickLine={false}
-                axisLine={false}
-                  width={40}
-                />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.4} vertical={false} />
+                  <XAxis
+                    dataKey="week_label"
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 130]}
+                    tickFormatter={v => `${v}%`}
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={40}
+                  />
                   <Tooltip content={<ProjectionTooltip />} />
 
-                {/* Projected area highlight */}
-                {firstProjected && (
-                <ReferenceArea
-                x1={firstProjected}
-                x2={chartData[chartData.length - 1].week_label}
-                  fill="hsl(var(--primary) / 0.05)"
-                    strokeOpacity={0.3}
+                  {/* Projected area highlight */}
+                  {firstProjected && (
+                    <ReferenceArea
+                      x1={firstProjected}
+                      x2={chartData[chartData.length - 1].week_label}
+                      fill="hsl(var(--primary) / 0.05)"
+                      strokeOpacity={0.3}
                       label={{ value: 'PROJECTION', position: 'insideTop', fill: 'hsl(var(--primary))', fontSize: 10, fontWeight: 700, offset: 10 }}
                     />
                   )}
@@ -421,6 +426,7 @@ export default function OLEProjection() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

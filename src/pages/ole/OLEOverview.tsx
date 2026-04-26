@@ -18,8 +18,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OLEReport from './OLEReport';
-import OLEWorkcellTab from './OLEWorkcellTab';
-import OLEProjection from './OLEProjection';
+import OLEAnalysis from './OLEAnalysis';
+import OLEFilters from './OLEFilters';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -31,8 +31,7 @@ const ALL = '__all__';
 const TABS = [
   { id: 'report',     label: 'OLE Report' },
   { id: 'summary',    label: 'OLE Summary' },
-  { id: 'workcell',   label: 'OLE Workcell' },
-  { id: 'projection', label: 'OLE Projection' },
+  { id: 'analysis',   label: 'OLE Analysis' },
   { id: 'shifts',     label: 'Shift Detail' },
   { id: 'production', label: 'Production' },
   { id: 'paid_hours', label: 'Paid Hours' },
@@ -59,10 +58,25 @@ function matchesPlant(workcellName: string, plant: string): boolean {
 
 // ─── Workcell logos (same map as WorkcellsTable) ────────────────────────────
 const WORKCELL_LOGOS: Record<string, string> = {
-  arista: '/workcell logo/Arista.png',
-  keysight: '/workcell logo/keyisght.png',
-  aop: '/workcell logo/aop.png',
-  micron: '/workcell logo/micron.png',
+  arista:      '/workcell logo/Arista.png',
+  keysight:    '/workcell logo/keysight.png',
+  keyisght:    '/workcell logo/keysight.png',
+  aop:         '/workcell logo/aop.png',
+  micron:      '/workcell logo/micron.png',
+  dyson:       '/workcell logo/dyson.png',
+  wabtec:      '/workcell logo/wabtec.png',
+  msi:         '/workcell logo/msi.png',
+  photonics:   '/workcell logo/photonics.png',
+  tellabs:     '/workcell logo/tellabs.png',
+  imed:        '/workcell logo/imed.png',
+  collins:     '/workcell logo/collins.png',
+  danaher:     '/workcell logo/danaher.png',
+  infinera:    '/workcell logo/infinera.jpg',
+  masimo:      '/workcell logo/masimo.png',
+  resmed:      '/workcell logo/resmed.png',
+  fortive:     '/workcell logo/fortive.png',
+  lamresearch: '/workcell logo/lam_research.png',
+  asp:         '/workcell logo/asp.jpg',
 };
 
 function WorkcellBadge({ name, status }: { name: string; status: string }) {
@@ -100,9 +114,9 @@ const MOCK_SUMMARY: OleSummary[] = [
   { workcell: 'ARISTA', stage_label: 'Backend', scan_stage: 'Backend', total_shifts: 10, avg_ole_pct: 83.2, min_ole_pct: 72.1, max_ole_pct: 91.4, latest_date: '2026-04-16', total_qty: 31200, total_output_smh: 4120.5, total_input_hours: 4952.0, flagged_shifts: 2 },
   { workcell: 'MICRON', stage_label: 'SMT', scan_stage: 'SMT', total_shifts: 8, avg_ole_pct: 61.7, min_ole_pct: 48.2, max_ole_pct: 74.3, latest_date: '2026-04-16', total_qty: 18900, total_output_smh: 2344.1, total_input_hours: 3798.0, flagged_shifts: 8 },
   { workcell: 'WABTEC', stage_label: 'BoxBuild', scan_stage: 'BoxBuild', total_shifts: 10, avg_ole_pct: 55.4, min_ole_pct: 31.0, max_ole_pct: 72.8, latest_date: '2026-04-15', total_qty: 8420, total_output_smh: 1890.3, total_input_hours: 3412.0, flagged_shifts: 10 },
-  { workcell: 'CELESTICA', stage_label: 'Backend', scan_stage: 'Backend', total_shifts: 6, avg_ole_pct: 91.3, min_ole_pct: 87.2, max_ole_pct: 95.1, latest_date: '2026-04-14', total_qty: 22100, total_output_smh: 3210.0, total_input_hours: 3515.0, flagged_shifts: 0 },
+  { workcell: 'COLLINS', stage_label: 'Backend', scan_stage: 'Backend', total_shifts: 6, avg_ole_pct: 91.3, min_ole_pct: 87.2, max_ole_pct: 95.1, latest_date: '2026-04-14', total_qty: 22100, total_output_smh: 3210.0, total_input_hours: 3515.0, flagged_shifts: 0 },
   { workcell: 'DYSON', stage_label: 'Backend', scan_stage: 'Backend', total_shifts: 4, avg_ole_pct: 44.8, min_ole_pct: 28.3, max_ole_pct: 61.2, latest_date: '2026-04-13', total_qty: 5600, total_output_smh: 980.2, total_input_hours: 2188.0, flagged_shifts: 4 },
-  { workcell: 'FLEX', stage_label: 'SMT', scan_stage: 'SMT', total_shifts: 10, avg_ole_pct: 78.9, min_ole_pct: 65.4, max_ole_pct: 88.7, latest_date: '2026-04-16', total_qty: 41000, total_output_smh: 5620.4, total_input_hours: 7122.0, flagged_shifts: 3 },
+  { workcell: 'DANAHER', stage_label: 'SMT', scan_stage: 'SMT', total_shifts: 10, avg_ole_pct: 78.9, min_ole_pct: 65.4, max_ole_pct: 88.7, latest_date: '2026-04-16', total_qty: 41000, total_output_smh: 5620.4, total_input_hours: 7122.0, flagged_shifts: 3 },
 ];
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
@@ -148,57 +162,7 @@ const QUALITY_BADGE: Record<string, string> = {
   NO_OUTPUT_SMH: 'bg-red-500/15    text-red-400    border-red-500/30',
 };
 
-// ─── Date picker (same as OleMartApiTest) ─────────────────────────────────────
-
-function toYmd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-function fromYmd(s: string): Date | undefined {
-  if (!s?.trim()) return undefined;
-  const parts = s.trim().split('-').map(Number);
-  if (parts.length !== 3) return undefined;
-  const [y, mo, d] = parts;
-  if (!y || !mo || !d) return undefined;
-  return new Date(y, mo - 1, d);
-}
-
-function DatePickerField({ id, label, value, onChange }: {
-  id: string; label: string; value: string; onChange: (ymd: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const date = fromYmd(value);
-  return (
-    <div className="min-w-[180px] max-w-[220px]">
-      <Label htmlFor={id} className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button id={id} type="button" variant="outline"
-            className={cn('mt-1 w-full h-9 justify-start text-left font-normal px-2', !value && 'text-muted-foreground')}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0 opacity-70" />
-            <span className="truncate">{date ? format(date, 'MMM d, yyyy') : 'Any date'}</span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={date}
-            onSelect={d => { onChange(d ? toYmd(d) : ''); setOpen(false); }}
-            initialFocus
-          />
-          {value && (
-            <div className="border-t border-border p-2">
-              <Button type="button" variant="ghost" size="sm" className="w-full h-8 text-xs"
-                onClick={() => { onChange(''); setOpen(false); }}
-              >Clear date</Button>
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
+// ─── Table components ────────────────────────────────────────────────────────
 
 // ─── Sort icon ────────────────────────────────────────────────────────────────
 
@@ -349,10 +313,9 @@ export default function OLEOverview() {
 
   // ── Global summary stats ──────────────────────────────────────────────────
   const summaryRows = summaryHook.data ?? [];
-  const validSummary = summaryRows.filter(r => r.avg_ole_pct !== null);
-  const avgOle = validSummary.length
-    ? (validSummary.reduce((s, r) => s + (r.avg_ole_pct ?? 0), 0) / validSummary.length).toFixed(1)
-    : '—';
+  const totalOutput = summaryRows.reduce((s, r) => s + (r.total_output_smh || 0), 0);
+  const totalInput = summaryRows.reduce((s, r) => s + (r.total_input_hours || 0), 0);
+  const avgOle = totalInput > 0 ? ((totalOutput / totalInput) * 100).toFixed(2) : '—';
   const totalQty = summaryRows.reduce((s, r) => s + r.total_qty, 0);
   const flaggedTotal = summaryRows.reduce((s, r) => s + r.flagged_shifts, 0);
 
@@ -400,8 +363,7 @@ export default function OLEOverview() {
   const rowCounts: Record<TabId, number> = {
     report:     0,
     summary:    filteredSummary.length,
-    workcell:   0,
-    projection: 0,
+    analysis:   0,
     shifts:     filteredShifts.length,
     production: filteredProd.length,
     paid_hours: filteredHours.length,
@@ -411,10 +373,10 @@ export default function OLEOverview() {
   // ── Paginated slices ──────────────────────────────────────────────────────
   const slice = <T,>(arr: T[]) => arr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const showDateFilters = ['summary', 'workcell', 'shifts', 'production', 'paid_hours'].includes(activeTab);
+  const showDateFilters = ['summary', 'analysis', 'shifts', 'production', 'paid_hours'].includes(activeTab);
   const showShiftFilter = activeTab === 'shifts';
   const showSmhFilter = activeTab === 'smh';
-  const showFilters = !['report', 'projection'].includes(activeTab);
+  const showFilters = !['report', 'analysis'].includes(activeTab);
 
   const onNavigateTab = useCallback((tab: string, wc?: string) => {
     setActiveTab(tab as TabId);
@@ -489,86 +451,39 @@ export default function OLEOverview() {
         <OLEReport onNavigateTab={onNavigateTab} />
       )}
 
-      {/* ── PROJECTION tab ── */}
-      {activeTab === 'projection' && (
-        <OLEProjection />
+      {/* ── ANALYSIS tab ── */}
+      {activeTab === 'analysis' && (
+        <OLEAnalysis
+          search={search} setSearch={setSearch}
+          workcell={workcell} setWorkcell={setWorkcell}
+          plant={plant} setPlant={setPlant}
+          dateFrom={dateFrom} setDateFrom={setDateFrom}
+          dateTo={dateTo} setDateTo={setDateTo}
+          workcellOptions={workcellOptions}
+          rowCount={rowCounts[activeTab]}
+        />
       )}
 
 
 
       {/* ── Filters + content for data tabs ── */}
       {showFilters && (<>
-        <div className="px-6 pt-4 pb-3 flex flex-wrap items-end gap-3">
-          <div className="relative min-w-[200px] max-w-xs flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder={activeTab === 'smh' ? 'Search assembly…' : activeTab === 'production' ? 'Search workcell or assembly…' : 'Search…'}
-              className="pl-8 h-9"
-            />
-          </div>
-
-          <div className="min-w-[180px]">
-            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Workcell</Label>
-            <Select value={workcell || ALL} onValueChange={v => setWorkcell(v === ALL ? '' : v)}>
-              <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All workcells" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All workcells</SelectItem>
-                {workcellOptions.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="min-w-[160px]">
-            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Plant</Label>
-            <Select value={plant || ALL} onValueChange={v => setPlant(v === ALL ? '' : v)}>
-              <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All plants" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All</SelectItem>
-                <SelectItem value="Plant 1">Plant 1</SelectItem>
-                <SelectItem value="Batu Kawan">Batu Kawan</SelectItem>
-                <SelectItem value="Plant 2">Plant 2</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {showDateFilters && (
-            <>
-              <DatePickerField id="ole-date-from" label="Date from" value={dateFrom} onChange={setDateFrom} />
-              <DatePickerField id="ole-date-to" label="Date to" value={dateTo} onChange={setDateTo} />
-            </>
-          )}
-
-          {showShiftFilter && (
-            <div className="min-w-[140px]">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Shift</Label>
-              <Select value={shift || ALL} onValueChange={v => setShift(v === ALL ? '' : v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Any shift" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>Any shift</SelectItem>
-                  <SelectItem value="2">Shift 2</SelectItem>
-                  <SelectItem value="3">Shift 3</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {showSmhFilter && (
-            <div className="min-w-[180px]">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">SMH Status</Label>
-              <Select value={smhFilter || ALL} onValueChange={v => setSmhFilter(v === ALL ? '' : v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Any status" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>Any status</SelectItem>
-                  <SelectItem value="MISSING_SMH">Missing SMH</SelectItem>
-                  <SelectItem value="NOT_IN_SMH_DB">Not in DB</SelectItem>
-                  <SelectItem value="OK">OK</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <span className="text-xs text-muted-foreground ml-auto">{rowCounts[activeTab].toLocaleString()} rows</span>
-        </div>
+        <OLEFilters
+          search={search} setSearch={setSearch}
+          workcell={workcell} setWorkcell={setWorkcell}
+          plant={plant} setPlant={setPlant}
+          dateFrom={showDateFilters ? dateFrom : undefined}
+          setDateFrom={showDateFilters ? setDateFrom : undefined}
+          dateTo={showDateFilters ? dateTo : undefined}
+          setDateTo={showDateFilters ? setDateTo : undefined}
+          shift={showShiftFilter ? shift : undefined}
+          setShift={showShiftFilter ? setShift : undefined}
+          smhFilter={showSmhFilter ? smhFilter : undefined}
+          setSmhFilter={showSmhFilter ? setSmhFilter : undefined}
+          workcellOptions={workcellOptions}
+          rowCount={rowCounts[activeTab]}
+          activeTab={activeTab}
+        />
 
         {/* ── Content ─────────────────────────────────────────────────────────── */}
         <div className="px-6 pb-8 pt-4">
@@ -579,10 +494,7 @@ export default function OLEOverview() {
             </div>
           )}
 
-          {/* ── WORKCELL tab ── */}
-          {activeTab === 'workcell' && (
-            <OLEWorkcellTab workcell={workcell} dateFrom={dateFrom} dateTo={dateTo} />
-          )}
+          {/* ── ANALYSIS tab (moved outside) ── */}
 
           {/* ── SUMMARY tab ── */}
           {activeTab === 'summary' && (() => {
@@ -617,7 +529,8 @@ export default function OLEOverview() {
                     {activeHook.error ? 'Backend unreachable — is the OLE API running?' : 'No data'}
                   </div>
                 ) : allRows.map((row, idx) => {
-                  const status = getOleStatus(row.avg_ole_pct);
+                  const calcOle = row.total_input_hours > 0 ? (row.total_output_smh / row.total_input_hours) * 100 : 0;
+                  const status = getOleStatus(calcOle);
                   const isLive = liveWorkcells.has(row.workcell);
                   return (
                     <div key={row.workcell}
@@ -657,11 +570,11 @@ export default function OLEOverview() {
                       {/* OLE % */}
                       <div className="px-3 py-3.5 text-center">
                         <span className={cn('text-lg font-mono font-bold', OLE_COLOR[status])}>
-                          {row.avg_ole_pct !== null ? `${row.avg_ole_pct}%` : '—'}
+                          {row.total_input_hours > 0 ? `${calcOle.toFixed(2)}%` : '—'}
                         </span>
                         <div className="mt-1 h-1 rounded-full bg-muted/50 overflow-hidden">
                           <div className={cn('h-full rounded-full', OLE_BAR[status])}
-                            style={{ width: `${Math.min(row.avg_ole_pct ?? 0, 100)}%` }} />
+                            style={{ width: `${Math.min(calcOle, 100)}%` }} />
                         </div>
                       </div>
 

@@ -38,10 +38,25 @@ const TT = {
 };
 
 const LOGOS: Record<string, string> = {
-    arista: '/workcell logo/Arista.png',
-    keysight: '/workcell logo/keyisght.png',
-    aop: '/workcell logo/aop.png',
-    micron: '/workcell logo/micron.png',
+  arista:      '/workcell logo/Arista.png',
+  keysight:    '/workcell logo/keysight.png',
+  keyisght:    '/workcell logo/keysight.png',
+  aop:         '/workcell logo/aop.png',
+  micron:      '/workcell logo/micron.png',
+  dyson:       '/workcell logo/dyson.png',
+  wabtec:      '/workcell logo/wabtec.png',
+  msi:         '/workcell logo/msi.png',
+  photonics:   '/workcell logo/photonics.png',
+  tellabs:     '/workcell logo/tellabs.png',
+  imed:        '/workcell logo/imed.png',
+  collins:     '/workcell logo/collins.png',
+  danaher:     '/workcell logo/danaher.png',
+  infinera:    '/workcell logo/infinera.jpg',
+  masimo:      '/workcell logo/masimo.png',
+  resmed:      '/workcell logo/resmed.png',
+  fortive:     '/workcell logo/fortive.png',
+  lamresearch: '/workcell logo/lam_research.png',
+  asp:         '/workcell logo/asp.jpg',
 };
 
 // ─── plant filter ─────────────────────────────────────────────────────────────
@@ -484,8 +499,9 @@ export default function OLEReport({ onNavigateTab }: {
                         <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground py-8">OLE backend offline</div>
                     )}
                     {raw.map(wc => {
-                        const st = getStatus(wc.avg_ole_pct);
-                        const clr = oleColor(wc.avg_ole_pct);
+                        const calcOle = wc.total_input_hours > 0 ? (wc.total_output_smh / wc.total_input_hours) * 100 : 0;
+                        const st = getStatus(calcOle);
+                        const clr = oleColor(calcOle);
                         const k = wc.workcell.toLowerCase().replace(/[^a-z]/g, '');
                         const lk = Object.keys(LOGOS).find(x => k.startsWith(x));
                         const logo = lk ? LOGOS[lk] : null;
@@ -505,12 +521,12 @@ export default function OLEReport({ onNavigateTab }: {
                                     <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">{wc.workcell}</p>
                                     <p className="text-[10px] text-muted-foreground">{wc.stage_label} · {wc.total_shifts} shifts</p>
                                     <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
-                                        <div className="h-full rounded-full" style={{ width: `${Math.min(wc.avg_ole_pct ?? 0, 100)}%`, background: clr }} />
+                                        <div className="h-full rounded-full" style={{ width: `${Math.min(calcOle, 100)}%`, background: clr }} />
                                     </div>
                                 </div>
                                 <div className="text-right flex-shrink-0">
                                     <p className="text-lg font-mono font-bold leading-none" style={{ color: clr }}>
-                                        {wc.avg_ole_pct !== null ? `${wc.avg_ole_pct.toFixed(1)}%` : '—'}
+                                        {wc.total_input_hours > 0 ? `${calcOle.toFixed(2)}%` : '—'}
                                     </p>
                                     {wc.flagged_shifts > 0 && (
                                         <p className="text-[9px] text-amber-400 flex items-center gap-0.5 justify-end mt-0.5">

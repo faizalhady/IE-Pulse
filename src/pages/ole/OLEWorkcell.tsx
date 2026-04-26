@@ -51,10 +51,9 @@ export default function OLEWorkcell() {
 
   // Aggregate stats
   const validRows   = rows.filter(r => r.ole_pct !== null);
-  const avgOle      = validRows.length ? (validRows.reduce((s, r) => s + (r.ole_pct ?? 0), 0) / validRows.length).toFixed(1) : '—';
-  const totalQty    = rows.reduce((s, r) => s + r.total_qty, 0);
   const totalOutput = rows.reduce((s, r) => s + r.effective_output_smh, 0);
   const totalInput  = rows.reduce((s, r) => s + r.total_input_hours, 0);
+  const avgOle      = totalInput > 0 ? ((totalOutput / totalInput) * 100).toFixed(2) : '—';
   const stageLabel  = rows[0]?.stage_label ?? '—';
 
   return (
@@ -149,7 +148,8 @@ export default function OLEWorkcell() {
                 {error ? 'Could not load shift data' : 'No shift data found'}
               </div>
             ) : rows.map((row, idx) => {
-              const status = getOleStatus(row.ole_pct);
+              const calcOle = row.total_input_hours > 0 ? (row.effective_output_smh / row.total_input_hours) * 100 : 0;
+              const status = getOleStatus(calcOle);
               return (
                 <div
                   key={`${row.date}-${row.shift}`}
@@ -171,12 +171,12 @@ export default function OLEWorkcell() {
                   {/* OLE % */}
                   <div className="px-3 py-4 text-center">
                     <span className={cn('text-lg font-mono font-bold', OLE_COLOR[status])}>
-                      {row.ole_pct !== null ? `${row.ole_pct}%` : '—'}
+                      {row.total_input_hours > 0 ? `${calcOle.toFixed(2)}%` : '—'}
                     </span>
                     <div className="mt-1 h-1 rounded-full bg-muted/50 overflow-hidden">
                       <div
                         className={cn('h-full rounded-full', OLE_BAR[status])}
-                        style={{ width: `${Math.min(row.ole_pct ?? 0, 100)}%` }}
+                        style={{ width: `${Math.min(calcOle, 100)}%` }}
                       />
                     </div>
                   </div>
