@@ -17,6 +17,7 @@ import {
   OleProduction,
   OleResult,
   OleSummary,
+  OleWeeklyResult,
   OleWorkcellConfig,
   SmhLookup,
   SmhStatus,
@@ -156,5 +157,18 @@ export function useSmhStatus(params?: {
     () => oleApi.smh.status(params),
     0,
     [params?.workcell, params?.status]
+  );
+}
+
+/** Weekly OLE aggregates — projection engine input, fetch once */
+export function useOleWeekly(params?: {
+  workcell?: string;
+  sample_from?: string;
+  sample_to?: string;
+}) {
+  return usePolling<OleWeeklyResult[]>(
+    () => oleApi.ole.weekly(params),
+    0,
+    [params?.workcell, params?.sample_from, params?.sample_to]
   );
 }

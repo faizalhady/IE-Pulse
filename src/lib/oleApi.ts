@@ -104,6 +104,28 @@ export interface SmhStatus {
   smh_status:        'OK' | 'MISSING_SMH' | 'NOT_IN_SMH_DB';
 }
 
+export interface OleWeeklyResult {
+  workcell:          string;
+  iso_year:          number;
+  iso_week:          number;
+  week_label:        string;
+  week_start_date:   string;
+  week_end_date:     string;
+  stage_label:       string;
+  scan_stage:        string;
+  total_qty:         number;
+  shift_count:       number;
+  total_output_smh:  number;
+  total_input_hours: number;
+  avg_hc_direct:     number;
+  avg_hc_support:    number;
+  ole_pct:           number | null;
+  ole_pct_avg_shifts: number | null;
+  shifts_ok:         number;
+  shifts_flagged:    number;
+  smh_coverage_pct:  number | null;
+}
+
 export interface OleHealth {
   status:     string;
   mart_ready: boolean;
@@ -139,6 +161,14 @@ export const oleApi = {
       if (params?.date_from) p.set('date_from', params.date_from);
       if (params?.date_to)   p.set('date_to',   params.date_to);
       return get<OleSummary[]>(`/api/ole/summary${p.toString() ? `?${p}` : ''}`);
+    },
+    /** Weekly OLE aggregates — projection engine input */
+    weekly: (params?: { workcell?: string; sample_from?: string; sample_to?: string }) => {
+      const p = new URLSearchParams();
+      if (params?.workcell)     p.set('workcell',     params.workcell);
+      if (params?.sample_from)  p.set('sample_from',  params.sample_from);
+      if (params?.sample_to)    p.set('sample_to',    params.sample_to);
+      return get<OleWeeklyResult[]>(`/api/ole/weekly${p.toString() ? `?${p}` : ''}`);
     },
   },
 
