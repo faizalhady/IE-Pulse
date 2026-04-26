@@ -1,4 +1,4 @@
-import { useOleSummary } from '@/hooks/useOleData';
+import { useOleSummary, useOleWeekly } from '@/hooks/useOleData';
 import { cn } from '@/lib/utils';
 import {
     Activity, AlertTriangle, ArrowRight,
@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Area, AreaChart, Bar, BarChart, CartesianGrid,
-    Cell, Line, Pie, PieChart, ReferenceLine,
+    Cell, ComposedChart, Legend, Line, Pie, PieChart, ReferenceArea, ReferenceLine,
     ResponsiveContainer, Sector, Tooltip, XAxis, YAxis,
 } from 'recharts';
 
@@ -149,6 +149,41 @@ const DONUT_DATA: Record<PlantId, { name: string; value: number; color: string }
     ],
 };
 
+const PROJECTION_DATA: Record<PlantId, { w: string; ole: number; emr: number; proj?: boolean }[]> = {
+    all: [
+        { w: 'W09', ole: 54.0, emr: 53.5 }, { w: 'W10', ole: 57.1, emr: 54.8 },
+        { w: 'W11', ole: 55.7, emr: 55.2 }, { w: 'W12', ole: 50.5, emr: 53.8 },
+        { w: 'W13', ole: 57.3, emr: 55.1 }, { w: 'W14', ole: 57.2, emr: 55.8 },
+        { w: 'W15', ole: 60.2, emr: 57.5 }, { w: 'W16', ole: 61.8, emr: 59.2 },
+        { w: 'W17', ole: 63.2, emr: 60.8, proj: true }, { w: 'W18', ole: 64.5, emr: 62.1, proj: true },
+        { w: 'W19', ole: 65.1, emr: 63.4, proj: true },
+    ],
+    plant1: [
+        { w: 'W09', ole: 56.3, emr: 55.8 }, { w: 'W10', ole: 59.4, emr: 57.2 },
+        { w: 'W11', ole: 58.2, emr: 57.6 }, { w: 'W12', ole: 53.1, emr: 56.1 },
+        { w: 'W13', ole: 60.0, emr: 57.5 }, { w: 'W14', ole: 59.8, emr: 58.3 },
+        { w: 'W15', ole: 63.5, emr: 60.2 }, { w: 'W16', ole: 65.1, emr: 62.1 },
+        { w: 'W17', ole: 66.8, emr: 63.9, proj: true }, { w: 'W18', ole: 68.2, emr: 65.5, proj: true },
+        { w: 'W19', ole: 69.5, emr: 67.1, proj: true },
+    ],
+    batu_kawan: [
+        { w: 'W09', ole: 48.9, emr: 47.2 }, { w: 'W10', ole: 51.6, emr: 48.8 },
+        { w: 'W11', ole: 50.2, emr: 49.3 }, { w: 'W12', ole: 45.8, emr: 48.1 },
+        { w: 'W13', ole: 52.0, emr: 49.5 }, { w: 'W14', ole: 51.9, emr: 50.3 },
+        { w: 'W15', ole: 55.4, emr: 52.1 }, { w: 'W16', ole: 57.1, emr: 54.2 },
+        { w: 'W17', ole: 58.5, emr: 55.8, proj: true }, { w: 'W18', ole: 59.8, emr: 57.1, proj: true },
+        { w: 'W19', ole: 61.2, emr: 58.5, proj: true },
+    ],
+    plant2: [
+        { w: 'W09', ole: 51.7, emr: 50.5 }, { w: 'W10', ole: 54.8, emr: 52.1 },
+        { w: 'W11', ole: 53.1, emr: 52.5 }, { w: 'W12', ole: 48.2, emr: 51.1 },
+        { w: 'W13', ole: 55.0, emr: 52.5 }, { w: 'W14', ole: 54.7, emr: 53.3 },
+        { w: 'W15', ole: 58.6, emr: 55.2 }, { w: 'W16', ole: 60.2, emr: 57.1 },
+        { w: 'W17', ole: 61.8, emr: 58.8, proj: true }, { w: 'W18', ole: 63.1, emr: 60.1, proj: true },
+        { w: 'W19', ole: 64.5, emr: 61.8, proj: true },
+    ],
+};
+
 const KPI_DATA: Record<PlantId, { avgOleOverride: number; inputHrs: number; shifts: number; flagged: number; qty: number }> = {
     all:       { avgOleOverride: 0, inputHrs: 0, shifts: 0, flagged: 0, qty: 0 }, // driven by API
     plant1:    { avgOleOverride: 63.5, inputHrs: 18400, shifts: 142, flagged: 3, qty: 72000 },
@@ -234,14 +269,67 @@ export default function OLEReport({ onNavigateTab }: {
     const [slice, setSlice] = useState(0);
     const [plant, setPlant] = useState<PlantId>('all');
     const { data, loading } = useOleSummary();
+    const { data: weeklyData } = useOleWeekly();
 
-    // Safely fallback to an empty array if data is null OR undefined
     const raw = data ?? [];
+    const weeklyRaw = weeklyData ?? [];
 
-    // ── derive values based on selected plant ──────────────────────────────
-    const WEEKLY = WEEKLY_DATA[plant];
-    const PARETO = PARETO_DATA[plant];
-    const DONUT  = DONUT_DATA[plant];
+    // ── Derive real weekly trend data per plant ───────────────────────────────────────
+    // Aggregate weekly OLE across all workcells (plant filter not yet wired at API level)
+    const realWeekly = useMemo(() => {
+        const byWeek: Record<string, { smh: number; hrs: number; label: string; year: number; week: number }> = {};
+        weeklyRaw.forEach(r => {
+            if (!byWeek[r.week_label])
+                byWeek[r.week_label] = { smh: 0, hrs: 0, label: r.week_label, year: r.iso_year, week: r.iso_week };
+            byWeek[r.week_label].smh += r.total_output_smh;
+            byWeek[r.week_label].hrs += r.total_input_hours;
+        });
+        return Object.values(byWeek)
+            .sort((a, b) => a.year !== b.year ? a.year - b.year : a.week - b.week)
+            .map(w => ({
+                w: `W${String(w.week).padStart(2, '0')}`,
+                ole: w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : 0,
+                va:  w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : 0, // placeholder same as ole until VA data available
+            }));
+    }, [weeklyRaw]);
+
+    // ── Real projection data: actual weeks + 3 projected using SMA(3) ───────────────────
+    const realProjection = useMemo(() => {
+        if (realWeekly.length === 0) return [];
+        const actuals = realWeekly.map(r => r.ole);
+        const result = realWeekly.map(r => ({ w: r.w, ole: r.ole, emr: null as number | null, proj: false }));
+
+        // EMA fast (period 3, alpha 0.5) for the eMR line on historical weeks
+        const alpha = 0.5;
+        let ema = actuals[0];
+        for (let i = 0; i < actuals.length; i++) {
+            ema = alpha * actuals[i] + (1 - alpha) * ema;
+            result[i].emr = Math.round(ema * 100) / 100;
+        }
+
+        // 3 projected weeks using last EMA value
+        const lastRow = realWeekly[realWeekly.length - 1];
+        const wMatch = lastRow.w.match(/(\d+)/);
+        let projWeek = wMatch ? parseInt(wMatch[1]) : 17;
+        for (let p = 1; p <= 3; p++) {
+            projWeek++;
+            const projEma = Math.round((alpha * actuals[actuals.length - 1] + (1 - alpha) * ema) * 100) / 100;
+            const projOle = Math.round((actuals.slice(-3).reduce((a, b) => a + b, 0) / Math.min(3, actuals.length)) * 100) / 100;
+            result.push({ w: `W${String(projWeek).padStart(2, '0')}`, ole: projOle, emr: projEma, proj: true });
+        }
+        return result;
+    }, [realWeekly]);
+
+    // fall back to static data if real data not yet loaded
+    const WEEKLY     = realWeekly.length     > 0 ? realWeekly     : WEEKLY_DATA[plant];
+    const PROJECTION = realProjection.length > 0 ? realProjection : PROJECTION_DATA[plant];
+    const PARETO     = PARETO_DATA[plant];
+    const DONUT      = DONUT_DATA[plant];
+
+    // projection reference area: first proj week to last
+    const projWeeks   = PROJECTION.filter(p => p.proj);
+    const projStart   = projWeeks[0]?.w;
+    const projEnd     = projWeeks[projWeeks.length - 1]?.w;
 
     const apiAvgOle = useMemo(() => {
         const v = raw.filter(r => r.avg_ole_pct !== null);
@@ -251,15 +339,23 @@ export default function OLEReport({ onNavigateTab }: {
     const kpi = KPI_DATA[plant];
     const isAll = plant === 'all';
 
-    const avgOleVal   = isAll ? apiAvgOle                          : kpi.avgOleOverride;
+    const avgOleVal     = isAll ? apiAvgOle                          : kpi.avgOleOverride;
     const totalInputHrs = isAll ? raw.reduce((s, r) => s + r.total_input_hours, 0) : kpi.inputHrs;
     const totalShifts   = isAll ? raw.reduce((s, r) => s + r.total_shifts, 0)      : kpi.shifts;
     const flagged       = isAll ? raw.reduce((s, r) => s + r.flagged_shifts, 0)    : kpi.flagged;
     const totalQty      = isAll ? raw.reduce((s, r) => s + r.total_qty, 0)         : kpi.qty;
 
-    const last2 = WEEKLY.slice(-2);
-    const trendUp = last2.length === 2 && last2[1].ole > last2[0].ole;
+    const last2    = WEEKLY.slice(-2);
+    const trendUp  = last2.length === 2 && last2[1].ole > last2[0].ole;
     const trendDiff = last2.length === 2 ? Math.abs(last2[1].ole - last2[0].ole).toFixed(1) : null;
+
+    // dynamic Y domain for charts
+    const oleValues  = WEEKLY.map(d => d.ole).filter(Boolean);
+    const yMin       = oleValues.length ? Math.max(0, Math.floor(Math.min(...oleValues) / 10) * 10 - 10) : 0;
+    const yMax       = oleValues.length ? Math.ceil(Math.max(...oleValues) / 10) * 10 + 10 : 120;
+    const projValues = PROJECTION.map(d => d.ole).filter(Boolean);
+    const pMin       = projValues.length ? Math.max(0, Math.floor(Math.min(...projValues) / 10) * 10 - 10) : 0;
+    const pMax       = projValues.length ? Math.ceil(Math.max(...projValues) / 10) * 10 + 15 : 120;
 
     return (
         <div className="px-6 pt-5 pb-16 space-y-6">
@@ -303,12 +399,50 @@ export default function OLEReport({ onNavigateTab }: {
                     onClick={() => onNavigateTab('production')} />
             </div>
 
+            {/* ── Weekly OLE + Projection ── */}
+            <div className="rounded-xl border border-border bg-card p-5">
+                <Hdr title="Weekly OLE + Upcoming Weeks Projection" sub="Actual OLE % with EMA Fast (3) projection line" />
+                <div style={{ height: 260 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={PROJECTION} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="w" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                            <YAxis tickFormatter={v => `${v}%`} domain={[pMin, pMax]}
+                                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                            <Tooltip contentStyle={TT} formatter={(v: number) => [`${(v as number).toFixed(1)}%`]} />
+                            <Legend verticalAlign="top" align="right" iconType="circle"
+                                wrapperStyle={{ fontSize: 10, paddingBottom: 10, paddingRight: 10 }} />
+
+                            {/* Projection highlight area */}
+                            {projStart && projEnd && (
+                                <ReferenceArea x1={projStart} x2={projEnd}
+                                    fill="hsl(var(--primary) / 0.05)" strokeOpacity={0.3}
+                                    label={{ value: 'PROJECTION', position: 'insideTop', fill: 'hsl(var(--primary))', fontSize: 10, fontWeight: 700, offset: 10 }} />
+                            )}
+
+                            <Bar dataKey="ole" name="Weekly OLE" radius={[4, 4, 0, 0]} barSize={32}>
+                                {PROJECTION.map((entry, index) => (
+                                    <Cell key={`cell-${index}`}
+                                        fill={entry.proj ? "hsl(var(--primary) / 0.25)" : "hsl(var(--primary))"}
+                                        stroke={entry.proj ? "hsl(var(--primary))" : "none"}
+                                        strokeDasharray={entry.proj ? "4 4" : "0"}
+                                    />
+                                ))}
+                            </Bar>
+                            <Line type="monotone" dataKey="emr" name="EMA Fast (3)" stroke="#f59e0b" strokeWidth={2.5}
+                                dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }}
+                                connectNulls />
+                        </ComposedChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
             {/* ── Trend chart + Workcell cards ── */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
                 {/* trend 2/3 */}
                 <div className="xl:col-span-2 rounded-xl border border-border bg-card p-5">
-                    <Hdr title="OLE Weekly Trend — FY26" sub="OLE vs Value-Added OLE % per week"
+                    <Hdr title="OLE Weekly Trend — FY26" sub="OLE % per week (actual data)"
                         action={<NavLink label="Shift data" onClick={() => onNavigateTab('shifts')} />} />
                     <div style={{ height: 220 }}>
                         <ResponsiveContainer width="100%" height="100%">
@@ -318,26 +452,21 @@ export default function OLEReport({ onNavigateTab }: {
                                         <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                                     </linearGradient>
-                                    <linearGradient id="gV" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.18} />
-                                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                                    </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                 <XAxis dataKey="w" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                                <YAxis tickFormatter={v => `${v}%`} domain={[40, 100]}
+                                <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]}
                                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                                 <Tooltip contentStyle={TT} formatter={(v: number) => [`${(v as number).toFixed(1)}%`]} />
                                 <ReferenceLine y={80} stroke="#22c55e" strokeDasharray="4 3" strokeOpacity={0.5}
                                     label={{ value: '80%', fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }} />
-                                <Area type="monotone" dataKey="va" name="OLE VA" stroke="#22c55e" fill="url(#gV)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
                                 <Area type="monotone" dataKey="ole" name="OLE" stroke="hsl(var(--primary))" fill="url(#gO)" strokeWidth={2.5}
                                     dot={{ r: 3, fill: 'hsl(var(--primary))', strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                     <div className="flex items-center gap-5 mt-3 justify-center">
-                        {[['OLE', 'hsl(var(--primary))'], ['OLE VA', '#22c55e'], ['80% Target', '#22c55e']].map(([n, c]) => (
+                        {[['OLE', 'hsl(var(--primary))'], ['80% Target', '#22c55e']].map(([n, c]) => (
                             <span key={n} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <span className="w-4 h-px inline-block rounded" style={{ background: c }} />{n}
                             </span>
