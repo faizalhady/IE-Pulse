@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OLEReport from './OLEReport';
 import OLEWorkcellTab from './OLEWorkcellTab';
+import OLEProjection from './OLEProjection';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -28,13 +29,14 @@ const ROW_HEIGHT = 56;
 const ALL = '__all__';
 
 const TABS = [
-  { id: 'report', label: 'OLE Report' },
-  { id: 'summary', label: 'OLE Summary' },
-  { id: 'workcell', label: 'OLE Workcell' },
-  { id: 'shifts', label: 'Shift Detail' },
+  { id: 'report',     label: 'OLE Report' },
+  { id: 'summary',    label: 'OLE Summary' },
+  { id: 'workcell',   label: 'OLE Workcell' },
+  { id: 'projection', label: 'OLE Projection' },
+  { id: 'shifts',     label: 'Shift Detail' },
   { id: 'production', label: 'Production' },
   { id: 'paid_hours', label: 'Paid Hours' },
-  { id: 'smh', label: 'SMH Coverage' },
+  // { id: 'smh', label: 'SMH Coverage' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -42,9 +44,9 @@ type SortDir = 'asc' | 'desc';
 
 // ─── Plant → workcell mapping (client-side filter) ───────────────────────────
 const PLANT_WORKCELLS: Record<string, string[]> = {
-  'Plant 1':    ['ARISTA', 'AOP', 'KEYSIGHT', 'MSI PCA'],
+  'Plant 1': ['ARISTA', 'AOP', 'KEYSIGHT', 'MSI PCA'],
   'Batu Kawan': ['MICRON', 'WABTEC', 'MSI', 'PHOTONICS', 'LAMKEY'],
-  'Plant 2':    ['CELESTICA', 'DYSON', 'FLEX', 'MED', 'REINERA', 'MAN COUL', 'TELLABS'],
+  'Plant 2': ['CELESTICA', 'DYSON', 'FLEX', 'MED', 'REINERA', 'MAN COUL', 'TELLABS'],
 };
 
 function matchesPlant(workcellName: string, plant: string): boolean {
@@ -396,13 +398,14 @@ export default function OLEOverview() {
   }, [smhHook.data, search, plant, sortCol, sortDir]);
 
   const rowCounts: Record<TabId, number> = {
-    report: 0,
-    summary: filteredSummary.length,
-    workcell: 0,
-    shifts: filteredShifts.length,
+    report:     0,
+    summary:    filteredSummary.length,
+    workcell:   0,
+    projection: 0,
+    shifts:     filteredShifts.length,
     production: filteredProd.length,
     paid_hours: filteredHours.length,
-    smh: filteredSmh.length,
+    smh:        filteredSmh.length,
   };
 
   // ── Paginated slices ──────────────────────────────────────────────────────
@@ -411,7 +414,7 @@ export default function OLEOverview() {
   const showDateFilters = ['summary', 'workcell', 'shifts', 'production', 'paid_hours'].includes(activeTab);
   const showShiftFilter = activeTab === 'shifts';
   const showSmhFilter = activeTab === 'smh';
-  const showFilters = activeTab !== 'report';
+  const showFilters = !['report', 'projection'].includes(activeTab);
 
   const onNavigateTab = useCallback((tab: string, wc?: string) => {
     setActiveTab(tab as TabId);
@@ -484,6 +487,11 @@ export default function OLEOverview() {
       {/* ── REPORT tab ── */}
       {activeTab === 'report' && (
         <OLEReport onNavigateTab={onNavigateTab} />
+      )}
+
+      {/* ── PROJECTION tab ── */}
+      {activeTab === 'projection' && (
+        <OLEProjection />
       )}
 
 
@@ -582,7 +590,7 @@ export default function OLEOverview() {
             const liveWorkcells = new Set(filteredSummary.map(r => r.workcell));
             const mockRows = MOCK_SUMMARY.filter(r => !liveWorkcells.has(r.workcell));
             const allRows = [...filteredSummary, ...mockRows];
-            const GT = '2.5rem minmax(10rem, 1fr) 7.5rem 9.5rem 9rem 9rem 6.5rem 7.5rem';
+            const GT = '2.5rem minmax(10rem, 1fr) 7.5rem 9.5rem 9rem 9rem 9rem 6.5rem 7.5rem';
             return (
               <div className="rounded-xl border border-border overflow-hidden">
                 {/* table header */}
@@ -593,7 +601,7 @@ export default function OLEOverview() {
                     ['workcell', 'Workcell'], ['stage_label', 'Final Scan'],
                     ['avg_ole_pct', 'OLE %'],
                     ['total_output_smh', 'Output SMH'],
-                    ['total_input_hours', 'Input Hrs'], ['total_qty', 'QTY'], ['', 'Status'],
+                    ['total_input_hours', 'Input Hrs'], ['transferred_man_hours', 'Transferred MH'], ['total_qty', 'QTY'], ['', 'Status'],
                   ] as [string, string][]).map(([col, label]) =>
                     col ? (
                       <button key={col} onClick={() => toggleSort(col)}
@@ -664,7 +672,7 @@ export default function OLEOverview() {
                         disabled={!isLive}
                         className={cn('px-3 py-3.5 text-center', isLive && 'cursor-pointer hover:text-primary transition-colors')}
                       >
-                        <span className="font-mono text-sm font-semibold text-foreground">{row.total_output_smh.toFixed(1)}</span>
+                        <span className="font-mono text-sm font-semibold text-foreground">{Math.round(row.total_output_smh).toLocaleString()}</span>
                         <p className="text-[10px] text-muted-foreground">hrs</p>
                       </button>
 
@@ -674,9 +682,17 @@ export default function OLEOverview() {
                         disabled={!isLive}
                         className={cn('px-3 py-3.5 text-center', isLive && 'cursor-pointer hover:text-primary transition-colors')}
                       >
-                        <span className="font-mono text-sm font-semibold text-foreground">{row.total_input_hours.toFixed(1)}</span>
+                        <span className="font-mono text-sm font-semibold text-foreground">{Math.round(row.total_input_hours).toLocaleString()}</span>
                         <p className="text-[10px] text-muted-foreground">hrs</p>
                       </button>
+
+                      {/* Transferred Man-Hours — default 0 */}
+                      <div className="px-3 py-3.5 text-center">
+                        <span className="font-mono text-sm font-semibold text-muted-foreground">
+                          {((row as any).transferred_man_hours ?? 0).toLocaleString()}
+                        </span>
+                        <p className="text-[10px] text-muted-foreground">hrs</p>
+                      </div>
 
                       {/* QTY */}
                       <div className="px-3 py-3.5 text-center">
