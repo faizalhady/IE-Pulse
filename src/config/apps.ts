@@ -1,7 +1,6 @@
 import {
   Activity,
   AlertTriangle,
-  BarChart3,
   BookOpen,
   Building2,
   CalendarDays,
@@ -12,14 +11,13 @@ import {
   FileText,
   FlaskConical,
   Home,
-  LayoutDashboard,
   LineChart,
   LucideIcon,
   MapPin,
   Pencil,
   TableProperties,
   TrendingUp,
-  Users,
+  Users
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -57,11 +55,11 @@ export const APPS: AppConfig[] = [
     color: 'text-blue-500',
     iconBg: 'bg-blue-500/15',
     navItems: [
-      { label: 'Overview',        to: '/',           icon: Home },
-      { label: 'Plants / Layouts', to: '/plants',    icon: MapPin },
-      { label: 'Workcells',       to: '/workcells',  icon: Factory },
-      { label: 'Reports',         to: '/reports',    icon: LineChart },
-      { label: 'Documents',       to: '/documents',  icon: FileText },
+      { label: 'Overview', to: '/', icon: Home },
+      { label: 'Plants / Layouts', to: '/plants', icon: MapPin },
+      { label: 'Workcells', to: '/workcells', icon: Factory },
+      { label: 'Reports', to: '/reports', icon: LineChart },
+      { label: 'Documents', to: '/documents', icon: FileText },
     ],
   },
   {
@@ -72,12 +70,12 @@ export const APPS: AppConfig[] = [
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     navItems: [
-      { label: 'OLE Overview',         to: '/ole',              icon: Home },
-      { label: '4Q Generator',         to: '/ole/4q',           icon: FileSpreadsheet },
-      { label: 'SMH Status',           to: '/ole/smh-status',   icon: FlaskConical },
-      { label: 'Downtime Management',  to: '/ole/downtime',     icon: AlertTriangle },
-      { label: 'WC Transfer Man-Hour', to: '/ole/transfer',     icon: Users },
-      { label: 'API Test',             to: '/ole-mart-api',     icon: Database },
+      { label: 'OLE Overview', to: '/ole', icon: Home },
+      { label: 'Standard Man-Hour', to: '/ole/smh-status', icon: FlaskConical },
+      { label: 'Downtime Management', to: '/ole/downtime', icon: AlertTriangle },
+      { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
+      { label: '4Q Generator', to: '/ole/4q', icon: FileSpreadsheet },
+      { label: 'API Test', to: '/ole-mart-api', icon: Database },
     ],
   },
   {
@@ -88,10 +86,10 @@ export const APPS: AppConfig[] = [
     color: 'text-violet-500',
     iconBg: 'bg-violet-500/15',
     navItems: [
-      { label: 'Plants',        to: '/plants',       icon: MapPin },
-      { label: 'Floor Map',      to: '/floor-map',    icon: ClipboardList },
-      { label: 'Layout Editor',  to: '/fsms/editor',  icon: Pencil },
-      { label: 'Bay Management', to: '/fsms/bays',    icon: TableProperties },
+      { label: 'Plants', to: '/plants', icon: MapPin },
+      { label: 'Floor Map', to: '/floor-map', icon: ClipboardList },
+      { label: 'Layout Editor', to: '/fsms/editor', icon: Pencil },
+      { label: 'Bay Management', to: '/fsms/bays', icon: TableProperties },
     ],
   },
   {

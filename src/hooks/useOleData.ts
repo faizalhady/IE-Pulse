@@ -18,6 +18,7 @@ import {
   OleResult,
   OleSummary,
   OleWeeklyResult,
+  OlePredictionResult,
   OleWorkcellConfig,
   SmhLookup,
   SmhStatus,
@@ -91,11 +92,12 @@ export function useOleWorkcells() {
 export function useOleSummary(params?: {
   date_from?: string;
   date_to?: string;
+  plant?: string;
 }) {
   return usePolling<OleSummary[]>(
     () => oleApi.ole.summary(params),
     5 * 60 * 1000,
-    [params?.date_from, params?.date_to]
+    [params?.date_from, params?.date_to, params?.plant]
   );
 }
 
@@ -165,10 +167,23 @@ export function useOleWeekly(params?: {
   workcell?: string;
   sample_from?: string;
   sample_to?: string;
+  plant?: string;
 }) {
   return usePolling<OleWeeklyResult[]>(
     () => oleApi.ole.weekly(params),
     0,
-    [params?.workcell, params?.sample_from, params?.sample_to]
+    [params?.workcell, params?.sample_from, params?.sample_to, params?.plant]
+  );
+}
+
+/** Advanced forecasting via statsmodels — fetch once */
+export function useOlePredictions(params: {
+  workcell: string;
+  projection_weeks?: number;
+}, skip = false) {
+  return usePolling<OlePredictionResult[]>(
+    async () => skip ? [] : oleApi.ole.predict(params),
+    0,
+    [params.workcell, params.projection_weeks, skip]
   );
 }
