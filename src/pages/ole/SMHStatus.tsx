@@ -115,7 +115,7 @@ export default function SMHStatus() {
   const { data, loading, error, refetch } = useSmhStatus({ workcell: workcellParam });
 
   const [search,        setSearch]        = useState('');
-  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('MISSING_SMH');
+  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('all');
   const [workcellFilter, setWorkcellFilter] = useState(workcellParam ?? 'all');
 
   const rows = data ?? [];
@@ -162,12 +162,7 @@ export default function SMHStatus() {
 
       {/* Page header */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate(workcellParam ? `/ole/${encodeURIComponent(workcellParam)}` : '/ole')}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
+
         <div>
           <h1 className="text-2xl font-bold text-foreground">SMH Coverage</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -194,21 +189,21 @@ export default function SMHStatus() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/12 px-4 py-3">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-            <p className="text-xs text-amber-400/80">Missing SMH</p>
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <p className="text-xs text-amber-600 dark:text-amber-400">Missing SMH</p>
           </div>
-          <p className="text-2xl font-mono font-bold text-amber-400 mt-1">{missingCount}</p>
-          <p className="text-[10px] text-amber-400/60 mt-0.5">{totalQtyMissing.toLocaleString()} units produced without SMH</p>
+          <p className="text-2xl font-mono font-bold text-amber-600 dark:text-amber-400 mt-1">{missingCount}</p>
+          <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60 mt-0.5">{totalQtyMissing.toLocaleString()} units produced without SMH</p>
         </div>
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+        <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/12 px-4 py-3">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-            <p className="text-xs text-emerald-400/80">With SMH</p>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">With SMH</p>
           </div>
-          <p className="text-2xl font-mono font-bold text-emerald-400 mt-1">{okCount}</p>
-          <p className="text-[10px] text-emerald-400/60 mt-0.5">assemblies with valid SMH values</p>
+          <p className="text-2xl font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-1">{okCount}</p>
+          <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 mt-0.5">assemblies with valid SMH values</p>
         </div>
         <div className="rounded-lg border border-border bg-card px-4 py-3">
           <p className="text-xs text-muted-foreground">Total assemblies</p>
@@ -254,6 +249,15 @@ export default function SMHStatus() {
             </SelectContent>
           </Select>
         </div>
+
+        {(search || statusFilter !== 'all' || workcellFilter !== 'all') && (
+          <button
+            onClick={() => { setSearch(''); setStatusFilter('all'); setWorkcellFilter('all'); }}
+            className="h-9 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-colors"
+          >
+            Clear
+          </button>
+        )}
 
         <span className="text-xs text-muted-foreground ml-auto">{filtered.length} assemblies</span>
       </div>

@@ -366,21 +366,21 @@ export default function OLEProjection() {
             {/* Chart */}
             <div className="p-5">
               <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 4, left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.4} vertical={false} />
+                <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 4, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
                   <XAxis
                     dataKey="week_label"
-                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
                     domain={[0, 130]}
                     tickFormatter={v => `${v}%`}
-                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     tickLine={false}
                     axisLine={false}
-                    width={40}
+                    width={45}
                   />
                   <Tooltip content={<ProjectionTooltip />} />
 
@@ -388,9 +388,8 @@ export default function OLEProjection() {
                   {firstProjected && (
                     <ReferenceArea
                       x1={firstProjected}
-                      x2={chartData[chartData.length - 1].week_label}
-                      fill="hsl(var(--primary) / 0.05)"
-                      strokeOpacity={0.3}
+                      fill="hsl(var(--primary) / 0.12)"
+                      strokeOpacity={0}
                       label={{ value: 'PROJECTION', position: 'insideTop', fill: 'hsl(var(--primary))', fontSize: 10, fontWeight: 700, offset: 10 }}
                     />
                   )}

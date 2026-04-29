@@ -51,6 +51,7 @@ export default function OLEWorkcell() {
 
   // Aggregate stats
   const validRows   = rows.filter(r => r.ole_pct !== null);
+  const totalQty    = rows.reduce((s, r) => s + r.total_qty, 0);
   const totalOutput = rows.reduce((s, r) => s + r.effective_output_smh, 0);
   const totalInput  = rows.reduce((s, r) => s + r.total_input_hours, 0);
   const avgOle      = totalInput > 0 ? ((totalOutput / totalInput) * 100).toFixed(2) : '—';

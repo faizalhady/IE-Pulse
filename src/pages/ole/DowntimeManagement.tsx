@@ -1,15 +1,34 @@
 import { cn } from '@/lib/utils';
+import { SHIFTS, shiftLabel } from '@/lib/oleConstants';
+import { oleApi } from '@/lib/oleApi';
+import { useOleWorkcells } from '@/hooks/useOleData';
 import {
-  AlertTriangle, BarChart2, ChevronDown, ChevronUp,
-  Clock, Plus, Users, X,
+  AlertTriangle, ChevronDown, ChevronUp,
+  Clock, Plus, Trash2, Users, X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePickerField } from './OLEFilters';
-import { DT_CATEGORIES, MOCK_LOGS, WEEKLY_DT, type DtLog } from './downtime-data';
+import { DT_CATEGORIES } from './downtime-data';
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DtLog {
+  id:          number;
+  created_at:  string;
+  date:        string;
+  shift:       number;
+  workcell:    string;
+  bay:         string | null;
+  dept:        string;
+  code:        string;
+  dl_affected: number;
+  minutes:     number;
+  commentary:  string | null;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const DEPT_SHORT: Record<string, string> = {
   'Manufacturing (MFG)': 'MFG', 'Manufacturing Engineering (ME)': 'ME',
@@ -29,29 +48,52 @@ const DEPT_COLOR: Record<string, string> = {
   'Other / HR': 'bg-pink-500/15 text-pink-400',
 };
 
-// ─── Log Downtime Dialog ───────────────────────────────────────────────────────
+// ─── Log Downtime Dialog ──────────────────────────────────────────────────────
 
-function LogDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (log: Omit<DtLog, 'id'>) => void }) {
-  const [shift, setShift] = useState('Shift A');
-  const [bay, setBay] = useState('');
-  const [dl, setDl] = useState('');
-  const [minutes, setMinutes] = useState('');
-  const [commentary, setCommentary] = useState('');
+function LogDialog({
+  workcellOptions,
+  onClose,
+  onSubmit,
+}: {
+  workcellOptions: string[];
+  onClose: () => void;
+  onSubmit: (log: Omit<DtLog, 'id' | 'created_at'>) => void;
+}) {
+  const [shift,       setShift]       = useState('1');
+  const [workcell,    setWorkcell]    = useState(workcellOptions[0] ?? '');
+  const [bay,         setBay]         = useState('');
+  const [dl,          setDl]          = useState('');
+  const [minutes,     setMinutes]     = useState('');
+  const [commentary,  setCommentary]  = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedCode, setSelectedCode] = useState('');
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded,    setExpanded]    = useState<string | null>(null);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
 
-  const canSubmit = shift && selectedCode && minutes;
+  const canSubmit = shift && workcell && selectedCode && minutes && !submitting;
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!canSubmit) return;
-    onSubmit({
-      date: new Date().toISOString().slice(0, 10),
-      shift, bay: bay || '—', dl: Number(dl) || 0,
-      minutes: Number(minutes), commentary,
-      dept: selectedDept, code: selectedCode,
-    });
-    onClose();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit({
+        date:        new Date().toISOString().slice(0, 10),
+        shift:       Number(shift),
+        workcell,
+        bay:         bay || null,
+        dl_affected: Number(dl) || 0,
+        minutes:     Number(minutes),
+        commentary:  commentary || null,
+        dept:        selectedDept,
+        code:        selectedCode,
+      });
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? 'Submission failed');
+      setSubmitting(false);
+    }
   }
 
   const inputCls = 'w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary';
@@ -77,26 +119,36 @@ function LogDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (log:
           </button>
         </div>
 
-        {/* body */}
         <div className="flex flex-1 overflow-hidden">
 
           {/* ── Left: form fields ── */}
           <div className="w-80 flex-shrink-0 border-r border-border px-5 py-4 overflow-y-auto space-y-4">
 
+            {/* workcell */}
+            <div>
+              <label className={labelCls}>Workcell *</label>
+              <select className={inputCls} value={workcell} onChange={e => setWorkcell(e.target.value)}>
+                {workcellOptions.map(w => <option key={w} value={w}>{w}</option>)}
+              </select>
+            </div>
+
             {/* shift */}
             <div>
               <label className={labelCls}>Shift *</label>
               <div className="flex gap-2">
-                {['Shift A', 'Shift B', 'Shift C'].map(s => (
-                  <button key={s} onClick={() => setShift(s)}
-                    className={cn('flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors', shift === s ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-foreground/30')}>
-                    {s}
+                {SHIFTS.map(s => (
+                  <button key={s.value} onClick={() => setShift(s.value)}
+                    className={cn('flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors',
+                      shift === s.value
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'border-border text-muted-foreground hover:border-foreground/30')}>
+                    {s.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* selected category display */}
+            {/* category display */}
             <div>
               <label className={labelCls}>Category *</label>
               {selectedCode ? (
@@ -116,7 +168,7 @@ function LogDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (log:
               <input className={inputCls} value={bay} onChange={e => setBay(e.target.value)} placeholder="e.g. B-12" />
             </div>
 
-            {/* DL headcount */}
+            {/* DL */}
             <div>
               <label className={labelCls}>Affected VA DL (headcount)</label>
               <input className={inputCls} type="number" min="0" value={dl} onChange={e => setDl(e.target.value)} placeholder="0" />
@@ -124,7 +176,7 @@ function LogDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (log:
 
             {/* minutes */}
             <div>
-              <label className={labelCls}>Down Time (minutes) *</label>
+              <label className={labelCls}>Downtime (minutes) *</label>
               <input className={inputCls} type="number" min="1" value={minutes} onChange={e => setMinutes(e.target.value)} placeholder="e.g. 45" />
             </div>
 
@@ -135,12 +187,14 @@ function LogDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (log:
             </div>
 
             {/* KPI preview */}
-            {minutes && dl && (
+            {minutes && dl && Number(minutes) > 0 && Number(dl) > 0 && (
               <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs space-y-0.5">
                 <p className="text-muted-foreground">Lost man-minutes</p>
                 <p className="font-mono font-bold text-foreground">{Number(minutes) * Number(dl)} min·person</p>
               </div>
             )}
+
+            {error && <p className="text-xs text-red-400">{error}</p>}
           </div>
 
           {/* ── Right: category accordion ── */}
@@ -165,7 +219,10 @@ function LogDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (log:
                       return (
                         <button key={c.code}
                           onClick={() => { setSelectedCode(fullCode); setSelectedDept(dept.dept); }}
-                          className={cn('px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all', active ? 'bg-primary text-primary-foreground border-primary' : cn('border-border text-muted-foreground hover:text-foreground hover:border-foreground/30', dept.color.split(' ').filter(x => x.startsWith('hover') || x.includes('text')).join(' ')))}>
+                          className={cn('px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
+                            active
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
                           <span className="font-mono mr-1 opacity-60">{c.code}</span>{c.label}
                         </button>
                       );
@@ -179,10 +236,12 @@ function LogDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (log:
 
         {/* footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors">
+            Cancel
+          </button>
           <button onClick={handleSubmit} disabled={!canSubmit}
             className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            Submit Log
+            {submitting ? 'Saving…' : 'Submit Log'}
           </button>
         </div>
       </div>
@@ -200,13 +259,25 @@ function DeptBadge({ dept }: { dept: string }) {
   );
 }
 
-// ─── Simple bar chart ─────────────────────────────────────────────────────────
+// ─── Weekly trend bar ─────────────────────────────────────────────────────────
 
-function TrendBar({ data }: { data: typeof WEEKLY_DT }) {
-  const maxEvents = Math.max(...data.map(d => d.events));
+function TrendBar({ logs }: { logs: DtLog[] }) {
+  const weeks = useMemo(() => {
+    const byWeek: Record<string, number> = {};
+    logs.forEach(l => {
+      const d = new Date(l.date);
+      const week = `W${String(Math.ceil((d.getDate()) / 7)).padStart(2, '0')}`;
+      byWeek[week] = (byWeek[week] ?? 0) + 1;
+    });
+    return Object.entries(byWeek).slice(-8).map(([w, events]) => ({ w, events }));
+  }, [logs]);
+
+  if (weeks.length === 0) return <div className="h-32 flex items-center justify-center text-xs text-muted-foreground">No data yet</div>;
+  const maxEvents = Math.max(...weeks.map(d => d.events));
+
   return (
     <div className="flex items-end gap-3 h-32">
-      {data.map(d => (
+      {weeks.map(d => (
         <div key={d.w} className="flex-1 flex flex-col items-center gap-1">
           <span className="text-[10px] font-mono text-muted-foreground">{d.events}</span>
           <div className="w-full rounded-t-md bg-primary/70 transition-all" style={{ height: `${(d.events / maxEvents) * 88}px` }} />
@@ -222,35 +293,74 @@ function TrendBar({ data }: { data: typeof WEEKLY_DT }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function DowntimeManagement() {
-  const [tab, setTab] = useState<'overview' | 'logs'>('overview');
-  const [logs, setLogs] = useState<DtLog[]>(MOCK_LOGS);
+  const [tab,        setTab]        = useState<'overview' | 'logs'>('overview');
+  const [logs,       setLogs]       = useState<DtLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
 
-  // logs tab filters
-  const [filterDept, setFilterDept] = useState('');
+  // filters
+  const [filterDept,  setFilterDept]  = useState('');
   const [filterShift, setFilterShift] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [filterWc,    setFilterWc]    = useState('');
+  const [filterDate,  setFilterDate]  = useState('');
+
+  const { data: workcellData } = useOleWorkcells();
+  const workcellOptions = useMemo(() => (workcellData ?? []).map(w => w.workcell), [workcellData]);
+
+  // Fetch logs from backend
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const data = await fetch('/api/downtime').then(r => r.json());
+      setLogs(data);
+    } catch {
+      setLogs([]);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => { fetchLogs(); }, []);
 
   const filteredLogs = useMemo(() => logs.filter(l =>
-    (!filterDept || l.dept === filterDept) &&
-    (!filterShift || l.shift === filterShift) &&
-    (!filterDate || l.date === filterDate)
-  ), [logs, filterDept, filterShift, filterDate]);
+    (!filterDept  || l.dept     === filterDept) &&
+    (!filterShift || String(l.shift) === filterShift) &&
+    (!filterWc    || l.workcell === filterWc) &&
+    (!filterDate  || l.date     === filterDate)
+  ), [logs, filterDept, filterShift, filterWc, filterDate]);
 
-  // dashboard stats
-  const totalMins = logs.reduce((s, l) => s + l.minutes, 0);
+  // Stats
+  const totalMins   = logs.reduce((s, l) => s + l.minutes, 0);
   const totalEvents = logs.length;
-  const totalDL = logs.reduce((s, l) => s + l.dl * l.minutes, 0);
+  const totalDL     = logs.reduce((s, l) => s + l.dl_affected * l.minutes, 0);
 
-  const tabCls = (t: string) => cn('px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-    tab === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border');
+  async function handleSubmit(log: Omit<DtLog, 'id' | 'created_at'>) {
+    const res = await fetch('/api/downtime', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(log),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.detail ?? 'Server error');
+    }
+    await fetchLogs();
+  }
 
-  const selectCls = 'h-9 rounded-lg border border-border bg-muted/30 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary';
+  async function handleDelete(id: number) {
+    await fetch(`/api/downtime/${id}`, { method: 'DELETE' });
+    setLogs(prev => prev.filter(l => l.id !== id));
+  }
+
+  const tabCls = (t: string) => cn(
+    'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+    tab === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+  );
 
   return (
     <div className="space-y-0">
 
-      {/* ── sticky header ── */}
+      {/* sticky header */}
       <div className="sticky top-0 z-20 bg-background border-b border-border px-6">
         <div className="pt-4 pb-3 flex items-center justify-between">
           <div>
@@ -262,8 +372,6 @@ export default function DowntimeManagement() {
             <Plus className="h-4 w-4" /> Log Downtime
           </button>
         </div>
-
-        {/* tabs */}
         <div className="flex items-center gap-0 -mb-px">
           <button className={tabCls('overview')} onClick={() => setTab('overview')}>Overview</button>
           <button className={tabCls('logs')} onClick={() => setTab('logs')}>
@@ -273,16 +381,16 @@ export default function DowntimeManagement() {
         </div>
       </div>
 
-      {/* ── OVERVIEW tab ── */}
+      {/* OVERVIEW tab */}
       {tab === 'overview' && (
         <div className="px-6 py-6 space-y-6">
 
           {/* KPI strip */}
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'Total Events', value: String(totalEvents), icon: AlertTriangle, accent: 'bg-red-500/15 text-red-400' },
-              { label: 'Total Downtime', value: `${totalMins} min`, icon: Clock, accent: 'bg-amber-500/15 text-amber-400' },
-              { label: 'Lost Man-Minutes', value: `${(totalDL / 1000).toFixed(1)}k`, icon: Users, accent: 'bg-violet-500/15 text-violet-400' },
+              { label: 'Total Events',      value: String(totalEvents),                        icon: AlertTriangle, accent: 'bg-red-500/15 text-red-400' },
+              { label: 'Total Downtime',     value: `${totalMins} min`,                        icon: Clock,         accent: 'bg-amber-500/15 text-amber-400' },
+              { label: 'Lost Man-Minutes',   value: totalDL >= 1000 ? `${(totalDL/1000).toFixed(1)}k` : String(totalDL), icon: Users, accent: 'bg-violet-500/15 text-violet-400' },
             ].map(({ label, value, icon: Icon, accent }) => (
               <div key={label} className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
                 <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0', accent)}>
@@ -296,17 +404,13 @@ export default function DowntimeManagement() {
             ))}
           </div>
 
-          {/* charts row */}
+          {/* Charts row */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-
-            {/* trend */}
             <div className="xl:col-span-2 rounded-xl border border-border bg-card p-5">
               <p className="text-sm font-semibold text-foreground mb-0.5">Weekly Event Trend</p>
               <p className="text-xs text-muted-foreground mb-5">Number of downtime events per week</p>
-              <TrendBar data={WEEKLY_DT} />
+              <TrendBar logs={logs} />
             </div>
-
-            {/* by dept */}
             <div className="rounded-xl border border-border bg-card p-5">
               <p className="text-sm font-semibold text-foreground mb-0.5">Top Departments</p>
               <p className="text-xs text-muted-foreground mb-4">Events by responsible dept</p>
@@ -315,6 +419,7 @@ export default function DowntimeManagement() {
                 logs.forEach(l => { counts[l.dept] = (counts[l.dept] ?? 0) + 1; });
                 const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
                 const max = sorted[0]?.[1] ?? 1;
+                if (sorted.length === 0) return <p className="text-xs text-muted-foreground">No data yet</p>;
                 return sorted.map(([dept, count]) => (
                   <div key={dept} className="mb-2.5">
                     <div className="flex justify-between mb-1">
@@ -330,7 +435,7 @@ export default function DowntimeManagement() {
             </div>
           </div>
 
-          {/* recent logs */}
+          {/* Recent logs */}
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
@@ -339,28 +444,43 @@ export default function DowntimeManagement() {
               </div>
               <button onClick={() => setTab('logs')} className="text-xs text-primary hover:underline">View all →</button>
             </div>
-            <div className="divide-y divide-border">
-              {logs.slice(0, 5).map(l => (
-                <div key={l.id} className="grid items-center px-5 py-3 text-sm gap-4" style={{ gridTemplateColumns: '6rem 5rem 1fr 5rem 6rem' }}>
-                  <span className="text-xs font-mono text-muted-foreground">{l.date}</span>
-                  <span className="text-xs text-muted-foreground">{l.shift}</span>
-                  <DeptBadge dept={l.dept} />
-                  <span className="text-xs font-mono text-foreground text-center">{l.minutes} min</span>
-                  <span className="text-xs text-muted-foreground truncate">{l.code.split(' ').slice(0, 2).join(' ')}</span>
-                </div>
-              ))}
-            </div>
+            {logs.length === 0 ? (
+              <div className="py-10 text-center text-xs text-muted-foreground">No downtime entries yet. Click "Log Downtime" to add one.</div>
+            ) : (
+              <div className="divide-y divide-border">
+                {logs.slice(0, 5).map(l => (
+                  <div key={l.id} className="grid items-center px-5 py-3 text-sm gap-4" style={{ gridTemplateColumns: '6rem 5rem 7rem 5rem 1fr 5rem' }}>
+                    <span className="text-xs font-mono text-muted-foreground">{l.date}</span>
+                    <span className="text-xs text-muted-foreground">{shiftLabel(l.shift)}</span>
+                    <span className="text-xs font-semibold text-foreground truncate">{l.workcell}</span>
+                    <DeptBadge dept={l.dept} />
+                    <span className="text-xs text-muted-foreground truncate">{l.code.split(' ').slice(0, 3).join(' ')}</span>
+                    <span className="text-xs font-mono text-amber-400 text-right">{l.minutes} min</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* ── LOGS tab ── */}
+      {/* LOGS tab */}
       {tab === 'logs' && (
         <div className="px-6 py-5 space-y-4">
 
           {/* filters */}
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[180px]">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Workcell</Label>
+              <Select value={filterWc || '__all__'} onValueChange={v => setFilterWc(v === '__all__' ? '' : v)}>
+                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All workcells" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All workcells</SelectItem>
+                  {workcellOptions.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-[160px]">
               <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Department</Label>
               <Select value={filterDept || '__all__'} onValueChange={v => setFilterDept(v === '__all__' ? '' : v)}>
                 <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All departments" /></SelectTrigger>
@@ -370,25 +490,20 @@ export default function DowntimeManagement() {
                 </SelectContent>
               </Select>
             </div>
-            
             <div className="min-w-[140px]">
               <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Shift</Label>
               <Select value={filterShift || '__all__'} onValueChange={v => setFilterShift(v === '__all__' ? '' : v)}>
                 <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All shifts" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All shifts</SelectItem>
-                  <SelectItem value="Shift A">Shift A</SelectItem>
-                  <SelectItem value="Shift B">Shift B</SelectItem>
-                  <SelectItem value="Shift C">Shift C</SelectItem>
+                  {SHIFTS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             <DatePickerField id="dt-date" label="Date" value={filterDate} onChange={setFilterDate} />
-
-            {(filterDept || filterShift || filterDate) && (
-              <button onClick={() => { setFilterDept(''); setFilterShift(''); setFilterDate(''); }}
-                className="h-9 px-3 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors">
+            {(filterDept || filterShift || filterWc || filterDate) && (
+              <button onClick={() => { setFilterDept(''); setFilterShift(''); setFilterWc(''); setFilterDate(''); }}
+                className="h-9 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 transition-colors">
                 Clear
               </button>
             )}
@@ -396,28 +511,35 @@ export default function DowntimeManagement() {
           </div>
 
           {/* table */}
-          <div className="rounded-xl border border-border overflow-hidden">
-            <div className="grid bg-muted/50 border-b border-border text-xs text-muted-foreground font-medium uppercase tracking-wider px-4 py-3 gap-4"
-              style={{ gridTemplateColumns: '6rem 5rem 4rem 1fr 10rem 5rem 5rem' }}>
-              <span>Date</span><span>Shift</span><span>Bay</span>
+          <div className="rounded-xl border border-border overflow-hidden bg-card">
+            <div className="grid bg-muted/50 border-b border-border text-xs text-muted-foreground font-medium uppercase tracking-wider px-4 py-3 gap-3"
+              style={{ gridTemplateColumns: '6rem 5rem 8rem 4rem 1fr 8rem 5rem 5rem 2.5rem' }}>
+              <span>Date</span><span>Shift</span><span>Workcell</span><span>Bay</span>
               <span>Category</span><span>Department</span>
-              <span className="text-center">DL</span><span className="text-center">Min</span>
+              <span className="text-center">DL</span><span className="text-center">Min</span><span />
             </div>
-            {filteredLogs.length === 0 ? (
+            {loadingLogs ? (
+              <div className="py-12 text-center text-xs text-muted-foreground">Loading…</div>
+            ) : filteredLogs.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground text-sm">No records match the current filters</div>
             ) : filteredLogs.map(l => (
-              <div key={l.id} className="grid items-start px-4 py-3 text-sm border-b border-border last:border-0 hover:bg-muted/30 transition-colors gap-4"
-                style={{ gridTemplateColumns: '6rem 5rem 4rem 1fr 10rem 5rem 5rem' }}>
+              <div key={l.id} className="grid items-start px-4 py-3 text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors gap-3"
+                style={{ gridTemplateColumns: '6rem 5rem 8rem 4rem 1fr 8rem 5rem 5rem 2.5rem' }}>
                 <span className="font-mono text-xs text-muted-foreground">{l.date}</span>
-                <span className="text-xs text-muted-foreground">{l.shift}</span>
-                <span className="text-xs font-mono text-foreground">{l.bay}</span>
+                <span className="text-xs text-muted-foreground">{shiftLabel(l.shift)}</span>
+                <span className="text-xs font-semibold text-foreground truncate">{l.workcell}</span>
+                <span className="text-xs font-mono text-foreground">{l.bay ?? '—'}</span>
                 <div>
                   <p className="text-xs font-medium text-foreground">{l.code}</p>
                   {l.commentary && <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-xs">{l.commentary}</p>}
                 </div>
                 <DeptBadge dept={l.dept} />
-                <span className="text-xs font-mono text-center text-foreground">{l.dl}</span>
+                <span className="text-xs font-mono text-center text-foreground">{l.dl_affected}</span>
                 <span className="text-xs font-mono text-center font-semibold text-amber-400">{l.minutes}</span>
+                <button onClick={() => handleDelete(l.id)}
+                  className="flex items-center justify-center text-muted-foreground hover:text-red-400 transition-colors">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             ))}
           </div>
@@ -425,8 +547,11 @@ export default function DowntimeManagement() {
       )}
 
       {showDialog && (
-        <LogDialog onClose={() => setShowDialog(false)}
-          onSubmit={log => setLogs(prev => [{ ...log, id: String(Date.now()) }, ...prev])} />
+        <LogDialog
+          workcellOptions={workcellOptions}
+          onClose={() => setShowDialog(false)}
+          onSubmit={handleSubmit}
+        />
       )}
     </div>
   );
