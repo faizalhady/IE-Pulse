@@ -1,25 +1,21 @@
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOlePaidHours, useOleProduction, useOleResults, useOleSummary, useSmhStatus } from '@/hooks/useOleData';
 import type { OlePaidHours, OleProduction, OleResult, OleSummary, SmhStatus } from '@/lib/oleApi';
+import { useOlePaidHours, useOleProduction, useOleResults, useOleSummary, useOleWorkcells, useSmhStatus } from '@/hooks/useOleData';
+import { getOleStatus, OLE_BAR, OLE_COLOR, QUALITY_BADGE, shiftLabel, SMH_STATUS_BADGE, STAGE_BADGE, STATUS_BADGE, STATUS_LABEL } from '@/lib/oleConstants';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import WorkcellBadge from '@/components/ole/WorkcellBadge';
 import {
   AlertTriangle,
   ArrowUpDown,
-  CalendarIcon,
-  ChevronDown, ChevronUp,
-  RefreshCw, Search, WifiOff,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  WifiOff
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import OLEReport from './OLEReport';
 import OLEAnalysis from './OLEAnalysis';
 import OLEFilters from './OLEFilters';
+import OLEReport from './OLEReport';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -29,138 +25,25 @@ const ROW_HEIGHT = 56;
 const ALL = '__all__';
 
 const TABS = [
-  { id: 'report',     label: 'OLE Report' },
-  { id: 'summary',    label: 'OLE Summary' },
-  { id: 'analysis',   label: 'OLE Analysis' },
-  { id: 'shifts',     label: 'Shift Detail' },
+  { id: 'report', label: 'Overview' },
+  { id: 'summary', label: 'Summary' },
+  { id: 'analysis', label: 'Analysis' },
+  { id: 'shifts', label: 'Shift Detail' },
   { id: 'production', label: 'Production' },
   { id: 'paid_hours', label: 'Paid Hours' },
-  // { id: 'smh', label: 'SMH Coverage' },
 ] as const;
+
 
 type TabId = typeof TABS[number]['id'];
 type SortDir = 'asc' | 'desc';
 
-// ─── Plant → workcell mapping (client-side filter) ───────────────────────────
-const PLANT_WORKCELLS: Record<string, string[]> = {
-  'Plant 1': ['ARISTA', 'AOP', 'KEYSIGHT', 'MSI PCA'],
-  'Batu Kawan': ['MICRON', 'WABTEC', 'MSI', 'PHOTONICS', 'LAMKEY'],
-  'Plant 2': ['CELESTICA', 'DYSON', 'FLEX', 'MED', 'REINERA', 'MAN COUL', 'TELLABS'],
-};
-
-function matchesPlant(workcellName: string, plant: string): boolean {
+// ─── Plant → workcell mapping (API-driven via useOleWorkcells) ─────────────
+// matchesPlant uses the plant field from /api/workcells — no hardcoding needed.
+function matchesPlant(workcellName: string, plant: string, workcellConfigs: { workcell: string; plant: string }[]): boolean {
   if (!plant) return true;
-  const list = PLANT_WORKCELLS[plant] ?? [];
-  const upper = workcellName.toUpperCase();
-  return list.some(p => upper.includes(p));
+  const cfg = workcellConfigs.find(c => c.workcell === workcellName);
+  return cfg ? cfg.plant === plant : false;
 }
-
-
-// ─── Workcell logos (same map as WorkcellsTable) ────────────────────────────
-const WORKCELL_LOGOS: Record<string, string> = {
-  arista:      '/workcell logo/Arista.png',
-  keysight:    '/workcell logo/keysight.png',
-  keyisght:    '/workcell logo/keysight.png',
-  aop:         '/workcell logo/aop.png',
-  micron:      '/workcell logo/micron.png',
-  dyson:       '/workcell logo/dyson.png',
-  wabtec:      '/workcell logo/wabtec.png',
-  msi:         '/workcell logo/msi.png',
-  photonics:   '/workcell logo/photonics.png',
-  tellabs:     '/workcell logo/tellabs.png',
-  imed:        '/workcell logo/imed.png',
-  collins:     '/workcell logo/collins.png',
-  danaher:     '/workcell logo/danaher.png',
-  infinera:    '/workcell logo/infinera.jpg',
-  masimo:      '/workcell logo/masimo.png',
-  resmed:      '/workcell logo/resmed.png',
-  fortive:     '/workcell logo/fortive.png',
-  lamresearch: '/workcell logo/lam_research.png',
-  asp:         '/workcell logo/asp.jpg',
-};
-
-function WorkcellBadge({ name, status }: { name: string; status: string }) {
-  const [imgErr, setImgErr] = useState(false);
-  const key = name.toLowerCase().replace(/[^a-z]/g, '');  // strip numbers/spaces: 'aop1' → 'aop'
-  const logoKey = Object.keys(WORKCELL_LOGOS).find(k => key.startsWith(k)) ?? key;
-  const logoSrc = WORKCELL_LOGOS[logoKey];
-  const ring: Record<string, string> = {
-    optimal: 'ring-emerald-500/30',
-    warning: 'ring-amber-500/30',
-    critical: 'ring-red-500/30',
-    idle: 'ring-border',
-  };
-  const bg: Record<string, string> = {
-    optimal: 'bg-emerald-500/15 text-emerald-400',
-    warning: 'bg-amber-500/15  text-amber-400',
-    critical: 'bg-red-500/15    text-red-400',
-    idle: 'bg-muted         text-muted-foreground',
-  };
-  if (logoSrc && !imgErr) return (
-    <div className={`w-14 h-8 rounded-lg overflow-hidden ring-1 flex-shrink-0 flex items-center justify-center ${ring[status] ?? 'ring-border'}`}
-      style={{ background: '#ffffff' }}>
-      <img src={logoSrc} alt={name} onError={() => setImgErr(true)} className="w-full h-full object-contain p-1" />
-    </div>
-  );
-  return (
-    <div className={`w-14 h-8 rounded-lg flex items-center justify-center text-[10px] font-black ring-1 flex-shrink-0 ${bg[status] ?? 'bg-muted text-muted-foreground'} ${ring[status] ?? 'ring-border'}`}>
-      {name.slice(0, 3).toUpperCase()}
-    </div>
-  );
-}
-
-// ─── Mock rows for summary table ─────────────────────────────────────────────
-const MOCK_SUMMARY: OleSummary[] = [
-  { workcell: 'ARISTA', stage_label: 'Backend', scan_stage: 'Backend', total_shifts: 10, avg_ole_pct: 83.2, min_ole_pct: 72.1, max_ole_pct: 91.4, latest_date: '2026-04-16', total_qty: 31200, total_output_smh: 4120.5, total_input_hours: 4952.0, flagged_shifts: 2 },
-  { workcell: 'MICRON', stage_label: 'SMT', scan_stage: 'SMT', total_shifts: 8, avg_ole_pct: 61.7, min_ole_pct: 48.2, max_ole_pct: 74.3, latest_date: '2026-04-16', total_qty: 18900, total_output_smh: 2344.1, total_input_hours: 3798.0, flagged_shifts: 8 },
-  { workcell: 'WABTEC', stage_label: 'BoxBuild', scan_stage: 'BoxBuild', total_shifts: 10, avg_ole_pct: 55.4, min_ole_pct: 31.0, max_ole_pct: 72.8, latest_date: '2026-04-15', total_qty: 8420, total_output_smh: 1890.3, total_input_hours: 3412.0, flagged_shifts: 10 },
-  { workcell: 'COLLINS', stage_label: 'Backend', scan_stage: 'Backend', total_shifts: 6, avg_ole_pct: 91.3, min_ole_pct: 87.2, max_ole_pct: 95.1, latest_date: '2026-04-14', total_qty: 22100, total_output_smh: 3210.0, total_input_hours: 3515.0, flagged_shifts: 0 },
-  { workcell: 'DYSON', stage_label: 'Backend', scan_stage: 'Backend', total_shifts: 4, avg_ole_pct: 44.8, min_ole_pct: 28.3, max_ole_pct: 61.2, latest_date: '2026-04-13', total_qty: 5600, total_output_smh: 980.2, total_input_hours: 2188.0, flagged_shifts: 4 },
-  { workcell: 'DANAHER', stage_label: 'SMT', scan_stage: 'SMT', total_shifts: 10, avg_ole_pct: 78.9, min_ole_pct: 65.4, max_ole_pct: 88.7, latest_date: '2026-04-16', total_qty: 41000, total_output_smh: 5620.4, total_input_hours: 7122.0, flagged_shifts: 3 },
-];
-
-// ─── Colour helpers ───────────────────────────────────────────────────────────
-
-function getOleStatus(pct: number | null): 'optimal' | 'warning' | 'critical' | 'idle' {
-  if (pct === null) return 'idle';
-  if (pct >= 80) return 'optimal';
-  if (pct >= 60) return 'warning';
-  return 'critical';
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  optimal: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  warning: 'bg-amber-500/15  text-amber-400  border-amber-500/30',
-  critical: 'bg-red-500/15    text-red-400    border-red-500/30',
-  idle: 'bg-muted         text-muted-foreground border-border',
-};
-const STATUS_LABEL: Record<string, string> = {
-  optimal: 'On Track', warning: 'At Risk', critical: 'Below Target', idle: 'No Data',
-};
-const OLE_COLOR: Record<string, string> = {
-  optimal: 'text-emerald-500', warning: 'text-amber-400',
-  critical: 'text-red-400', idle: 'text-muted-foreground',
-};
-const OLE_BAR: Record<string, string> = {
-  optimal: 'bg-emerald-500', warning: 'bg-amber-400',
-  critical: 'bg-red-500', idle: 'bg-muted',
-};
-const STAGE_BADGE: Record<string, string> = {
-  SMT: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  Backend: 'bg-violet-500/15 text-violet-400 border-violet-500/30',
-  BoxBuild: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
-};
-const SMH_STATUS_BADGE: Record<string, string> = {
-  OK: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  MISSING_SMH: 'bg-amber-500/15  text-amber-400  border-amber-500/30',
-  NOT_IN_SMH_DB: 'bg-red-500/15    text-red-400    border-red-500/30',
-};
-const QUALITY_BADGE: Record<string, string> = {
-  OK: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  PARTIAL_SMH: 'bg-amber-500/15  text-amber-400  border-amber-500/30',
-  NO_INPUT_HOURS: 'bg-red-500/15    text-red-400    border-red-500/30',
-  NO_OUTPUT_SMH: 'bg-red-500/15    text-red-400    border-red-500/30',
-};
 
 // ─── Table components ────────────────────────────────────────────────────────
 
@@ -217,7 +100,7 @@ function VirtualTable({ rows, renderRow, renderHeader, rowHeight = ROW_HEIGHT, h
   const offsetTop = startIdx * rowHeight;
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden">
+    <div className="rounded-xl border border-border overflow-hidden bg-card">
       {renderHeader()}
       <div style={{ height, overflowY: 'auto' }}
         onScroll={e => setScrollTop((e.target as HTMLDivElement).scrollTop)}
@@ -278,6 +161,15 @@ export default function OLEOverview() {
   }, []);
 
   // ── Data ─────────────────────────────────────────────────────────────────
+  const workcellsHook = useOleWorkcells();
+  const workcellConfigs = workcellsHook.data ?? [];
+
+  // Derive plant options dynamically from API
+  const plantOptions = useMemo(() => {
+    const plants = Array.from(new Set(workcellConfigs.map(c => c.plant))).sort();
+    return plants;
+  }, [workcellConfigs]);
+
   const summaryHook = useOleSummary({
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
@@ -323,7 +215,7 @@ export default function OLEOverview() {
   const filteredSummary = useMemo(() => {
     let list = summaryRows.filter(r =>
       (!search || r.workcell.toLowerCase().includes(search.toLowerCase())) &&
-      matchesPlant(r.workcell, plant)
+      matchesPlant(r.workcell, plant, workcellConfigs)
     );
     return sortRows(list, sortCol, sortDir) as OleSummary[];
   }, [summaryRows, search, plant, sortCol, sortDir]);
@@ -331,7 +223,7 @@ export default function OLEOverview() {
   const filteredShifts = useMemo(() => {
     let list = (shiftsHook.data ?? []).filter(r =>
       (!search || r.workcell.toLowerCase().includes(search.toLowerCase()) || r.date.includes(search)) &&
-      matchesPlant(r.workcell, plant)
+      matchesPlant(r.workcell, plant, workcellConfigs)
     );
     return sortRows(list, sortCol, sortDir) as OleResult[];
   }, [shiftsHook.data, search, plant, sortCol, sortDir]);
@@ -339,7 +231,7 @@ export default function OLEOverview() {
   const filteredProd = useMemo(() => {
     let list = (productionHook.data ?? []).filter(r =>
       (!search || r.workcell.toLowerCase().includes(search.toLowerCase()) || r.assembly.toLowerCase().includes(search.toLowerCase())) &&
-      matchesPlant(r.workcell, plant)
+      matchesPlant(r.workcell, plant, workcellConfigs)
     );
     return sortRows(list, sortCol, sortDir) as OleProduction[];
   }, [productionHook.data, search, plant, sortCol, sortDir]);
@@ -347,7 +239,7 @@ export default function OLEOverview() {
   const filteredHours = useMemo(() => {
     let list = (paidHoursHook.data ?? []).filter(r =>
       (!search || r.workcell.toLowerCase().includes(search.toLowerCase())) &&
-      matchesPlant(r.workcell, plant)
+      matchesPlant(r.workcell, plant, workcellConfigs)
     );
     return sortRows(list, sortCol, sortDir) as OlePaidHours[];
   }, [paidHoursHook.data, search, plant, sortCol, sortDir]);
@@ -355,19 +247,19 @@ export default function OLEOverview() {
   const filteredSmh = useMemo(() => {
     let list = (smhHook.data ?? []).filter(r =>
       (!search || r.assembly.toLowerCase().includes(search.toLowerCase()) || r.workcell.toLowerCase().includes(search.toLowerCase())) &&
-      matchesPlant(r.workcell, plant)
+      matchesPlant(r.workcell, plant, workcellConfigs)
     );
     return sortRows(list, sortCol, sortDir) as SmhStatus[];
   }, [smhHook.data, search, plant, sortCol, sortDir]);
 
   const rowCounts: Record<TabId, number> = {
-    report:     0,
-    summary:    filteredSummary.length,
-    analysis:   0,
-    shifts:     filteredShifts.length,
+    report: 0,
+    summary: filteredSummary.length,
+    analysis: 0,
+    shifts: filteredShifts.length,
     production: filteredProd.length,
     paid_hours: filteredHours.length,
-    smh:        filteredSmh.length,
+    smh: filteredSmh.length,
   };
 
   // ── Paginated slices ──────────────────────────────────────────────────────
@@ -457,6 +349,7 @@ export default function OLEOverview() {
           search={search} setSearch={setSearch}
           workcell={workcell} setWorkcell={setWorkcell}
           plant={plant} setPlant={setPlant}
+          plantOptions={plantOptions}
           dateFrom={dateFrom} setDateFrom={setDateFrom}
           dateTo={dateTo} setDateTo={setDateTo}
           workcellOptions={workcellOptions}
@@ -472,6 +365,7 @@ export default function OLEOverview() {
           search={search} setSearch={setSearch}
           workcell={workcell} setWorkcell={setWorkcell}
           plant={plant} setPlant={setPlant}
+          plantOptions={plantOptions}
           dateFrom={showDateFilters ? dateFrom : undefined}
           setDateFrom={showDateFilters ? setDateFrom : undefined}
           dateTo={showDateFilters ? dateTo : undefined}
@@ -498,13 +392,10 @@ export default function OLEOverview() {
 
           {/* ── SUMMARY tab ── */}
           {activeTab === 'summary' && (() => {
-            // real rows first, mock rows below — mock rows are not navigatable
-            const liveWorkcells = new Set(filteredSummary.map(r => r.workcell));
-            const mockRows = MOCK_SUMMARY.filter(r => !liveWorkcells.has(r.workcell));
-            const allRows = [...filteredSummary, ...mockRows];
+            const allRows = filteredSummary;
             const GT = '2.5rem minmax(10rem, 1fr) 7.5rem 9.5rem 9rem 9rem 9rem 6.5rem 7.5rem';
             return (
-              <div className="rounded-xl border border-border overflow-hidden">
+              <div className="rounded-xl border border-border overflow-hidden bg-card">
                 {/* table header */}
                 <div className="grid bg-muted/50 border-b border-border text-xs text-muted-foreground font-medium uppercase tracking-wider"
                   style={{ gridTemplateColumns: GT }}>
@@ -531,96 +422,52 @@ export default function OLEOverview() {
                 ) : allRows.map((row, idx) => {
                   const calcOle = row.total_input_hours > 0 ? (row.total_output_smh / row.total_input_hours) * 100 : 0;
                   const status = getOleStatus(calcOle);
-                  const isLive = liveWorkcells.has(row.workcell);
                   return (
                     <div key={row.workcell}
-                      className={cn('grid items-center text-sm border-b border-border last:border-0 transition-colors', isLive ? 'hover:bg-muted/40' : 'opacity-60 hover:opacity-80 hover:bg-muted/20')}
+                      className="grid items-center text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
                       style={{ gridTemplateColumns: GT }}
                     >
-                      {/* # */}
                       <div className="px-4 py-3.5 text-center text-xs text-muted-foreground font-mono">{idx + 1}</div>
 
-                      {/* Workcell — clickable → workcell drill-down (live only) */}
-                      <button
-                        onClick={() => isLive && navigate(`/ole/${encodeURIComponent(row.workcell)}`)}
-                        disabled={!isLive}
-                        className={cn('px-4 py-3.5 flex items-center gap-3 text-left group w-full', isLive && 'cursor-pointer')}
-                      >
+                      <button onClick={() => navigate(`/ole/${encodeURIComponent(row.workcell)}`)} className="px-4 py-3.5 flex items-center gap-3 text-left group w-full cursor-pointer">
                         <WorkcellBadge name={row.workcell} status={status} />
                         <div className="min-w-0">
-                          <p className={cn('font-semibold text-foreground truncate', isLive && 'group-hover:text-primary transition-colors')}>{row.workcell}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">
-                            {isLive ? `Latest: ${row.latest_date ?? '—'}` : 'Mock data'}
-                          </p>
+                          <p className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">{row.workcell}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">Latest: {row.latest_date ?? '—'}</p>
                         </div>
                       </button>
 
-                      {/* Final Scan — clickable → SMH Coverage tab filtered to this workcell */}
-                      <button
-                        onClick={() => { setActiveTab('smh'); setWorkcell(row.workcell); }}
-                        className="px-3 py-3.5 flex items-center justify-center cursor-pointer"
-                      >
-                        <span className={cn(
-                          'text-[10px] font-semibold px-2 py-0.5 rounded border whitespace-nowrap',
-                          STAGE_BADGE[row.stage_label] ?? 'bg-muted text-muted-foreground border-border'
-                        )}>{row.stage_label}</span>
+                      <button onClick={() => navigate(`/ole/smh-status?workcell=${encodeURIComponent(row.workcell)}`)} className="px-3 py-3.5 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity">
+                        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded border whitespace-nowrap', STAGE_BADGE[row.stage_label] ?? 'bg-muted text-muted-foreground border-border')}>{row.stage_label}</span>
                       </button>
 
-
-                      {/* OLE % */}
                       <div className="px-3 py-3.5 text-center">
-                        <span className={cn('text-lg font-mono font-bold', OLE_COLOR[status])}>
-                          {row.total_input_hours > 0 ? `${calcOle.toFixed(2)}%` : '—'}
-                        </span>
-                        <div className="mt-1 h-1 rounded-full bg-muted/50 overflow-hidden">
-                          <div className={cn('h-full rounded-full', OLE_BAR[status])}
-                            style={{ width: `${Math.min(calcOle, 100)}%` }} />
-                        </div>
+                        <span className={cn('text-lg font-mono font-bold', OLE_COLOR[status])}>{row.total_input_hours > 0 ? `${calcOle.toFixed(2)}%` : '—'}</span>
+                        <div className="mt-1 h-1 rounded-full bg-muted/50 overflow-hidden"><div className={cn('h-full rounded-full', OLE_BAR[status])} style={{ width: `${Math.min(calcOle, 100)}%` }} /></div>
                       </div>
 
-
-                      {/* Output SMH — clickable → Shift Detail tab */}
-                      <button
-                        onClick={() => { if (isLive) { setActiveTab('shifts'); setWorkcell(row.workcell); } }}
-                        disabled={!isLive}
-                        className={cn('px-3 py-3.5 text-center', isLive && 'cursor-pointer hover:text-primary transition-colors')}
-                      >
+                      <button onClick={() => { setActiveTab('shifts'); setWorkcell(row.workcell); }} className="px-3 py-3.5 text-center cursor-pointer hover:text-primary transition-colors">
                         <span className="font-mono text-sm font-semibold text-foreground">{Math.round(row.total_output_smh).toLocaleString()}</span>
                         <p className="text-[10px] text-muted-foreground">hrs</p>
                       </button>
 
-                      {/* Input Hrs — clickable → Paid Hours tab */}
-                      <button
-                        onClick={() => { if (isLive) { setActiveTab('paid_hours'); setWorkcell(row.workcell); } }}
-                        disabled={!isLive}
-                        className={cn('px-3 py-3.5 text-center', isLive && 'cursor-pointer hover:text-primary transition-colors')}
-                      >
+                      <button onClick={() => { setActiveTab('paid_hours'); setWorkcell(row.workcell); }} className="px-3 py-3.5 text-center cursor-pointer hover:text-primary transition-colors">
                         <span className="font-mono text-sm font-semibold text-foreground">{Math.round(row.total_input_hours).toLocaleString()}</span>
                         <p className="text-[10px] text-muted-foreground">hrs</p>
                       </button>
 
-                      {/* Transferred Man-Hours — default 0 */}
                       <div className="px-3 py-3.5 text-center">
-                        <span className="font-mono text-sm font-semibold text-muted-foreground">
-                          {((row as any).transferred_man_hours ?? 0).toLocaleString()}
-                        </span>
+                        <span className="font-mono text-sm font-semibold text-muted-foreground">—</span>
                         <p className="text-[10px] text-muted-foreground">hrs</p>
                       </div>
 
-                      {/* QTY */}
                       <div className="px-3 py-3.5 text-center">
-                        <span className="font-mono text-sm font-semibold text-foreground">
-                          {row.total_qty != null ? row.total_qty.toLocaleString() : '—'}
-                        </span>
+                        <span className="font-mono text-sm font-semibold text-foreground">{row.total_qty != null ? row.total_qty.toLocaleString() : '—'}</span>
                         <p className="text-[10px] text-muted-foreground">units</p>
                       </div>
 
-                      {/* Status badge */}
                       <div className="px-3 py-3.5 flex items-center justify-center">
-                        <span className={cn(
-                          'text-[10px] font-semibold px-2 py-0.5 rounded border whitespace-nowrap',
-                          STATUS_BADGE[status]
-                        )}>{STATUS_LABEL[status]}</span>
+                        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded border whitespace-nowrap', STATUS_BADGE[status])}>{STATUS_LABEL[status]}</span>
                       </div>
                     </div>
                   );
@@ -661,7 +508,7 @@ export default function OLEOverview() {
                     <span className="font-semibold text-foreground truncate">{row.workcell}</span>
                   </div>
                   <div className="px-3 font-mono text-xs text-foreground">{row.date}</div>
-                  <div className="px-3 text-center font-mono font-semibold text-foreground">{row.shift}</div>
+                  <div className="px-3 text-center font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
                   <div className="px-3 text-center">
                     <span className={cn('font-mono font-bold', OLE_COLOR[status])}>{row.ole_pct !== null ? `${row.ole_pct}%` : '—'}</span>
                   </div>
@@ -687,7 +534,7 @@ export default function OLEOverview() {
               <VirtualTable rows={filteredShifts} renderHeader={renderHeader} renderRow={renderRow} />
             ) : (
               <>
-                <div className="rounded-xl border border-border overflow-x-auto">
+                <div className="rounded-xl border border-border overflow-x-auto bg-card">
                   {renderHeader()}
                   {filteredShifts.length === 0
                     ? <div className="py-12 text-center text-muted-foreground text-sm">No shift data</div>
@@ -734,7 +581,7 @@ export default function OLEOverview() {
                   <div className="px-3 font-mono text-xs text-foreground truncate" title={row.assembly}>{row.assembly}</div>
                   <div className="px-3 text-center font-mono font-semibold text-foreground">{row.qty.toLocaleString()}</div>
                   <div className="px-3 font-mono text-xs text-foreground">{row.date}</div>
-                  <div className="px-3 text-center font-mono text-sm text-foreground">{row.shift}</div>
+                  <div className="px-3 text-center font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
                 </div>
               );
             };
@@ -742,7 +589,7 @@ export default function OLEOverview() {
               <VirtualTable rows={filteredProd} renderHeader={renderHeader} renderRow={renderRow} />
             ) : (
               <>
-                <div className="rounded-xl border border-border overflow-x-auto">
+                <div className="rounded-xl border border-border overflow-x-auto bg-card">
                   {renderHeader()}
                   {filteredProd.length === 0
                     ? <div className="py-12 text-center text-muted-foreground text-sm">No production data</div>
@@ -755,16 +602,16 @@ export default function OLEOverview() {
 
           {/* ── PAID HOURS tab ── */}
           {activeTab === 'paid_hours' && (() => {
-            const gt = { gridTemplateColumns: '2.5rem 1fr 7rem 4rem 7rem 7rem 7rem 7rem 8rem' };
+            const gt = { gridTemplateColumns: '2.5rem 1fr 7rem 4rem 5rem 6rem 7rem 8rem 8rem' };
             return (
               <>
-                <div className="rounded-xl border border-border overflow-x-auto">
+                <div className="rounded-xl border border-border overflow-x-auto bg-card">
                   <div className="grid bg-muted/50 border-b border-border text-xs text-muted-foreground font-medium uppercase tracking-wider" style={gt}>
                     <div className="px-4 py-3 text-center">#</div>
                     {([
                       ['workcell', 'Workcell'], ['date', 'Date'], ['shift', 'Shift'],
                       ['thc_direct', 'Direct HC'], ['tph_direct', 'Direct Hrs'],
-                      ['thc_support', 'Support HC'], ['tph_support', 'Support Hrs'],
+                      ['value_type', 'Type'], ['name', 'Employee'],
                       ['total_input_hours', 'Total Input'],
                     ] as [string, string][]).map(([col, label]) => (
                       <button key={col} onClick={() => toggleSort(col)}
@@ -775,7 +622,7 @@ export default function OLEOverview() {
                   {filteredHours.length === 0
                     ? <div className="py-12 text-center text-muted-foreground text-sm">No paid hours data</div>
                     : slice(filteredHours).map((row, i) => (
-                      <div key={`${row.workcell}-${row.date}-${row.shift}`}
+                      <div key={`${row.workcell}-${row.date}-${row.shift}-${row.name}-${i}`}
                         className="grid items-center text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
                         style={gt}
                       >
@@ -785,11 +632,17 @@ export default function OLEOverview() {
                           <span className="font-semibold text-foreground truncate">{row.workcell}</span>
                         </div>
                         <div className="px-3 py-3 font-mono text-xs text-foreground">{row.date}</div>
-                        <div className="px-3 py-3 text-center font-mono font-semibold text-foreground">{row.shift}</div>
-                        <div className="px-3 py-3 text-center font-mono text-sm text-foreground">{row.thc_direct.toFixed(0)}</div>
+                        <div className="px-3 py-3 text-center font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
+                        <div className="px-3 py-3 text-center font-mono text-sm text-foreground">{row.thc_direct}</div>
                         <div className="px-3 py-3 text-center font-mono text-sm text-foreground">{row.tph_direct.toFixed(2)}</div>
-                        <div className="px-3 py-3 text-center font-mono text-sm text-foreground">{row.thc_support.toFixed(0)}</div>
-                        <div className="px-3 py-3 text-center font-mono text-sm text-foreground">{row.tph_support.toFixed(2)}</div>
+                        <div className="px-3 py-3 text-center">
+                          <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border',
+                            row.value_type === 'VA'  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
+                            row.value_type === 'NVA' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
+                            'bg-muted text-muted-foreground border-border'
+                          )}>{row.value_type || 'NVA'}</span>
+                        </div>
+                        <div className="px-3 py-3 text-xs text-foreground truncate">{row.name}</div>
                         <div className="px-3 py-3 text-center font-mono font-bold text-foreground">{row.total_input_hours.toFixed(2)}</div>
                       </div>
                     ))}
@@ -851,7 +704,7 @@ export default function OLEOverview() {
               <VirtualTable rows={filteredSmh} renderHeader={renderHeader} renderRow={renderRow} />
             ) : (
               <>
-                <div className="rounded-xl border border-border overflow-x-auto">
+                <div className="rounded-xl border border-border overflow-x-auto bg-card">
                   {renderHeader()}
                   {filteredSmh.length === 0
                     ? <div className="py-12 text-center text-muted-foreground text-sm">No SMH coverage data</div>

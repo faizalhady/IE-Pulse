@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import OLEFilters from './OLEFilters';
-import OLEProjection from './OLEProjection';
+import OLEPredictiveBacktesting from './OLEPredictiveBacktesting';
 import OLEWorkcellTab from './OLEWorkcellTab';
 
 interface OLEAnalysisProps {
@@ -11,6 +11,7 @@ interface OLEAnalysisProps {
   setWorkcell: (v: string) => void;
   plant: string;
   setPlant: (v: string) => void;
+  plantOptions?: string[];
   dateFrom: string;
   setDateFrom: (v: string) => void;
   dateTo: string;
@@ -23,6 +24,7 @@ export default function OLEAnalysis({
   search, setSearch,
   workcell, setWorkcell,
   plant, setPlant,
+  plantOptions = [],
   dateFrom, setDateFrom,
   dateTo, setDateTo,
   workcellOptions,
@@ -41,7 +43,7 @@ export default function OLEAnalysis({
                 ? 'bg-primary text-primary-foreground border-primary'
                 : 'text-muted-foreground border-border hover:text-foreground'
             )}>
-            {s === 'workcell' ? 'Workcell Analytics' : 'OLE Projection'}
+            {s === 'workcell' ? 'Workcell Analytics' : 'Projection'}
           </button>
         ))}
       </div>
@@ -52,6 +54,7 @@ export default function OLEAnalysis({
             search={search} setSearch={setSearch}
             workcell={workcell} setWorkcell={setWorkcell}
             plant={plant} setPlant={setPlant}
+            plantOptions={plantOptions}
             dateFrom={dateFrom} setDateFrom={setDateFrom}
             dateTo={dateTo} setDateTo={setDateTo}
             workcellOptions={workcellOptions}
@@ -64,7 +67,7 @@ export default function OLEAnalysis({
         </>
       ) : (
         <div className="pb-8">
-          <OLEProjection />
+          <OLEPredictiveBacktesting />
         </div>
       )}
     </div>

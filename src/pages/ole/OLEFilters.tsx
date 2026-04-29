@@ -68,6 +68,7 @@ interface OLEFiltersProps {
   setWorkcell: (v: string) => void;
   plant: string;
   setPlant: (v: string) => void;
+  plantOptions?: string[];
   dateFrom?: string;
   setDateFrom?: (v: string) => void;
   dateTo?: string;
@@ -85,6 +86,7 @@ export default function OLEFilters({
   search, setSearch,
   workcell, setWorkcell,
   plant, setPlant,
+  plantOptions = [],
   dateFrom, setDateFrom,
   dateTo, setDateTo,
   shift, setShift,
@@ -120,9 +122,7 @@ export default function OLEFilters({
           <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="All plants" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All</SelectItem>
-            <SelectItem value="Plant 1">Plant 1</SelectItem>
-            <SelectItem value="Batu Kawan">Batu Kawan</SelectItem>
-            <SelectItem value="Plant 2">Plant 2</SelectItem>
+            {plantOptions.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -141,8 +141,9 @@ export default function OLEFilters({
             <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Any shift" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>Any shift</SelectItem>
-              <SelectItem value="2">Shift 2</SelectItem>
-              <SelectItem value="3">Shift 3</SelectItem>
+              <SelectItem value="1">Normal</SelectItem>
+              <SelectItem value="2">Night</SelectItem>
+              <SelectItem value="3">Day</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -162,6 +163,23 @@ export default function OLEFilters({
           </Select>
         </div>
       )}
+
+      {(search || workcell || plant || dateFrom || dateTo || shift || smhFilter) ? (
+        <button
+          onClick={() => {
+            setSearch('');
+            setWorkcell('');
+            setPlant('');
+            if (setDateFrom) setDateFrom('');
+            if (setDateTo) setDateTo('');
+            if (setShift) setShift('');
+            if (setSmhFilter) setSmhFilter('');
+          }}
+          className="h-9 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-colors"
+        >
+          Clear
+        </button>
+      ) : null}
 
       <span className="text-xs text-muted-foreground ml-auto">{rowCount.toLocaleString()} rows</span>
     </div>
