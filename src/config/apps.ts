@@ -75,6 +75,7 @@ export const APPS: AppConfig[] = [
       { label: 'Downtime Management', to: '/ole/downtime', icon: AlertTriangle },
       { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
       { label: '4Q Generator', to: '/ole/4q', icon: FileSpreadsheet },
+      { label: 'Analysis', to: '/ole/analysis', icon: LineChart },
       { label: 'API Test', to: '/ole-mart-api', icon: Database },
     ],
   },
