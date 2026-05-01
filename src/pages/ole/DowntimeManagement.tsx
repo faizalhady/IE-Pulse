@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { SHIFTS, shiftLabel } from '@/lib/oleConstants';
+import { SHIFTS, shiftLabel, fmtDate } from '@/lib/oleConstants';
 import { oleApi } from '@/lib/oleApi';
 import { useOleWorkcells } from '@/hooks/useOleData';
 import {
@@ -450,7 +450,7 @@ export default function DowntimeManagement() {
               <div className="divide-y divide-border">
                 {logs.slice(0, 5).map(l => (
                   <div key={l.id} className="grid items-center px-5 py-3 text-sm gap-4" style={{ gridTemplateColumns: '6rem 5rem 7rem 5rem 1fr 5rem' }}>
-                    <span className="text-xs font-mono text-muted-foreground">{l.date}</span>
+                    <span className="text-xs font-mono text-muted-foreground">{fmtDate(l.date)}</span>
                     <span className="text-xs text-muted-foreground">{shiftLabel(l.shift)}</span>
                     <span className="text-xs font-semibold text-foreground truncate">{l.workcell}</span>
                     <DeptBadge dept={l.dept} />
@@ -525,7 +525,7 @@ export default function DowntimeManagement() {
             ) : filteredLogs.map(l => (
               <div key={l.id} className="grid items-start px-4 py-3 text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors gap-3"
                 style={{ gridTemplateColumns: '6rem 5rem 8rem 4rem 1fr 8rem 5rem 5rem 2.5rem' }}>
-                <span className="font-mono text-xs text-muted-foreground">{l.date}</span>
+                <span className="font-mono text-xs text-muted-foreground">{fmtDate(l.date)}</span>
                 <span className="text-xs text-muted-foreground">{shiftLabel(l.shift)}</span>
                 <span className="text-xs font-semibold text-foreground truncate">{l.workcell}</span>
                 <span className="text-xs font-mono text-foreground">{l.bay ?? '—'}</span>

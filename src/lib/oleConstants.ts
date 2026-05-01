@@ -20,6 +20,19 @@ export function shiftLabel(value: string | number | undefined | null): string {
   return map[String(value)] ?? String(value ?? '—');
 }
 
+// ─── Date Formatter ─────────────────────────────────────────────────────────
+// Single source of truth for display dates across all OLE tables.
+// Accepts ISO strings (2026-03-01, 2026-03-01T00:00:00, etc.) → dd-mm-yyyy
+export function fmtDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  // Take only the date part before any 'T'
+  const datePart = value.split('T')[0];
+  const parts = datePart.split('-');
+  if (parts.length !== 3) return value; // fallback: return as-is
+  const [yyyy, mm, dd] = parts;
+  return `${dd}-${mm}-${yyyy}`;
+}
+
 // ─── Workcell Logos ─────────────────────────────────────────────────────────
 export const WORKCELL_LOGOS: Record<string, string> = {
   aop: '/workcell logo/aop.png',

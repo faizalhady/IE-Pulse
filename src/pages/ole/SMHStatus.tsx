@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { useSmhStatus } from '@/hooks/useOleData';
+import { fmtDate } from '@/lib/oleConstants';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Search, RefreshCw, WifiOff, Pencil, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -314,7 +315,7 @@ export default function SMHStatus() {
                         <p className="font-semibold text-sm text-foreground font-mono truncate">{row.assembly}</p>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1 truncate">
-                        {row.workcell} · Active {row.active_days} day{row.active_days !== 1 ? 's' : ''} · Last seen: {row.last_seen_date}
+                        {row.workcell} · Active {row.active_days} day{row.active_days !== 1 ? 's' : ''} · Last seen: {fmtDate(row.last_seen_date)}
                       </p>
                     </div>
 

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { SHIFTS, shiftLabel } from '@/lib/oleConstants';
+import { SHIFTS, shiftLabel, fmtDate } from '@/lib/oleConstants';
 import { useOleWorkcells } from '@/hooks/useOleData';
 import {
   ArrowRightLeft, CalendarIcon,
@@ -308,7 +308,7 @@ export default function TransferManHour() {
                 {logs.slice(0, 5).map(l => (
                   <div key={l.id} className="grid items-center px-5 py-3 gap-4 border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
                     style={{ gridTemplateColumns: '6rem 5rem 1fr 1fr 7rem 7rem' }}>
-                    <span className="text-xs font-mono text-muted-foreground">{l.date}</span>
+                    <span className="text-xs font-mono text-muted-foreground">{fmtDate(l.date)}</span>
                     <span className="text-xs text-muted-foreground">{shiftLabel(l.shift)}</span>
                     <span className="text-xs font-semibold text-foreground">{l.from_wc}</span>
                     <span className="text-xs font-semibold text-foreground">{l.to_wc}</span>
@@ -374,7 +374,7 @@ export default function TransferManHour() {
             ) : filteredLogs.map(l => (
               <div key={l.id} className="grid items-center px-4 py-3 text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors gap-3"
                 style={{ gridTemplateColumns: '6rem 5rem 1fr 1fr 5rem 6rem 5rem 6rem 2.5rem' }}>
-                <span className="font-mono text-xs text-muted-foreground">{l.date}</span>
+                <span className="font-mono text-xs text-muted-foreground">{fmtDate(l.date)}</span>
                 <span className="text-xs text-muted-foreground">{shiftLabel(l.shift)}</span>
                 <span className="text-xs font-semibold text-foreground">{l.from_wc}</span>
                 <span className="text-xs font-semibold text-foreground">{l.to_wc}</span>

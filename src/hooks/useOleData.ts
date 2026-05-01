@@ -1,12 +1,13 @@
 /**
  * useOleData.ts — React hooks for OLE Analyzer backend
  *
- * Mirrors the useMesData.ts polling pattern exactly.
- * Each hook fetches on mount with optional polling.
+ * PERFORMANCE DESIGN:
+ *   - All data is fetched ONCE in full (no filter params sent to backend)
+ *   - Filtering is done IN-BROWSER via useMemo in the consuming component
+ *   - Module-level cache prevents re-fetching on unmount/remount within session
+ *   - Polling only for primary datasets (summary + ole results)
  *
- * Usage:
- *   const { data: summary, loading } = useOleSummary();
- *   const { data: results } = useOleResults({ workcell: 'AOP1' });
+ * DO NOT pass filter params here — filter in the component with useMemo.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -24,7 +25,28 @@ import {
   SmhStatus,
 } from '@/lib/oleApi';
 
-// ─── Generic polling hook (same as useMesData) ────────────────────────────────
+// ─── Module-level in-memory cache ────────────────────────────────────────────
+// Survives component unmount/remount — cleared only on full page refresh.
+const CACHE = new Map<string, { data: unknown; ts: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function getCached<T>(key: string): T | null {
+  const entry = CACHE.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL_MS) { CACHE.delete(key); return null; }
+  return entry.data as T;
+}
+function setCached<T>(key: string, data: T): void {
+  CACHE.set(key, { data, ts: Date.now() });
+}
+export function invalidateCache(keyPrefix?: string) {
+  if (!keyPrefix) { CACHE.clear(); return; }
+  for (const k of Array.from(CACHE.keys())) {
+    if (k.startsWith(keyPrefix)) CACHE.delete(k);
+  }
+}
+
+// ─── Generic cache-first fetch hook ──────────────────────────────────────────
 
 interface UseFetchResult<T> {
   data: T | null;
@@ -33,157 +55,115 @@ interface UseFetchResult<T> {
   refetch: () => void;
 }
 
-function usePolling<T>(
+function useCachedFetch<T>(
+  key: string,
   fetcher: () => Promise<T>,
-  interval: number,
-  deps: unknown[] = []
+  pollIntervalMs = 0,
 ): UseFetchResult<T> {
-  const [data, setData]       = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cached                = getCached<T>(key);
+  const [data, setData]       = useState<T | null>(cached);
+  const [loading, setLoading] = useState<boolean>(cached === null);
   const [error, setError]     = useState<string | null>(null);
   const timerRef              = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef            = useRef(true);
 
-  const fetch_ = useCallback(async () => {
+  const fetch_ = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       const result = await fetcher();
+      if (!mountedRef.current) return;
+      setCached(key, result);
       setData(result);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (mountedRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   useEffect(() => {
-    setLoading(true);
-    fetch_();
-    if (interval > 0) {
-      timerRef.current = setInterval(fetch_, interval);
+    mountedRef.current = true;
+    const hit = getCached<T>(key);
+    if (hit !== null) {
+      setData(hit);
+      setLoading(false);
+    } else {
+      fetch_(true);
+    }
+    if (pollIntervalMs > 0) {
+      timerRef.current = setInterval(() => fetch_(false), pollIntervalMs);
     }
     return () => {
+      mountedRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [fetch_, interval]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, pollIntervalMs]);
 
-  return { data, loading, error, refetch: fetch_ };
+  const refetch = useCallback(() => { CACHE.delete(key); fetch_(true); }, [key, fetch_]);
+  return { data, loading, error, refetch };
 }
 
-// ─── OLE hooks ────────────────────────────────────────────────────────────────
+// ─── OLE hooks ─────────────────────────────────────────────────────────────────
+// All hooks fetch ALL data — no filter params. Filter with useMemo in component.
 
-/** Health check — fetch once */
+/** Health check */
 export function useOleHealth() {
-  return usePolling<OleHealth>(
-    () => oleApi.health.check(),
-    0
-  );
+  return useCachedFetch<OleHealth>('health', () => oleApi.health.check(), 0);
 }
 
-/** Workcell config list — fetch once */
+/** Workcell config list */
 export function useOleWorkcells() {
-  return usePolling<OleWorkcellConfig[]>(
-    () => oleApi.workcells.list(),
-    0
-  );
+  return useCachedFetch<OleWorkcellConfig[]>('workcells', () => oleApi.workcells.list(), 0);
 }
 
-/** OLE summary per workcell — refreshes every 5 minutes */
-export function useOleSummary(params?: {
-  date_from?: string;
-  date_to?: string;
-  plant?: string;
-}) {
-  return usePolling<OleSummary[]>(
-    () => oleApi.ole.summary(params),
-    5 * 60 * 1000,
-    [params?.date_from, params?.date_to, params?.plant]
-  );
+/** OLE summary per workcell — poll every 5 min */
+export function useOleSummary() {
+  return useCachedFetch<OleSummary[]>('ole_summary', () => oleApi.ole.summary(), 5 * 60 * 1000);
 }
 
-/** Full OLE results — filterable, refreshes every 5 minutes */
-export function useOleResults(params?: {
-  workcell?: string;
-  date_from?: string;
-  date_to?: string;
-  shift?: number;
-}) {
-  return usePolling<OleResult[]>(
-    () => oleApi.ole.list(params),
-    5 * 60 * 1000,
-    [params?.workcell, params?.date_from, params?.date_to, params?.shift]
-  );
+/** Full OLE shift rows — poll every 5 min */
+export function useOleResults() {
+  return useCachedFetch<OleResult[]>('ole_results', () => oleApi.ole.list(), 5 * 60 * 1000);
 }
 
-/** Raw MES production data — fetch once */
-export function useOleProduction(params?: {
-  workcell?: string;
-  date_from?: string;
-  date_to?: string;
-}) {
-  return usePolling<OleProduction[]>(
-    () => oleApi.production.list(params),
-    0,
-    [params?.workcell, params?.date_from, params?.date_to]
-  );
+/** Raw MES production rows */
+export function useOleProduction() {
+  return useCachedFetch<OleProduction[]>('ole_production', () => oleApi.production.list(), 0);
 }
 
-/** Raw eTMS paid hours data — fetch once */
-export function useOlePaidHours(params?: {
-  workcell?: string;
-  date_from?: string;
-  date_to?: string;
-}) {
-  return usePolling<OlePaidHours[]>(
-    () => oleApi.paidHours.list(params),
-    0,
-    [params?.workcell, params?.date_from, params?.date_to]
-  );
+/** Raw eTMS paid-hours rows */
+export function useOlePaidHours() {
+  return useCachedFetch<OlePaidHours[]>('ole_paid_hours', () => oleApi.paidHours.list(), 0);
 }
 
-/** SMH lookup — fetch once */
+/** SMH lookup — workcell/assembly specific */
 export function useSmhLookup(params?: { workcell?: string; assembly?: string }) {
-  return usePolling<SmhLookup[]>(
-    () => oleApi.smh.list(params),
-    0,
-    [params?.workcell, params?.assembly]
-  );
+  const key = `smh_lookup:${params?.workcell ?? ''}:${params?.assembly ?? ''}`;
+  return useCachedFetch<SmhLookup[]>(key, () => oleApi.smh.list(params), 0);
 }
 
-/** SMH assembly status — fetch once */
-export function useSmhStatus(params?: {
-  workcell?: string;
-  status?: SmhStatus['smh_status'];
-}) {
-  return usePolling<SmhStatus[]>(
-    () => oleApi.smh.status(params),
-    0,
-    [params?.workcell, params?.status]
-  );
+/** SMH assembly status */
+export function useSmhStatus() {
+  return useCachedFetch<SmhStatus[]>('smh_status', () => oleApi.smh.status(), 0);
 }
 
-/** Weekly OLE aggregates — projection engine input, fetch once */
-export function useOleWeekly(params?: {
-  workcell?: string;
-  sample_from?: string;
-  sample_to?: string;
-  plant?: string;
-}) {
-  return usePolling<OleWeeklyResult[]>(
-    () => oleApi.ole.weekly(params),
-    0,
-    [params?.workcell, params?.sample_from, params?.sample_to, params?.plant]
-  );
+/** Weekly OLE aggregates */
+export function useOleWeekly() {
+  return useCachedFetch<OleWeeklyResult[]>('ole_weekly', () => oleApi.ole.weekly(), 0);
 }
 
-/** Advanced forecasting via statsmodels — fetch once */
-export function useOlePredictions(params: {
-  workcell: string;
-  projection_weeks?: number;
-}, skip = false) {
-  return usePolling<OlePredictionResult[]>(
+/** ARIMA/HW predictions — cached per workcell */
+export function useOlePredictions(
+  params: { workcell: string; projection_weeks?: number },
+  skip = false,
+) {
+  const key = `ole_predict:${params.workcell}:${params.projection_weeks ?? 3}`;
+  return useCachedFetch<OlePredictionResult[]>(
+    key,
     async () => skip ? [] : oleApi.ole.predict(params),
     0,
-    [params.workcell, params.projection_weeks, skip]
   );
 }

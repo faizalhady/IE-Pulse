@@ -10,10 +10,29 @@
 
 const BASE = '/ole-api';
 
+// Strip timestamp from date strings: '2026-04-04T00:00:00' → '2026-04-04'
+// Required for correct string comparison in date filters (dateTo <= r.date)
+function normalizeDates<T>(data: T): T {
+  if (Array.isArray(data)) return data.map(normalizeDates) as T;
+  if (data && typeof data === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+        out[k] = v.slice(0, 10);
+      } else {
+        out[k] = normalizeDates(v);
+      }
+    }
+    return out as T;
+  }
+  return data;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) throw new Error(`OLE API ${path} → ${res.status}`);
-  return res.json() as Promise<T>;
+  const json = await res.json();
+  return normalizeDates<T>(json);
 }
 
 // ─── Response shapes (mirrors FastAPI responses) ──────────────────────────────

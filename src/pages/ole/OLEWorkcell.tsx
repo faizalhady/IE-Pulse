@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { useOleResults } from '@/hooks/useOleData';
+import { fmtDate } from '@/lib/oleConstants';
 import { ArrowLeft, AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { OleResult } from '@/lib/oleApi';
@@ -161,7 +162,7 @@ export default function OLEWorkcell() {
 
                   {/* Date */}
                   <div className="px-3 py-4">
-                    <span className="font-mono text-xs text-foreground">{row.date}</span>
+                    <span className="font-mono text-xs text-foreground">{fmtDate(row.date)}</span>
                   </div>
 
                   {/* Shift */}

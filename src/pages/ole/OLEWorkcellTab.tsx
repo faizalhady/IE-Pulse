@@ -323,17 +323,25 @@ function DonutChart({ workcell, dateFrom, dateTo }: { workcell?: string; dateFro
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function OLEWorkcellTab({ workcell, dateFrom, dateTo }: { workcell: string; dateFrom: string; dateTo: string }) {
-  const wcParam   = workcell || undefined;
-  const fromParam = dateFrom || undefined;
-  const toParam   = dateTo   || undefined;
-
-  const { data: rawWeekly, loading } = useOleWeekly({ workcell: wcParam, sample_from: fromParam, sample_to: toParam });
+  const { data: rawWeekly, loading } = useOleWeekly();
 
   const rows = useMemo((): OleWeeklyResult[] => {
     const all = rawWeekly ?? [];
-    if (workcell || !all.length) return all;
+
+    // Apply workcell + date filters in-browser (hooks now return all data)
+    const filtered = all.filter(r =>
+      (!workcell  || r.workcell === workcell) &&
+      (!dateFrom  || r.week_start_date >= dateFrom) &&
+      (!dateTo    || r.week_start_date <= dateTo)
+    );
+
+    // If a specific workcell is selected, return its rows directly
+    if (workcell) return filtered;
+
+    // No workcell selected — aggregate across all workcells by week
+    if (!filtered.length) return [];
     const byWeek: Record<string, { smh: number; hrs: number; qty: number; shifts: number; hc: number; va: number; nva: number; count: number; label: string; year: number; week: number; ws: string; we: string; }> = {};
-    all.forEach(r => {
+    filtered.forEach(r => {
       if (!byWeek[r.week_label]) byWeek[r.week_label] = { smh: 0, hrs: 0, qty: 0, shifts: 0, hc: 0, va: 0, nva: 0, count: 0, label: r.week_label, year: r.iso_year, week: r.iso_week, ws: r.week_start_date, we: r.week_end_date };
       const b = byWeek[r.week_label];
       b.smh += r.total_output_smh; b.hrs += r.total_input_hours; b.qty += r.total_qty;
@@ -348,14 +356,14 @@ export default function OLEWorkcellTab({ workcell, dateFrom, dateTo }: { workcel
       ole_pct: w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : null,
       ole_pct_avg_shifts: null, shifts_ok: 0, shifts_flagged: 0, smh_coverage_pct: null,
     } as OleWeeklyResult));
-  }, [rawWeekly, workcell]);
+  }, [rawWeekly, workcell, dateFrom, dateTo]);
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
       <OleTrendChart    rows={rows} loading={loading} />
       <HcTrendChart     rows={rows} loading={loading} />
       <BacktestingChart rows={rows} loading={loading} wcLabel={workcell || '__all__'} />
-      <DonutChart workcell={wcParam} dateFrom={fromParam} dateTo={toParam} />
+      <DonutChart workcell={workcell || undefined} dateFrom={dateFrom || undefined} dateTo={dateTo || undefined} />
     </div>
   );
 }
