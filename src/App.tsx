@@ -16,7 +16,8 @@ import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import SMHStatus from "@/pages/ole/SMHStatus";
 import DowntimeManagement from "@/pages/ole/DowntimeManagement";
 import TransferManHour from "@/pages/ole/TransferManHour";
-import OLEAnalysis from "@/pages/ole/OLEAnalysis";
+import OLEWoWAnalysis from "@/pages/ole/OLEWoWAnalysis";
+import OLEHome1 from "@/pages/ole/OLEHome1";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import IEBaseline from "@/pages/iebaseline/IEBaseline";
 import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
@@ -74,7 +75,8 @@ function AppShell() {
             <Route path="/ole/4q" element={<FourQGenerator />} />
             <Route path="/ole/downtime" element={<DowntimeManagement />} />
             <Route path="/ole/transfer" element={<TransferManHour />} />
-            <Route path="/ole/analysis" element={<OLEAnalysis />} />
+            <Route path="/ole/analysis" element={<OLEWoWAnalysis />} />
+            <Route path="/ole/home1" element={<OLEHome1 />} />
             <Route path="/ole/:workcell" element={<OLEWorkcell />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ole-mart-api" element={<OleMartApiTest />} />

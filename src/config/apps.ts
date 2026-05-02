@@ -76,6 +76,7 @@ export const APPS: AppConfig[] = [
       { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
       { label: '4Q Generator', to: '/ole/4q', icon: FileSpreadsheet },
       { label: 'Analysis', to: '/ole/analysis', icon: LineChart },
+      { label: 'Home 1', to: '/ole/home1', icon: TrendingUp },
       { label: 'API Test', to: '/ole-mart-api', icon: Database },
     ],
   },
