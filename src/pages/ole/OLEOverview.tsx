@@ -395,7 +395,6 @@ export default function OLEOverview() {
           workcell={workcell} setWorkcell={setWorkcell}
           plant={plant} setPlant={setPlant}
           plantOptions={plantOptions}
-          workcellConfigs={workcellConfigs}
           dateFrom={dateFrom} setDateFrom={setDateFrom}
           dateTo={dateTo} setDateTo={setDateTo}
           workcellOptions={workcellOptions}
