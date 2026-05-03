@@ -1,13 +1,17 @@
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { OleWeeklyResult, OleWorkcellConfig } from '@/lib/oleApi';
 import { oleApi } from '@/lib/oleApi';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Eye, GripVertical, Info, Plus, Printer, Settings, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { CalendarIcon, ChevronLeft, ChevronRight, Eye, GripVertical, Info, Plus, Printer, Settings, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar, CartesianGrid, Cell, ComposedChart, Line,
   ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -16,9 +20,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type SetupMode = 'plant' | 'workcell';
-type ActionItem = { id: string; issue: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; commitDate: string; status: string; };
-// RawRow removed — Q3 is now auto-computed from mhBreakdown
-type ParetoRow = { id: string; issue: string; count: number };
+type ActionItem = { id: string; issue: string; problemDescription: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; commitDate: string; status: string; };
 type TrendPoint = { id: string; label: string; ole: number; target: number; projected?: boolean };
 
 const genId = () => Math.random().toString(36).substr(2, 9);
@@ -40,11 +42,6 @@ const SLICE_COLORS: Record<string, string> = {
 
 const LOSS_CATS = ['NVA Input', 'Lunch / Break', 'MFG DT', 'Unexplained Lost Hours'];
 
-const FORMULA_COLORS: Record<string, string> = {
-  sma3: '#3b82f6', sma5: '#6366f1', wma3: '#f59e0b',
-  ema_fast: '#10b981', ema_slow: '#06b6d4',
-  cma: '#a855f7', linear_reg: '#f43f5e',
-};
 const FORMULA_LABELS: Record<string, string> = {
   sma3: 'SMA (3w)', sma5: 'SMA (5w)', wma3: 'WMA (3w)',
   ema_fast: 'EMA Fast', ema_slow: 'EMA Slow',
@@ -134,6 +131,58 @@ function fmtWeekLabel(v: string): string {
   return m ? `WW${m[0].padStart(2, '0')}` : v;
 }
 
+// ─── DatePicker Helpers ──────────────────────────────────────────────────────
+
+function toYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function fromYmd(s: string): Date | undefined {
+  if (!s?.trim()) return undefined;
+  const parts = s.trim().split('-').map(Number);
+  if (parts.length !== 3) return undefined;
+  const [y, mo, d] = parts;
+  if (!y || !mo || !d) return undefined;
+  return new Date(y, mo - 1, d);
+}
+
+function DatePickerField({ id, label, value, onChange }: {
+  id: string; label: string; value: string; onChange: (ymd: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const date = fromYmd(value);
+  return (
+    <div className="w-full">
+      <Label htmlFor={id} className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button id={id} type="button" variant="outline"
+            className={cn('mt-1 w-full h-7 justify-start text-left font-normal px-2 text-xs shadow-none', !value && 'text-muted-foreground')}
+          >
+            <CalendarIcon className="mr-2 h-3 w-3 shrink-0 opacity-70" />
+            <span className="truncate">{date ? format(date, 'MMM d, yyyy') : 'Any date'}</span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar mode="single" selected={date}
+            onSelect={d => { onChange(d ? toYmd(d) : ''); setOpen(false); }}
+            initialFocus
+          />
+          {value && (
+            <div className="border-t border-border p-2">
+              <Button type="button" variant="ghost" size="sm" className="w-full h-8 text-xs"
+                onClick={() => { onChange(''); setOpen(false); }}
+              >Clear date</Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 // ─── Pareto helpers ───────────────────────────────────────────────────────────
 
 interface ParetoBar { name: string; value: number; color: string; cum: number; }
@@ -152,19 +201,15 @@ function SetupStep({
   selectedPlant, setSelectedPlant,
   selectedWorkcells, setSelectedWorkcells,
   onGenerate, generating,
+  plants, byPlant
 }: {
   workcellConfigs: OleWorkcellConfig[];
   mode: SetupMode; setMode: (m: SetupMode) => void;
   selectedPlant: string; setSelectedPlant: (p: string) => void;
   selectedWorkcells: string[]; setSelectedWorkcells: (w: string[]) => void;
   onGenerate: () => void; generating: boolean;
+  plants: string[]; byPlant: Record<string, string[]>;
 }) {
-  const plants = useMemo(() => Array.from(new Set(workcellConfigs.map(w => w.plant))).sort(), [workcellConfigs]);
-  const byPlant = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    workcellConfigs.forEach(w => { if (!map[w.plant]) map[w.plant] = []; map[w.plant].push(w.workcell); });
-    return map;
-  }, [workcellConfigs]);
   const canGen = (mode === 'plant' && !!selectedPlant) || (mode === 'workcell' && selectedWorkcells.length > 0);
   const toggleWC = (wc: string) => setSelectedWorkcells(selectedWorkcells.includes(wc) ? selectedWorkcells.filter(x => x !== wc) : [...selectedWorkcells, wc]);
 
@@ -400,7 +445,7 @@ function Q2Section({ aggregateRows, scopeWorkcells, scopePlant, compact = false,
       } catch (e) { console.error('Q2 load failed', e); }
       finally { setLoading(false); }
     })();
-  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.join(','), scopePlant]);
+  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.slice().sort().join('|'), scopePlant]);
 
   if (compact) {
     return (
@@ -427,7 +472,7 @@ function Q2Section({ aggregateRows, scopeWorkcells, scopePlant, compact = false,
   );
 }
 
-// ─── Q3 Table: Man-Hrs Distribution Paynter ──────────────────────────────────
+// ─── Q3 Improvement Plan Table ──────────────────────────────────────────────
 
 // Loss categories only — OLE % tracked separately in Q1
 const MH_ROWS = [
@@ -443,7 +488,7 @@ interface MhWeekData {
   total: number; // sum of loss categories only
 }
 
-function Q3Table({ aggregateRows, scopeWorkcells, scopePlant, isPrint = false }: {
+function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = false }: {
   aggregateRows: OleWeeklyResult[];
   scopeWorkcells: string[];
   scopePlant: string;
@@ -463,17 +508,28 @@ function Q3Table({ aggregateRows, scopeWorkcells, scopePlant, isPrint = false }:
 
         const results = await Promise.all(actWeeks.map(async w => {
           try {
-            const bd = await oleApi.ole.mhBreakdown({
-              date_from: w.week_start_date, date_to: w.week_end_date,
-              plant: scopePlant || undefined,
-              workcell: !scopePlant && scopeWorkcells.length === 1 ? scopeWorkcells[0] : undefined,
-            });
-            const t = bd.total_input_hours;
-            if (!t) return null;
-            const pct = (name: string) => {
-              const s = bd.slices.find((sl: any) => sl.name === name);
-              return s ? parseFloat(((s.value / t) * 100).toFixed(2)) : 0;
-            };
+            // When multiple workcells selected: fetch each and sum raw hours, then compute pct
+            let totalHours = 0;
+            const sliceSums: Record<string, number> = {};
+            if (!scopePlant && scopeWorkcells.length > 1) {
+              const bds = await Promise.all(
+                scopeWorkcells.map(wc => oleApi.ole.mhBreakdown({ workcell: wc, date_from: w.week_start_date, date_to: w.week_end_date }).catch(() => null))
+              );
+              bds.filter(Boolean).forEach((bd: any) => {
+                totalHours += bd.total_input_hours ?? 0;
+                bd.slices?.forEach((sl: any) => { sliceSums[sl.name] = (sliceSums[sl.name] ?? 0) + (sl.value ?? 0); });
+              });
+            } else {
+              const bd = await oleApi.ole.mhBreakdown({
+                date_from: w.week_start_date, date_to: w.week_end_date,
+                plant: scopePlant || undefined,
+                workcell: !scopePlant && scopeWorkcells.length === 1 ? scopeWorkcells[0] : undefined,
+              });
+              totalHours = bd.total_input_hours ?? 0;
+              bd.slices?.forEach((sl: any) => { sliceSums[sl.name] = (sl.value ?? 0); });
+            }
+            if (!totalHours) return null;
+            const pct = (name: string) => sliceSums[name] ? parseFloat(((sliceSums[name] / totalHours) * 100).toFixed(2)) : 0;
             const nva = pct('NVA Input');
             const lunch = pct('Lunch / Break');
             const mfg = pct('MFG DT');
@@ -488,7 +544,7 @@ function Q3Table({ aggregateRows, scopeWorkcells, scopePlant, isPrint = false }:
       } catch (e) { console.error('Q3 mh load failed', e); }
       finally { setLoading(false); }
     })();
-  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.join(','), scopePlant]);
+  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.slice().sort().join('|'), scopePlant]);
 
   const last4 = weekData.slice(-4);
   const avg4 = (key: keyof Omit<MhWeekData, 'week_label'>) =>
@@ -570,15 +626,14 @@ function Q3Table({ aggregateRows, scopeWorkcells, scopePlant, isPrint = false }:
   );
 }
 
-// ─── Q4 Table ─────────────────────────────────────────────────────────────────
+// ─── Q3 Improvement Plan Table ─────────────────────────────────────────────
 
-function Q4Table({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: {
+function ImprovementTable({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: {
   actions: ActionItem[]; isPrint?: boolean; top1Cat?: string; top2Cat?: string;
 }) {
   const sz = isPrint ? 'text-[9px]' : 'text-xs';
   const ph = isPrint ? 'px-1 py-1' : 'px-2 py-1.5';
   const pd = isPrint ? 'px-1 py-1' : 'px-2 py-2';
-  const TOTAL = 10;
 
   const issueOrder: string[] = [];
   [top1Cat, top2Cat].filter(Boolean).forEach(c => { if (!issueOrder.includes(c)) issueOrder.push(c); });
@@ -594,6 +649,7 @@ function Q4Table({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: {
 
   const COLS = [
     { label: 'Issue', th: 'sticky left-0 bg-primary z-10 w-20 max-w-[80px]' },
+    { label: 'Problem Description', th: 'min-w-[100px]' },
     { label: 'Root Cause', th: 'min-w-[90px]' },
     { label: 'Containment Action', th: 'min-w-[90px]' },
     { label: 'Corrective & Preventive Actions', th: 'min-w-[90px]' },
@@ -606,6 +662,7 @@ function Q4Table({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: {
   ];
 
   const renderDataCells = (a: ActionItem) => <>
+    <td className={cn(pd, 'border border-border min-w-[100px]')}>{a.problemDescription || '—'}</td>
     <td className={cn(pd, 'border border-border min-w-[90px]')}>{a.rootCause || '—'}</td>
     <td className={cn(pd, 'border border-border min-w-[90px]')}>{a.containmentAction || '—'}</td>
     <td className={cn(pd, 'border border-border min-w-[90px]')}>{a.correctiveAction || '—'}</td>
@@ -621,14 +678,14 @@ function Q4Table({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: {
     <div className={cn('overflow-x-auto rounded-xl w-full', !isPrint && 'bg-card')}>
       <table className={cn('w-full text-left border-collapse', sz)}>
         <thead>
-          {isPrint && <tr><th colSpan={TOTAL} className="text-center py-1.5 text-xs font-bold uppercase text-primary-foreground bg-primary border-0">Third Quadrant — Improvement Plan</th></tr>}
+          {isPrint && <tr><th colSpan={11} className="text-center py-1.5 text-xs font-bold uppercase text-primary-foreground bg-primary border-0">Third Quadrant — Improvement Plan</th></tr>}
           <tr className="bg-primary text-primary-foreground uppercase">
             {COLS.map(c => <th key={c.label} className={cn(ph, 'border border-primary/70 font-semibold leading-snug', c.th)}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {groups.length === 0 && ungrouped.length === 0
-            ? <tr><td colSpan={TOTAL} className="px-3 py-8 text-center text-muted-foreground text-xs italic">No actions added — use the editor panel to add corrective actions</td></tr>
+            ? <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground text-xs italic">No actions added — use the editor panel to add corrective actions</td></tr>
             : <>
               {groups.map(({ issue, rows }) => rows.map((a, ri) => (
                 <tr key={a.id} className={cn('border-b border-border last:border-0 hover:bg-muted/40', ri % 2 === 1 && 'bg-muted/20')}>
@@ -653,13 +710,7 @@ function Q4Table({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: {
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// INIT_RAW removed — Q3 is auto-computed
-const INIT_PARETO: ParetoRow[] = [
-  { id: genId(), issue: 'NVA Input', count: 0 },
-  { id: genId(), issue: 'Unexplained Lost Hours', count: 0 },
-  { id: genId(), issue: 'MFG DT', count: 0 },
-  { id: genId(), issue: 'Lunch / Break', count: 0 },
-];
+// INIT_PARETO removed — Q2 Pareto is auto-computed
 
 export default function FourQGenerator() {
   const [title, setTitle] = useState('Weekly OLE Performance Review');
@@ -674,11 +725,28 @@ export default function FourQGenerator() {
 
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [trendScope, setTrendScope] = useState('');
-  const [paretoRows, setParetoRows] = useState<ParetoRow[]>(INIT_PARETO);
   const [actions, setActions] = useState<ActionItem[]>([]);
   const [weeklyRows, setWeeklyRows] = useState<OleWeeklyResult[]>([]);
   const [top1Cat, setTop1Cat] = useState('');
   const [top2Cat, setTop2Cat] = useState('');
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  const scrollToSection = (tab: string) => {
+    const map: Record<string, string> = { q1: 'q1-section', q2: 'q2-section', q3: 'q3-section', q4: 'q4-section' };
+    const id = map[tab];
+    if (!id) return;
+    setTimeout(() => {
+      const el = bodyRef.current?.querySelector(`#${id}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+  const plants = useMemo(() => Array.from(new Set(workcellConfigs.map(w => w.plant))).sort(), [workcellConfigs]);
+  const byPlant = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    workcellConfigs.forEach(w => { if (!map[w.plant]) map[w.plant] = []; map[w.plant].push(w.workcell); });
+    return map;
+  }, [workcellConfigs]);
 
   useEffect(() => { oleApi.workcells.list().then(setWorkcellConfigs).catch(() => { }); }, []);
 
@@ -783,18 +851,24 @@ export default function FourQGenerator() {
                   <span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">Second Quadrant - Pareto Four Weeks</span>
                 </div>
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  <Q2Section aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} compact />
+                  <Q2Section
+                    aggregateRows={aggregateRows}
+                    scopeWorkcells={scopeWorkcells}
+                    scopePlant={mode === 'plant' ? selectedPlant : ''}
+                    compact
+                    onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }}
+                  />
                 </div>
               </div>
 
-              {/* Q3 — table fills cell, no header bar */}
+              {/* Q3 — Improvement Plan */}
               <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
-                <Q3Table aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} isPrint />
+                <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} isPrint />
               </div>
 
-              {/* Q4 — table fills cell, no header bar */}
+              {/* Q4 — Paynter Chart */}
               <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
-                <Q4Table actions={actions} isPrint />
+                <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} isPrint />
               </div>
 
             </div>
@@ -830,16 +904,17 @@ export default function FourQGenerator() {
             selectedPlant={selectedPlant} setSelectedPlant={setSelectedPlant}
             selectedWorkcells={selectedWorkcells} setSelectedWorkcells={setSelectedWorkcells}
             onGenerate={handleGenerate} generating={generating}
+            plants={plants} byPlant={byPlant}
           />
         )}
 
         {tab === 'editor' && (
           <>
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className="flex-1 overflow-y-auto p-8" ref={bodyRef}>
               <div className="max-w-5xl mx-auto space-y-12 pb-16">
 
                 {/* ── Q1 ── */}
-                <section className="space-y-3">
+                <section id="q1-section" className="space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground text-sm font-bold shadow-sm">1</span>
                     <div>
@@ -853,7 +928,7 @@ export default function FourQGenerator() {
                 </section>
 
                 {/* ── Q2 ── */}
-                <section className="space-y-3">
+                <section id="q2-section" className="space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground text-sm font-bold shadow-sm">2</span>
                     <div>
@@ -861,10 +936,15 @@ export default function FourQGenerator() {
                       <p className="text-xs text-muted-foreground mt-0.5">Avg of last 4 actual weeks</p>
                     </div>
                   </div>
-                  <Q2Section aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} />
+                  <Q2Section
+                    aggregateRows={aggregateRows}
+                    scopeWorkcells={scopeWorkcells}
+                    scopePlant={mode === 'plant' ? selectedPlant : ''}
+                    onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }}
+                  />
                 </section>
                 {/* ── Q3 ── */}
-                <section className="space-y-3">
+                <section id="q3-section" className="space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground text-sm font-bold shadow-sm">3</span>
                     <div>
@@ -872,11 +952,11 @@ export default function FourQGenerator() {
                       <p className="text-xs text-muted-foreground mt-0.5">Corrective actions and ownership</p>
                     </div>
                   </div>
-                  <Q4Table actions={actions} />
+                  <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} />
                 </section>
 
                 {/* ── Q4 ── */}
-                <section className="space-y-3">
+                <section id="q4-section" className="space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground text-sm font-bold shadow-sm">4</span>
                     <div>
@@ -885,7 +965,7 @@ export default function FourQGenerator() {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <Q3Table aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} />
+                    <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} />
                   </div>
                 </section>
 
@@ -916,13 +996,13 @@ export default function FourQGenerator() {
 
               {rightOpen && (
                 <div className="flex-1 overflow-hidden p-4 flex flex-col min-h-0">
-                  <Tabs defaultValue="q1" className="h-full flex flex-col min-h-0">
+                  <Tabs defaultValue="q1" className="h-full flex flex-col min-h-0" onValueChange={scrollToSection}>
                     <TabsList className="w-full flex-wrap justify-start rounded-none border-b border-border bg-transparent h-auto p-0 gap-x-4 gap-y-2 pb-2">
                       {[
                         { v: 'q1', label: 'Q1 Trend', cls: 'data-[state=active]:border-primary' },
                         { v: 'q2', label: 'Q2 Pareto', cls: 'data-[state=active]:border-orange-500' },
-                        { v: 'q3', label: 'Q3 Paynter', cls: 'data-[state=active]:border-blue-500' },
-                        { v: 'q4', label: 'Q4 Actions', cls: 'data-[state=active]:border-emerald-500' },
+                        { v: 'q3', label: 'Q3 Improvements', cls: 'data-[state=active]:border-emerald-500' },
+                        { v: 'q4', label: 'Q4 Paynter', cls: 'data-[state=active]:border-blue-500' },
                         { v: 'settings', label: 'Settings', cls: 'data-[state=active]:border-muted-foreground ml-auto' },
                       ].map(t => (
                         <TabsTrigger key={t.v} value={t.v}
@@ -972,25 +1052,317 @@ export default function FourQGenerator() {
                       </TabsContent>
 
                       <TabsContent value="q2" className="m-0 space-y-3">
-                        <p className="text-[11px] text-muted-foreground">Auto-computed from last 4 weeks MH breakdown.</p>
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Manual override (optional)</p>
-                          <Button variant="outline" size="sm" className="h-7 text-[11px]"
-                            onClick={() => setParetoRows([...paretoRows, { id: genId(), issue: '', count: 0 }])}>
-                            <Plus className="w-3 h-3 mr-1" /> Add
-                          </Button>
-                        </div>
-                        {paretoRows.map((p, i) => (
-                          <div key={p.id} className="flex items-center gap-2 bg-muted/30 p-2 rounded border border-border">
-                            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
-                            <Input value={p.issue} onChange={e => { const n = [...paretoRows]; n[i].issue = e.target.value; setParetoRows(n); }} placeholder="Category" className="h-7 text-xs flex-1" />
-                            <Input type="number" value={p.count} onChange={e => { const n = [...paretoRows]; n[i].count = Number(e.target.value); setParetoRows(n); }} placeholder="Count" className="h-7 text-xs w-20" />
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setParetoRows(paretoRows.filter(x => x.id !== p.id))}><Trash2 className="w-3.5 h-3.5" /></Button>
-                          </div>
-                        ))}
+                        <p className="text-[11px] text-muted-foreground">Auto-computed from last 4 weeks MH breakdown. Reflects the current scope selection.</p>
                       </TabsContent>
 
-                      <TabsContent value="q3" className="m-0 space-y-2">
+                      <TabsContent value="q3" className="m-0 space-y-6">
+                        <p className="text-[11px] text-muted-foreground">Track corrective actions for top loss categories.</p>
+
+                        {[top1Cat, top2Cat].map((cat, catIdx) => (
+                          <div key={catIdx} className="space-y-3">
+                            <div className="flex items-center justify-between border-b border-border pb-1">
+                              <h3 className="text-xs font-bold uppercase text-primary flex items-center gap-2">
+                                <span className="w-5 h-5 rounded bg-primary text-primary-foreground flex items-center justify-center text-[10px]">{catIdx + 1}</span>
+                                {cat || `Top Loss Category ${catIdx + 1}`}
+                              </h3>
+                              <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary"
+                                onClick={() => {
+                                  const newAction: ActionItem = {
+                                    id: genId(),
+                                    issue: cat,
+                                    problemDescription: '',
+                                    rootCause: '',
+                                    containmentAction: '',
+                                    correctiveAction: '',
+                                    impactPct: '',
+                                    ecnPcn: '',
+                                    fia: '',
+                                    responsible: '',
+                                    commitDate: '',
+                                    status: 'Open'
+                                  };
+                                  setActions([...actions, newAction]);
+                                }}>
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Add Action
+                              </Button>
+                            </div>
+
+                            <div className="space-y-4">
+                              <Accordion type="multiple" className="w-full space-y-2">
+                                {actions.filter(a => a.issue === cat).map((a) => {
+                                  const globalIdx = actions.findIndex(x => x.id === a.id);
+                                  const update = (fields: Partial<ActionItem>) => {
+                                    const n = [...actions];
+                                    n[globalIdx] = { ...n[globalIdx], ...fields };
+                                    setActions(n);
+                                  };
+                                  return (
+                                    <AccordionItem key={a.id} value={a.id} className="border border-border rounded-xl bg-card overflow-hidden shadow-sm group/item">
+                                      <div className="flex items-center relative hover:bg-muted/20 transition-colors">
+                                        <AccordionTrigger className="hover:no-underline px-4 py-3 group flex-1 [&>svg]:order-first [&>svg]:mr-3 justify-start">
+                                          <div className="flex items-center gap-3 text-left flex-1 min-w-0">
+                                            <div className={cn("w-2 h-2 rounded-full flex-shrink-0", a.status === 'Closed' ? 'bg-emerald-500' : 'bg-amber-500')} />
+                                            <div className="flex flex-col min-w-0 flex-1">
+                                              <span className="text-xs font-bold text-foreground truncate">{a.problemDescription || 'New Problem...'}</span>
+                                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+                                                {a.responsible || 'No Owner'} · {a.status}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </AccordionTrigger>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive absolute right-2 top-1/2 -translate-y-1/2 z-20 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActions(actions.filter(x => x.id !== a.id));
+                                          }}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                      <AccordionContent className="px-4 pb-4 space-y-4 border-t border-border pt-4 bg-muted/20 relative">
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] uppercase text-muted-foreground">Problem Description</Label>
+                                            <Input value={a.problemDescription} onChange={e => update({ problemDescription: e.target.value })} placeholder="New Problem..." className="h-7 text-xs bg-background" />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] uppercase text-muted-foreground">Responsible</Label>
+                                            <select
+                                              value={a.responsible}
+                                              onChange={e => update({ responsible: e.target.value })}
+                                              className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                            >
+                                              <option value="">Select Owner</option>
+                                              <option value="Syuhada (IE SME)">Syuhada (IE SME)</option>
+                                              <option value="ChoHui (IE SME)">ChoHui (IE SME)</option>
+                                            </select>
+                                          </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">Root Cause</Label>
+                                          <textarea
+                                            value={a.rootCause}
+                                            onChange={e => update({ rootCause: e.target.value })}
+                                            placeholder="Root cause..."
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[40px]"
+                                          />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">Containment Action</Label>
+                                          <textarea
+                                            value={a.containmentAction}
+                                            onChange={e => update({ containmentAction: e.target.value })}
+                                            placeholder="Interim fix"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[40px]"
+                                          />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">Corrective & Preventive Actions</Label>
+                                          <textarea
+                                            value={a.correctiveAction}
+                                            onChange={e => update({ correctiveAction: e.target.value })}
+                                            placeholder="Long-term solution"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px]"
+                                          />
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-2">
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] uppercase text-muted-foreground">Impact %</Label>
+                                            <Input value={a.impactPct} onChange={e => update({ impactPct: e.target.value })} placeholder="e.g. 15%" className="h-7 text-xs bg-background" />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] uppercase text-muted-foreground">ECN/PCN</Label>
+                                            <Input value={a.ecnPcn} onChange={e => update({ ecnPcn: e.target.value })} placeholder="N/A" className="h-7 text-xs bg-background" />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] uppercase text-muted-foreground">FIA</Label>
+                                            <Input value={a.fia} onChange={e => update({ fia: e.target.value })} placeholder="N/A" className="h-7 text-xs bg-background" />
+                                          </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div className="space-y-0">
+                                            <DatePickerField
+                                              id={`commit-date-${a.id}`}
+                                              label="Commit Date"
+                                              value={a.commitDate}
+                                              onChange={val => update({ commitDate: val })}
+                                            />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] uppercase text-muted-foreground">Status</Label>
+                                            <select
+                                              value={a.status}
+                                              onChange={e => update({ status: e.target.value })}
+                                              className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                            >
+                                              <option value="Open">Open</option>
+                                              <option value="Closed">Closed</option>
+                                            </select>
+                                          </div>
+                                        </div>
+                                      </AccordionContent>
+                                    </AccordionItem>
+                                  );
+                                })}
+                              </Accordion>
+                              {actions.filter(a => a.issue === cat).length === 0 && (
+                                <div className="py-4 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-2">
+                                  <p className="text-[11px] text-muted-foreground">No actions for this category.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
+                        {actions.filter(a => a.issue !== top1Cat && a.issue !== top2Cat).length > 0 && (
+                          <div className="space-y-3 pt-6 border-t border-border">
+                            <h3 className="text-xs font-bold uppercase text-muted-foreground">Other Actions</h3>
+                            <Accordion type="multiple" className="w-full space-y-2">
+                              {actions.filter(a => a.issue !== top1Cat && a.issue !== top2Cat).map((a) => {
+                                const globalIdx = actions.findIndex(x => x.id === a.id);
+                                const update = (fields: Partial<ActionItem>) => {
+                                  const n = [...actions];
+                                  n[globalIdx] = { ...n[globalIdx], ...fields };
+                                  setActions(n);
+                                };
+                                return (
+                                  <AccordionItem key={a.id} value={a.id} className="border border-border rounded-xl bg-card overflow-hidden shadow-sm group/item">
+                                    <div className="flex items-center relative hover:bg-muted/20 transition-colors">
+                                      <AccordionTrigger className="hover:no-underline px-4 py-3 group flex-1 [&>svg]:order-first [&>svg]:mr-3 justify-start">
+                                        <div className="flex items-center gap-3 text-left flex-1 min-w-0">
+                                          <div className={cn("w-2 h-2 rounded-full flex-shrink-0", a.status === 'Closed' ? 'bg-emerald-500' : 'bg-amber-500')} />
+                                          <div className="flex flex-col min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-bold uppercase tracking-wider">{a.issue || 'Misc'}</span>
+                                              <span className="text-xs font-bold text-foreground truncate">{a.problemDescription || 'New Problem...'}</span>
+                                            </div>
+                                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+                                              {a.responsible || 'No Owner'} · {a.status}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </AccordionTrigger>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive absolute right-2 top-1/2 -translate-y-1/2 z-20 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActions(actions.filter(x => x.id !== a.id));
+                                        }}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+                                    <AccordionContent className="px-4 pb-4 space-y-4 border-t border-border pt-4 bg-muted/20 relative">
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase text-muted-foreground">Issue Name</Label>
+                                        <Input value={a.issue} onChange={e => update({ issue: e.target.value })} placeholder="Issue category..." className="h-7 text-xs bg-background" />
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">Problem Description</Label>
+                                          <Input value={a.problemDescription} onChange={e => update({ problemDescription: e.target.value })} placeholder="Small desc..." className="h-7 text-xs bg-background" />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">Responsible</Label>
+                                          <select
+                                            value={a.responsible}
+                                            onChange={e => update({ responsible: e.target.value })}
+                                            className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                          >
+                                            <option value="">Select Owner</option>
+                                            <option value="Syuhada (IE SME)">Syuhada (IE SME)</option>
+                                            <option value="ChoHui (IE SME)">ChoHui (IE SME)</option>
+                                          </select>
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase text-muted-foreground">Root Cause</Label>
+                                        <textarea
+                                          value={a.rootCause}
+                                          onChange={e => update({ rootCause: e.target.value })}
+                                          placeholder="Root cause..."
+                                          className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[40px]"
+                                        />
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase text-muted-foreground">Containment Action</Label>
+                                        <textarea
+                                          value={a.containmentAction}
+                                          onChange={e => update({ containmentAction: e.target.value })}
+                                          placeholder="Interim fix"
+                                          className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[40px]"
+                                        />
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase text-muted-foreground">Corrective & Preventive Actions</Label>
+                                        <textarea
+                                          value={a.correctiveAction}
+                                          onChange={e => update({ correctiveAction: e.target.value })}
+                                          placeholder="Long-term solution"
+                                          className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px]"
+                                        />
+                                      </div>
+
+                                      <div className="grid grid-cols-3 gap-2">
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">Impact %</Label>
+                                          <Input value={a.impactPct} onChange={e => update({ impactPct: e.target.value })} placeholder="e.g. 15%" className="h-7 text-xs bg-background" />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">ECN/PCN</Label>
+                                          <Input value={a.ecnPcn} onChange={e => update({ ecnPcn: e.target.value })} placeholder="N/A" className="h-7 text-xs bg-background" />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">FIA</Label>
+                                          <Input value={a.fia} onChange={e => update({ fia: e.target.value })} placeholder="N/A" className="h-7 text-xs bg-background" />
+                                        </div>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-0">
+                                          <DatePickerField
+                                            id={`commit-date-other-${a.id}`}
+                                            label="Commit Date"
+                                            value={a.commitDate}
+                                            onChange={val => update({ commitDate: val })}
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] uppercase text-muted-foreground">Status</Label>
+                                          <select
+                                            value={a.status}
+                                            onChange={e => update({ status: e.target.value })}
+                                            className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                          >
+                                            <option value="Open">Open</option>
+                                            <option value="Closed">Closed</option>
+                                          </select>
+                                        </div>
+                                      </div>
+                                    </AccordionContent>
+                                  </AccordionItem>
+                                );
+                              })}
+                            </Accordion>
+                          </div>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="q4" className="m-0 space-y-2">
                         <p className="text-[11px] text-muted-foreground">Auto-computed from MH breakdown API per week. Read-only.</p>
                         <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
                           {MH_ROWS.map(r => (
@@ -1011,35 +1383,73 @@ export default function FourQGenerator() {
                         </div>
                       </TabsContent>
 
-                      <TabsContent value="q4" className="m-0 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <p className="text-[11px] text-muted-foreground">Track corrective actions.</p>
-                          <Button variant="outline" size="sm" className="h-7 text-[11px]"
-                            onClick={() => setActions([...actions, { id: genId(), issue: '', rootCause: '', action: '', owner: '', targetDate: '', status: 'Open' }])}>
-                            <Plus className="w-3 h-3 mr-1" /> Add
-                          </Button>
-                        </div>
-                        {actions.map((a, i) => (
-                          <div key={a.id} className="flex flex-col gap-2 bg-muted/30 p-2 rounded border border-border">
-                            <div className="flex gap-2">
-                              <Input value={a.issue} onChange={e => { const n = [...actions]; n[i].issue = e.target.value; setActions(n); }} placeholder="Issue" className="h-7 text-xs flex-1" />
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => setActions(actions.filter(x => x.id !== a.id))}><Trash2 className="w-3.5 h-3.5" /></Button>
-                            </div>
-                            <Input value={a.rootCause} onChange={e => { const n = [...actions]; n[i].rootCause = e.target.value; setActions(n); }} placeholder="Root Cause" className="h-7 text-xs" />
-                            <Input value={a.action} onChange={e => { const n = [...actions]; n[i].action = e.target.value; setActions(n); }} placeholder="Corrective Action" className="h-7 text-xs" />
-                            <div className="flex gap-2">
-                              <Input value={a.owner} onChange={e => { const n = [...actions]; n[i].owner = e.target.value; setActions(n); }} placeholder="Owner" className="h-7 text-xs w-1/3" />
-                              <Input value={a.targetDate} onChange={e => { const n = [...actions]; n[i].targetDate = e.target.value; setActions(n); }} type="date" className="h-7 text-xs w-1/3" />
-                              <Input value={a.status} onChange={e => { const n = [...actions]; n[i].status = e.target.value; setActions(n); }} placeholder="Status" className="h-7 text-xs w-1/3" />
-                            </div>
-                          </div>
-                        ))}
-                      </TabsContent>
-
                       <TabsContent value="settings" className="m-0 space-y-4 max-w-sm">
                         <div className="space-y-1.5">
                           <Label className="text-xs">Report Title</Label>
                           <Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-xs" />
+                        </div>
+
+                        <div className="pt-4 border-t border-border space-y-4">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Report Scope</Label>
+                            <div className="flex rounded-lg border border-border overflow-hidden">
+                              {(['plant', 'workcell'] as SetupMode[]).map(m => (
+                                <button key={m} onClick={() => setMode(m)}
+                                  className={cn('flex-1 py-2 text-[10px] font-medium transition-colors',
+                                    mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50')}>
+                                  {m === 'plant' ? 'By Plant' : 'By Workcell'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {mode === 'plant' && (
+                            <div className="space-y-2">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Select Plant</Label>
+                              <div className="flex gap-2">
+                                {plants.map(p => (
+                                  <button key={p} onClick={() => setSelectedPlant(p)}
+                                    className={cn('flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all',
+                                      selectedPlant === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
+                                    {p}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {mode === 'workcell' && (
+                            <div className="space-y-2">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                Select Workcells <span className="text-primary">({selectedWorkcells.length})</span>
+                              </Label>
+                              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {plants.map(p => (
+                                  <div key={p} className="space-y-1">
+                                    <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">{p}</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {byPlant[p]?.map(wc => (
+                                        <button key={wc} 
+                                          onClick={() => setSelectedWorkcells(selectedWorkcells.includes(wc) ? selectedWorkcells.filter(x => x !== wc) : [...selectedWorkcells, wc])}
+                                          className={cn('px-2 py-1 rounded-md border text-[10px] font-medium transition-all',
+                                            selectedWorkcells.includes(wc) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
+                                          {wc}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <Button 
+                            onClick={handleGenerate} 
+                            disabled={generating || (mode === 'plant' && !selectedPlant) || (mode === 'workcell' && selectedWorkcells.length === 0)}
+                            className="w-full h-8 text-xs font-bold"
+                          >
+                            {generating ? 'Updating...' : 'Update Report Scope'}
+                          </Button>
                         </div>
                       </TabsContent>
 

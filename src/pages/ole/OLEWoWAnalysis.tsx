@@ -1,22 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
-import {
-  AreaChart, Area, BarChart, Bar, Cell,
-  XAxis, YAxis, Tooltip, ResponsiveContainer,
-  ReferenceLine, PieChart, Pie, CartesianGrid,
-} from 'recharts';
-import { AlertCircle, RefreshCw, Eye, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  PLANT_OLE_GOAL,
   DL_WEEKLY_DATA,
+  PLANT_OLE_GOAL,
   useAnalysisData,
   useAnalysisDerived,
 } from '@/hooks/useAnalysisData';
+import { Eye, RefreshCw, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis, YAxis,
+} from 'recharts';
 
-const MOCK_TREND_WEEKS = ['WW05','WW06','WW07','WW08','WW09','WW10','WW11','WW12','WW13','WW14','WW15','WW16','WW17'];
-const MOCK_BUILD_UNIT = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, units: [246205,250980,279903,230100,306014,306940,374289,195906,329074,363706,390703,394433,351715][i] }));
-const MOCK_INPUT_HRS  = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, hrs:   [144710,133057,155484,114545,142020,150222,151427,93413,141783,170450,176851,171134,194193][i] }));
+const MOCK_TREND_WEEKS = ['WW05', 'WW06', 'WW07', 'WW08', 'WW09', 'WW10', 'WW11', 'WW12', 'WW13', 'WW14', 'WW15', 'WW16', 'WW17'];
+const MOCK_BUILD_UNIT = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, units: [246205, 250980, 279903, 230100, 306014, 306940, 374289, 195906, 329074, 363706, 390703, 394433, 351715][i] }));
+const MOCK_INPUT_HRS = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, hrs: [144710, 133057, 155484, 114545, 142020, 150222, 151427, 93413, 141783, 170450, 176851, 171134, 194193][i] }));
 const MOCK_DL = DL_WEEKLY_DATA;
 
 const CARD = 'bg-card border border-border rounded-lg p-4 flex flex-col';
@@ -24,8 +33,8 @@ const TITLE = 'text-xs font-semibold text-muted-foreground uppercase tracking-wi
 const TT = {
   contentStyle: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6, fontSize: 11, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
   labelStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
-  itemStyle:  { color: 'hsl(var(--muted-foreground))' },
-  cursor:     { fill: 'hsl(var(--muted-foreground) / 0.12)' },
+  itemStyle: { color: 'hsl(var(--muted-foreground))' },
+  cursor: { fill: 'hsl(var(--muted-foreground) / 0.12)' },
 };
 
 function ExpandModal({ title, open, onClose, children }: { title: string; open: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -39,8 +48,10 @@ function ExpandModal({ title, open, onClose, children }: { title: string; open: 
       <div onClick={onClose} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
         style={{ transition: 'opacity 0.3s ease', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }} />
       <div className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl flex flex-col"
-        style={{ width: '74vw', height: '72vh', top: '50%', left: '50%', transition: 'opacity 0.3s ease, transform 0.3s ease',
-          opacity: open ? 1 : 0, transform: open ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -52%) scale(0.96)', pointerEvents: open ? 'auto' : 'none' }}>
+        style={{
+          width: '74vw', height: '72vh', top: '50%', left: '50%', transition: 'opacity 0.3s ease, transform 0.3s ease',
+          opacity: open ? 1 : 0, transform: open ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -52%) scale(0.96)', pointerEvents: open ? 'auto' : 'none'
+        }}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
           <span className="text-sm font-semibold text-foreground uppercase tracking-wide">{title}</span>
           <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"><X className="h-4 w-4" /></button>
@@ -94,16 +105,16 @@ const GapBarLabel = (props: any) => {
     fontSize={12} fontWeight={700} fill="hsl(var(--foreground))">{text}</text>;
 };
 
-const IMPACT_COLORS = ['#1e3a8a','#1e40af','#1d4ed8','#2563eb','#3b82f6','#60a5fa','#93c5fd','#bfdbfe','#a5b4fc','#818cf8','#6366f1','#4f46e5'];
+const IMPACT_COLORS = ['#1e3a8a', '#1e40af', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#a5b4fc', '#818cf8', '#6366f1', '#4f46e5'];
 
 function BuildUnitRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_BUILD_UNIT} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="buGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6b7280" stopOpacity={0.35} /><stop offset="95%" stopColor="#6b7280" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v/1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [`${(v/1000).toFixed(0)}K`, 'Units']} /><Area type="monotone" dataKey="units" stroke="#9ca3af" strokeWidth={2} fill="url(#buGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_BUILD_UNIT} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="buGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6b7280" stopOpacity={0.35} /><stop offset="95%" stopColor="#6b7280" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(0)}K`, 'Units']} /><Area type="monotone" dataKey="units" stroke="#9ca3af" strokeWidth={2} fill="url(#buGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
 function DLWeeklyRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_DL} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis domain={['auto','auto']} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [v?.toLocaleString() ?? '—', 'DL']} /><Area type="monotone" dataKey="dl" stroke="#3b82f6" strokeWidth={2} fill="url(#dlGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_DL} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [v?.toLocaleString() ?? '—', 'DL']} /><Area type="monotone" dataKey="dl" stroke="#3b82f6" strokeWidth={2} fill="url(#dlGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
 function InputHrsRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_INPUT_HRS} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v/1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [`${(v/1000).toFixed(1)}K`, 'Hrs']} /><Area type="monotone" dataKey="hrs" stroke="#10b981" strokeWidth={2} fill="url(#hrGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_INPUT_HRS} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(1)}K`, 'Hrs']} /><Area type="monotone" dataKey="hrs" stroke="#10b981" strokeWidth={2} fill="url(#hrGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
 
 function OLECompareRecharts({ data, prevWeek, currWeek }: { data: { name: string; prev: number; curr: number }[]; prevWeek: string; currWeek: string }) {
@@ -113,8 +124,8 @@ function OLECompareRecharts({ data, prevWeek, currWeek }: { data: { name: string
         <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 110]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} />
-        <Bar dataKey="prev" fill="#60a5fa" radius={[3,3,0,0]} label={<OLEPrevLabel />} />
-        <Bar dataKey="curr" fill="#1d4ed8" radius={[3,3,0,0]} label={<OLECurrLabel />} />
+        <Bar dataKey="prev" fill="#60a5fa" radius={[3, 3, 0, 0]} label={<OLEPrevLabel />} />
+        <Bar dataKey="curr" fill="#1d4ed8" radius={[3, 3, 0, 0]} label={<OLECurrLabel />} />
         <ReferenceLine y={PLANT_OLE_GOAL * 100} stroke="#10b981" strokeDasharray="4 3" strokeWidth={1.5} />
         <Tooltip {...TT} cursor={{ fill: 'hsl(var(--muted-foreground) / 0.08)' }} formatter={(v: number, n: string) => [`${v}%`, n === 'prev' ? prevWeek : currWeek]} />
       </BarChart>
@@ -156,11 +167,11 @@ function BuildGapRecharts({ data }: { data: { name: string; gap: number }[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} layout="vertical" margin={{ top: 0, right: 8, left: 4, bottom: 0 }}>
-        <XAxis type="number" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
+        <XAxis type="number" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
         <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={90} />
         <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1} />
         <Tooltip {...TT} cursor={{ fill: 'hsl(var(--muted-foreground) / 0.08)' }} formatter={(v: number) => [v.toLocaleString(), 'Gap (units)']} />
-        <Bar dataKey="gap" radius={[0,3,3,0]} label={<GapBarLabel />}>
+        <Bar dataKey="gap" radius={[0, 3, 3, 0]} label={<GapBarLabel />}>
           {data.map((e, i) => <Cell key={i} fill={e.gap >= 0 ? '#22c55e' : '#f87171'} />)}
         </Bar>
       </BarChart>
@@ -196,7 +207,7 @@ export default function OLEWoWAnalysis() {
     <div className="flex flex-col gap-3 p-4 h-screen overflow-hidden bg-background text-foreground">
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">WoW Analysis</h1>
+          <h1 className="text-xl font-bold tracking-tight">OLE Analysis</h1>
           <p className="text-xs text-muted-foreground mt-0.5">Penang Island · Week-over-Week Performance</p>
         </div>
         <div>
@@ -214,12 +225,12 @@ export default function OLEWoWAnalysis() {
       {loading && <div className="flex flex-1 items-center justify-center text-muted-foreground text-sm gap-2"><RefreshCw className="h-4 w-4 animate-spin" />Loading…</div>}
       {!loading && error && <div className="flex flex-1 items-center justify-center"><div className="rounded-lg border border-red-500/30 bg-red-500/10 px-6 py-4 text-sm text-red-400 text-center"><p className="font-semibold mb-1">Could not load data</p><p className="text-xs opacity-70">{error}</p></div></div>}
 
-      {!loading && !error && derived && (
+      {/* {!loading && !error && derived && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-400 shrink-0">
           <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
           <span><strong>{pair.curr} vs {pair.prev}</strong> — Site build unit delta: <strong>{derived.siteGap >= 0 ? '+' : ''}{derived.siteGap.toLocaleString()} units</strong>.{derived.topImpact && <> Largest impact: <strong>{derived.topImpact.name}</strong> ({derived.topImpact.value}%).</>}</span>
         </div>
-      )}
+      )} */}
 
       {!loading && !error && derived && (
         <div className="flex gap-3 flex-1 min-h-0">

@@ -14,39 +14,50 @@
  *  - Tooltip style matches OLEReport (hsl(var(--card)) bg)
  */
 
-import OLEFilters from '@/pages/ole/OLEFilters';
 import WorkcellBadge from '@/components/ole/WorkcellBadge';
 import {
+  useOlePaidHours,
+  useOleProduction,
+  useOleResults,
   useOleSummary,
   useOleWeekly,
-  useOleResults,
-  useOleProduction,
-  useOlePaidHours,
   useOleWorkcells,
   useSmhLookup,
 } from '@/hooks/useOleData';
-import { oleApi } from '@/lib/oleApi';
-import type { OleResult, OleProduction, OlePaidHours, OleSummary, OleWeeklyResult } from '@/lib/oleApi';
+import type { OlePaidHours, OleProduction, OleResult, OleSummary } from '@/lib/oleApi';
 import {
-  getOleStatus, oleColor,
-  OLE_COLOR, OLE_BAR,
+  fmtDate,
+  getOleStatus,
+  OLE_BAR,
+  OLE_COLOR,
+  oleColor,
+  shiftLabel,
   STATUS_BADGE, STATUS_LABEL,
-  QUALITY_BADGE,
-  fmtDate, shiftLabel,
-  WORKCELL_LOGOS,
+  WORKCELL_LOGOS
 } from '@/lib/oleConstants';
 import { cn } from '@/lib/utils';
+import OLEFilters from '@/pages/ole/OLEFilters';
 import {
-  AlertTriangle, RefreshCw, WifiOff,
-  ChevronDown, ChevronUp, ArrowUpDown, ChevronRight,
-  Activity, Clock, BarChart2, Users, TrendingUp, TrendingDown,
+  Activity,
+  ArrowUpDown,
+  BarChart2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Clock,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  WifiOff
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
-  ComposedChart, Line, ReferenceArea, ReferenceLine,
-  ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Sector,
+  Area, AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -57,8 +68,8 @@ const ALL = '__all__';
 
 // Table grid column templates — match OLEOverview exactly
 const SCORECARD_GT = '2.5rem minmax(10rem,1fr) 7rem 9.5rem 9rem 9rem 6.5rem 7.5rem';
-const LABOR_GT     = '2.5rem minmax(9rem,1fr) 6rem 4rem 7rem 6rem 6.5rem 6.5rem 5.5rem 7rem';
-const PROD_GT      = '2.5rem 1fr 6rem 4rem 5rem 12rem 5rem 6rem 7rem';
+const LABOR_GT = '2.5rem minmax(9rem,1fr) 6rem 4rem 7rem 6rem 6.5rem 6.5rem 5.5rem 7rem';
+const PROD_GT = '2.5rem 1fr 6rem 4rem 5rem 12rem 5rem 6rem 7rem';
 
 // Shared tooltip style — matches OLEReport
 const TT = {
@@ -72,10 +83,10 @@ const TT = {
 };
 
 const TABS = [
-  { id: 'site',       label: 'Site' },
-  { id: 'workcells',  label: 'Workcells' },
-  { id: 'labor',      label: 'Labor' },
-  { id: 'output',     label: 'Output' },
+  { id: 'site', label: 'Site' },
+  { id: 'workcells', label: 'Workcells' },
+  { id: 'labor', label: 'Labor' },
+  { id: 'output', label: 'Output' },
   { id: 'projection', label: 'Projection' },
 ] as const;
 
@@ -100,7 +111,7 @@ function Pagination({ page, total, pageSize, onChange }: {
         {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()}
       </span>
       <div className="flex items-center gap-1">
-        {[['«',1],['‹',page-1],[null,page],['›',page+1],['»',pages]].map(([label, target], i) =>
+        {[['«', 1], ['‹', page - 1], [null, page], ['›', page + 1], ['»', pages]].map(([label, target], i) =>
           label === null ? (
             <span key={i} className="px-3 py-1 text-xs font-mono text-foreground">{page} / {pages}</span>
           ) : (
@@ -204,21 +215,21 @@ function EmptyTable({ msg }: { msg: string }) {
 
 function SiteTab({ onNavigate }: { onNavigate: (tab: TabId) => void }) {
   const summaryHook = useOleSummary();
-  const weeklyHook  = useOleWeekly({});
-  const raw         = summaryHook.data ?? [];
-  const weeklyRaw   = weeklyHook.data ?? [];
+  const weeklyHook = useOleWeekly({});
+  const raw = summaryHook.data ?? [];
+  const weeklyRaw = weeklyHook.data ?? [];
 
   // Site-level aggregates
   const totalOutput = raw.reduce((s, r) => s + (r.total_output_smh || 0), 0);
-  const totalInput  = raw.reduce((s, r) => s + (r.total_input_hours || 0), 0);
-  const siteOle     = totalInput > 0 ? (totalOutput / totalInput) * 100 : null;
-  const totalQty    = raw.reduce((s, r) => s + r.total_qty, 0);
+  const totalInput = raw.reduce((s, r) => s + (r.total_input_hours || 0), 0);
+  const siteOle = totalInput > 0 ? (totalOutput / totalInput) * 100 : null;
+  const totalQty = raw.reduce((s, r) => s + r.total_qty, 0);
   const totalShifts = raw.reduce((s, r) => s + r.total_shifts, 0);
-  const flagged     = raw.reduce((s, r) => s + r.flagged_shifts, 0);
+  const flagged = raw.reduce((s, r) => s + r.flagged_shifts, 0);
 
   // Plant-level aggregates
-  const plant1 = raw.filter(r => !['ARISTA NETWORKS','ARISTA NETWORKS HLA'].includes(r.workcell));
-  const plant2 = raw.filter(r =>  ['ARISTA NETWORKS','ARISTA NETWORKS HLA'].includes(r.workcell));
+  const plant1 = raw.filter(r => !['ARISTA NETWORKS', 'ARISTA NETWORKS HLA'].includes(r.workcell));
+  const plant2 = raw.filter(r => ['ARISTA NETWORKS', 'ARISTA NETWORKS HLA'].includes(r.workcell));
   const plantOle = (rows: OleSummary[]) => {
     const out = rows.reduce((s, r) => s + (r.total_output_smh || 0), 0);
     const inp = rows.reduce((s, r) => s + (r.total_input_hours || 0), 0);
@@ -243,12 +254,12 @@ function SiteTab({ onNavigate }: { onNavigate: (tab: TabId) => void }) {
       }));
   }, [weeklyRaw]);
 
-  const last2    = weeklyByWeek.slice(-2);
-  const trendUp  = last2.length === 2 && last2[1].ole > last2[0].ole;
+  const last2 = weeklyByWeek.slice(-2);
+  const trendUp = last2.length === 2 && last2[1].ole > last2[0].ole;
   const trendDiff = last2.length === 2 ? Math.abs(last2[1].ole - last2[0].ole).toFixed(1) : null;
-  const oles     = weeklyByWeek.map(d => d.ole).filter(Boolean);
-  const yMin     = oles.length ? Math.max(0, Math.floor(Math.min(...oles) / 10) * 10 - 10) : 0;
-  const yMax     = oles.length ? Math.ceil(Math.max(...oles) / 10) * 10 + 10 : 100;
+  const oles = weeklyByWeek.map(d => d.ole).filter(Boolean);
+  const yMin = oles.length ? Math.max(0, Math.floor(Math.min(...oles) / 10) * 10 - 10) : 0;
+  const yMax = oles.length ? Math.ceil(Math.max(...oles) / 10) * 10 + 10 : 100;
 
   const siteStatus = getOleStatus(siteOle);
 
@@ -256,7 +267,7 @@ function SiteTab({ onNavigate }: { onNavigate: (tab: TabId) => void }) {
     <div className="px-6 pt-5 pb-16 space-y-6">
 
       {/* SMH alert — first because it affects data integrity of everything below */}
-      {flagged > 0 && (
+      {/* {flagged > 0 && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4">
           <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
@@ -266,7 +277,7 @@ function SiteTab({ onNavigate }: { onNavigate: (tab: TabId) => void }) {
             </p>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -301,7 +312,7 @@ function SiteTab({ onNavigate }: { onNavigate: (tab: TabId) => void }) {
                 <AreaChart data={weeklyByWeek} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
                   <defs>
                     <linearGradient id="h1siteGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                     </linearGradient>
                   </defs>
@@ -327,7 +338,7 @@ function SiteTab({ onNavigate }: { onNavigate: (tab: TabId) => void }) {
             { label: 'Plant 1', sub: 'Penang Main', ole: p1Ole, rows: plant1 },
             { label: 'Plant 2', sub: 'Batu Kawan', ole: p2Ole, rows: plant2 },
           ].map(({ label, sub, ole, rows }) => {
-            const st  = getOleStatus(ole);
+            const st = getOleStatus(ole);
             const clr = oleColor(ole);
             const hrs = rows.reduce((s, r) => s + r.total_input_hours, 0);
             const qty = rows.reduce((s, r) => s + r.total_qty, 0);
@@ -375,9 +386,9 @@ function WorkcellsTab({
   dateFrom: string; dateTo: string; search: string;
   onNavigate: (tab: TabId, wc?: string) => void;
 }) {
-  const navigate    = useNavigate();
+  const navigate = useNavigate();
   const summaryHook = useOleSummary();
-  const weeklyHook  = useOleWeekly({});
+  const weeklyHook = useOleWeekly({});
   const [sortCol, setSortCol] = useState('avg_ole_pct');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -389,9 +400,9 @@ function WorkcellsTab({
 
   const filtered = useMemo(() => {
     const list = (summaryHook.data ?? []).filter(r =>
-      (!plant   || (plant === 'Plant 1' ? !PLANT2_WCS.includes(r.workcell) : PLANT2_WCS.includes(r.workcell))) &&
+      (!plant || (plant === 'Plant 1' ? !PLANT2_WCS.includes(r.workcell) : PLANT2_WCS.includes(r.workcell))) &&
       (!workcell || r.workcell === workcell) &&
-      (!search  || r.workcell.toLowerCase().includes(search.toLowerCase()))
+      (!search || r.workcell.toLowerCase().includes(search.toLowerCase()))
     );
     return sortRows(list, sortCol, sortDir) as OleSummary[];
   }, [summaryHook.data, plant, workcell, search, sortCol, sortDir]);
@@ -410,13 +421,13 @@ function WorkcellsTab({
 
   const cols: [string, string][] = [
     ['', '#'],
-    ['workcell',          'Workcell'],
-    ['stage_label',       'Stage'],
-    ['avg_ole_pct',       'OLE %'],
-    ['total_output_smh',  'Output SMH'],
+    ['workcell', 'Workcell'],
+    ['stage_label', 'Stage'],
+    ['avg_ole_pct', 'OLE %'],
+    ['total_output_smh', 'Output SMH'],
     ['total_input_hours', 'Input Hrs'],
-    ['total_qty',         'Units'],
-    ['',                  'Status'],
+    ['total_qty', 'Units'],
+    ['', 'Status'],
   ];
 
   return (
@@ -426,15 +437,15 @@ function WorkcellsTab({
         {summaryHook.loading && filtered.length === 0
           ? <EmptyTable msg="Loading…" />
           : filtered.length === 0
-          ? <EmptyTable msg={summaryHook.error ? 'Backend unreachable' : 'No data'} />
-          : filtered.map((row, idx) => {
+            ? <EmptyTable msg={summaryHook.error ? 'Backend unreachable' : 'No data'} />
+            : filtered.map((row, idx) => {
               const calcOle = row.total_input_hours > 0 ? (row.total_output_smh / row.total_input_hours) * 100 : 0;
-              const st      = getOleStatus(calcOle);
-              const clr     = oleColor(calcOle);
-              const range   = rangeByWc[row.workcell];
-              const k       = row.workcell.toLowerCase().replace(/[^a-z]/g, '');
-              const lk      = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
-              const logo    = lk ? WORKCELL_LOGOS[lk] : null;
+              const st = getOleStatus(calcOle);
+              const clr = oleColor(calcOle);
+              const range = rangeByWc[row.workcell];
+              const k = row.workcell.toLowerCase().replace(/[^a-z]/g, '');
+              const lk = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
+              const logo = lk ? WORKCELL_LOGOS[lk] : null;
               return (
                 <div key={row.workcell}
                   className="grid items-center text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
@@ -444,8 +455,8 @@ function WorkcellsTab({
                     className="px-4 py-3.5 flex items-center gap-3 text-left group w-full">
                     {logo
                       ? <div className="w-8 h-8 rounded-lg border border-border bg-white flex items-center justify-center shrink-0 overflow-hidden">
-                          <img src={logo} alt={row.workcell} className="w-full h-full object-contain p-1" />
-                        </div>
+                        <img src={logo} alt={row.workcell} className="w-full h-full object-contain p-1" />
+                      </div>
                       : <WorkcellBadge name={row.workcell} status={st} />
                     }
                     <div className="min-w-0">
@@ -516,11 +527,11 @@ function LaborTab({
 }: {
   workcell: string; plant: string; dateFrom: string; dateTo: string; shift: string; search: string;
 }) {
-  const shiftsHook  = useOleResults();
-  const hoursHook   = useOlePaidHours();
-  const [sortCol, setSortCol]   = useState('date');
-  const [sortDir, setSortDir]   = useState<SortDir>('desc');
-  const [page, setPage]         = useState(1);
+  const shiftsHook = useOleResults();
+  const hoursHook = useOlePaidHours();
+  const [sortCol, setSortCol] = useState('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const PLANT2_WCS = ['ARISTA NETWORKS', 'ARISTA NETWORKS HLA'];
@@ -533,11 +544,11 @@ function LaborTab({
   const filtered = useMemo(() => {
     const list = (shiftsHook.data ?? []).filter(r =>
       (!workcell || r.workcell === workcell) &&
-      (!plant    || (plant === 'Plant 1' ? !PLANT2_WCS.includes(r.workcell) : PLANT2_WCS.includes(r.workcell))) &&
+      (!plant || (plant === 'Plant 1' ? !PLANT2_WCS.includes(r.workcell) : PLANT2_WCS.includes(r.workcell))) &&
       (!dateFrom || r.date >= dateFrom) &&
-      (!dateTo   || r.date <= dateTo) &&
-      (!shift    || r.shift === Number(shift)) &&
-      (!search   || r.workcell.toLowerCase().includes(search.toLowerCase()))
+      (!dateTo || r.date <= dateTo) &&
+      (!shift || r.shift === Number(shift)) &&
+      (!search || r.workcell.toLowerCase().includes(search.toLowerCase()))
     );
     return sortRows(list, sortCol, sortDir) as OleResult[];
   }, [shiftsHook.data, workcell, plant, dateFrom, dateTo, shift, search, sortCol, sortDir]);
@@ -554,15 +565,15 @@ function LaborTab({
 
   const cols: [string, string][] = [
     ['', ''],
-    ['workcell',             'Workcell'],
-    ['date',                 'Date'],
-    ['shift',                'Shift'],
-    ['ole_pct',              'OLE %'],
-    ['smh_coverage_pct',     'SMH Cov.'],
+    ['workcell', 'Workcell'],
+    ['date', 'Date'],
+    ['shift', 'Shift'],
+    ['ole_pct', 'OLE %'],
+    ['smh_coverage_pct', 'SMH Cov.'],
     ['effective_output_smh', 'Output SMH'],
-    ['total_input_hours',    'Input Hrs'],
-    ['total_qty',            'Qty'],
-    ['assembly_count',       'Assemblies'],
+    ['total_input_hours', 'Input Hrs'],
+    ['total_qty', 'Qty'],
+    ['assembly_count', 'Assemblies'],
   ];
 
   const slice = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -574,74 +585,74 @@ function LaborTab({
         {filtered.length === 0
           ? <EmptyTable msg={shiftsHook.error ? 'Backend unreachable' : 'No shift data'} />
           : slice.map((row, i) => {
-              const key      = `${row.workcell}|${row.date}|${row.shift}`;
-              const isOpen   = expanded.has(key);
-              const emps     = phByKey.get(key) ?? [];
-              const st       = getOleStatus(row.ole_pct);
-              const idx      = (page - 1) * PAGE_SIZE + i;
-              return (
-                <div key={key} className="border-b border-border last:border-0">
-                  <div className="grid items-center text-sm hover:bg-muted/40 transition-colors cursor-pointer"
-                    style={{ gridTemplateColumns: LABOR_GT, minHeight: ROW_HEIGHT }}
-                    onClick={() => emps.length > 0 && setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; })}>
-                    <div className="px-4 flex items-center justify-center text-muted-foreground">
-                      {emps.length > 0
-                        ? isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
-                        : <span className="text-[10px] font-mono">{idx + 1}</span>}
-                    </div>
-                    <div className="px-3 flex items-center gap-2.5">
-                      <WorkcellBadge name={row.workcell} status={st} />
-                      <span className="font-semibold text-foreground truncate">{row.workcell}</span>
-                    </div>
-                    <div className="px-3 font-mono text-xs text-foreground">{fmtDate(row.date)}</div>
-                    <div className="px-3 text-center font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
-                    <div className="px-3 text-center">
-                      <span className={cn('font-mono font-bold', OLE_COLOR[st])}>
-                        {row.ole_pct !== null ? `${row.ole_pct}%` : '—'}
-                      </span>
-                    </div>
-                    <div className="px-3 text-center">
-                      <span className={cn('text-xs font-mono font-semibold',
-                        (row.smh_coverage_pct ?? 0) >= 90 ? 'text-emerald-400' :
-                        (row.smh_coverage_pct ?? 0) >= 70 ? 'text-amber-400' : 'text-red-400'
-                      )}>{row.smh_coverage_pct !== null ? `${row.smh_coverage_pct}%` : '—'}</span>
-                    </div>
-                    <div className="px-3 text-center font-mono text-sm text-foreground">{row.effective_output_smh.toFixed(2)}</div>
-                    <div className="px-3 text-center font-mono text-sm text-foreground">{row.total_input_hours.toFixed(2)}</div>
-                    <div className="px-3 text-center font-mono text-sm text-foreground">{row.total_qty.toLocaleString()}</div>
-                    <div className="px-3 text-center font-mono text-sm text-foreground">{row.assembly_count}</div>
+            const key = `${row.workcell}|${row.date}|${row.shift}`;
+            const isOpen = expanded.has(key);
+            const emps = phByKey.get(key) ?? [];
+            const st = getOleStatus(row.ole_pct);
+            const idx = (page - 1) * PAGE_SIZE + i;
+            return (
+              <div key={key} className="border-b border-border last:border-0">
+                <div className="grid items-center text-sm hover:bg-muted/40 transition-colors cursor-pointer"
+                  style={{ gridTemplateColumns: LABOR_GT, minHeight: ROW_HEIGHT }}
+                  onClick={() => emps.length > 0 && setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; })}>
+                  <div className="px-4 flex items-center justify-center text-muted-foreground">
+                    {emps.length > 0
+                      ? isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                      : <span className="text-[10px] font-mono">{idx + 1}</span>}
                   </div>
-                  {isOpen && emps.length > 0 && (
-                    <div className="bg-muted/20 border-t border-border/50">
-                      <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border/30"
-                        style={{ gridTemplateColumns: '3rem 1fr 6rem 6rem 7rem 8rem' }}>
-                        {['', 'Employee', 'Type', 'Direct HC', 'Direct Hrs', 'Total Input'].map(h => (
-                          <div key={h} className="px-3 py-1.5">{h}</div>
-                        ))}
-                      </div>
-                      {emps.map((emp, ei) => (
-                        <div key={`${emp.name}-${ei}`}
-                          className="grid items-center text-xs border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors"
-                          style={{ gridTemplateColumns: '3rem 1fr 6rem 6rem 7rem 8rem', height: 40 }}>
-                          <div className="px-4 text-center text-muted-foreground font-mono">{ei + 1}</div>
-                          <div className="px-3 text-foreground truncate">{emp.name || '—'}</div>
-                          <div className="px-3 flex justify-center">
-                            <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border',
-                              emp.value_type === 'VA'  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
-                              emp.value_type === 'NVA' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-                              'bg-muted text-muted-foreground border-border'
-                            )}>{emp.value_type || 'NVA'}</span>
-                          </div>
-                          <div className="px-3 text-center font-mono text-foreground">{emp.thc_direct}</div>
-                          <div className="px-3 text-center font-mono text-foreground">{emp.tph_direct.toFixed(2)}</div>
-                          <div className="px-3 text-center font-mono font-semibold text-foreground">{emp.total_input_hours.toFixed(2)}</div>
-                        </div>
+                  <div className="px-3 flex items-center gap-2.5">
+                    <WorkcellBadge name={row.workcell} status={st} />
+                    <span className="font-semibold text-foreground truncate">{row.workcell}</span>
+                  </div>
+                  <div className="px-3 font-mono text-xs text-foreground">{fmtDate(row.date)}</div>
+                  <div className="px-3 text-center font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
+                  <div className="px-3 text-center">
+                    <span className={cn('font-mono font-bold', OLE_COLOR[st])}>
+                      {row.ole_pct !== null ? `${row.ole_pct}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="px-3 text-center">
+                    <span className={cn('text-xs font-mono font-semibold',
+                      (row.smh_coverage_pct ?? 0) >= 90 ? 'text-emerald-400' :
+                        (row.smh_coverage_pct ?? 0) >= 70 ? 'text-amber-400' : 'text-red-400'
+                    )}>{row.smh_coverage_pct !== null ? `${row.smh_coverage_pct}%` : '—'}</span>
+                  </div>
+                  <div className="px-3 text-center font-mono text-sm text-foreground">{row.effective_output_smh.toFixed(2)}</div>
+                  <div className="px-3 text-center font-mono text-sm text-foreground">{row.total_input_hours.toFixed(2)}</div>
+                  <div className="px-3 text-center font-mono text-sm text-foreground">{row.total_qty.toLocaleString()}</div>
+                  <div className="px-3 text-center font-mono text-sm text-foreground">{row.assembly_count}</div>
+                </div>
+                {isOpen && emps.length > 0 && (
+                  <div className="bg-muted/20 border-t border-border/50">
+                    <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border/30"
+                      style={{ gridTemplateColumns: '3rem 1fr 6rem 6rem 7rem 8rem' }}>
+                      {['', 'Employee', 'Type', 'Direct HC', 'Direct Hrs', 'Total Input'].map(h => (
+                        <div key={h} className="px-3 py-1.5">{h}</div>
                       ))}
                     </div>
-                  )}
-                </div>
-              );
-            })
+                    {emps.map((emp, ei) => (
+                      <div key={`${emp.name}-${ei}`}
+                        className="grid items-center text-xs border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors"
+                        style={{ gridTemplateColumns: '3rem 1fr 6rem 6rem 7rem 8rem', height: 40 }}>
+                        <div className="px-4 text-center text-muted-foreground font-mono">{ei + 1}</div>
+                        <div className="px-3 text-foreground truncate">{emp.name || '—'}</div>
+                        <div className="px-3 flex justify-center">
+                          <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border',
+                            emp.value_type === 'VA' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
+                              emp.value_type === 'NVA' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
+                                'bg-muted text-muted-foreground border-border'
+                          )}>{emp.value_type || 'NVA'}</span>
+                        </div>
+                        <div className="px-3 text-center font-mono text-foreground">{emp.thc_direct}</div>
+                        <div className="px-3 text-center font-mono text-foreground">{emp.tph_direct.toFixed(2)}</div>
+                        <div className="px-3 text-center font-mono font-semibold text-foreground">{emp.total_input_hours.toFixed(2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
         }
       </div>
       <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
@@ -656,11 +667,11 @@ function OutputTab({
 }: {
   workcell: string; plant: string; dateFrom: string; dateTo: string; search: string;
 }) {
-  const prodHook    = useOleProduction();
-  const smhHook     = useSmhLookup();
+  const prodHook = useOleProduction();
+  const smhHook = useSmhLookup();
   const [sortCol, setSortCol] = useState('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [page, setPage]       = useState(1);
+  const [page, setPage] = useState(1);
 
   const PLANT2_WCS = ['ARISTA NETWORKS', 'ARISTA NETWORKS HLA'];
 
@@ -678,24 +689,24 @@ function OutputTab({
   const filtered = useMemo(() => {
     const list = (prodHook.data ?? []).filter(r =>
       (!workcell || r.workcell === workcell) &&
-      (!plant    || (plant === 'Plant 1' ? !PLANT2_WCS.includes(r.workcell) : PLANT2_WCS.includes(r.workcell))) &&
+      (!plant || (plant === 'Plant 1' ? !PLANT2_WCS.includes(r.workcell) : PLANT2_WCS.includes(r.workcell))) &&
       (!dateFrom || r.date >= dateFrom) &&
-      (!dateTo   || r.date <= dateTo) &&
-      (!search   || r.workcell.toLowerCase().includes(search.toLowerCase()) || r.assembly.toLowerCase().includes(search.toLowerCase()))
+      (!dateTo || r.date <= dateTo) &&
+      (!search || r.workcell.toLowerCase().includes(search.toLowerCase()) || r.assembly.toLowerCase().includes(search.toLowerCase()))
     );
     return sortRows(list, sortCol, sortDir) as OleProduction[];
   }, [prodHook.data, workcell, plant, dateFrom, dateTo, search, sortCol, sortDir]);
 
   const cols: [string, string][] = [
     ['', '#'],
-    ['workcell',     'Workcell'],
-    ['date',         'Date'],
-    ['shift',        'Shift'],
+    ['workcell', 'Workcell'],
+    ['date', 'Date'],
+    ['shift', 'Shift'],
     ['sub_workcell', 'Stage'],
-    ['assembly',     'Assembly'],
-    ['qty',          'Qty'],
-    ['smh_unit',     'SMH/unit'],
-    ['output_smh',   'Output SMH'],
+    ['assembly', 'Assembly'],
+    ['qty', 'Qty'],
+    ['smh_unit', 'SMH/unit'],
+    ['output_smh', 'Output SMH'],
   ];
 
   const slice = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -707,32 +718,32 @@ function OutputTab({
         {filtered.length === 0
           ? <EmptyTable msg={prodHook.error ? 'Backend unreachable' : 'No production data'} />
           : slice.map((row, i) => {
-              const smhUnit   = smhMap.get(`${row.workcell}|${row.assembly}`) ?? null;
-              const outputSmh = smhUnit !== null ? row.qty * smhUnit : null;
-              const idx       = (page - 1) * PAGE_SIZE + i;
-              return (
-                <div key={`${row.workcell}-${row.assembly}-${row.date}-${row.shift}-${idx}`}
-                  className="grid items-center text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
-                  style={{ gridTemplateColumns: PROD_GT, height: ROW_HEIGHT }}>
-                  <div className="px-4 text-center text-xs text-muted-foreground font-mono">{idx + 1}</div>
-                  <div className="px-3 flex items-center gap-2.5">
-                    <WorkcellBadge name={row.workcell} status="idle" />
-                    <span className="font-semibold text-foreground truncate">{row.workcell}</span>
-                  </div>
-                  <div className="px-3 font-mono text-xs text-foreground">{fmtDate(row.date)}</div>
-                  <div className="px-3 text-center font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
-                  <div className="px-3"><span className="text-xs font-medium text-muted-foreground">{row.sub_workcell}</span></div>
-                  <div className="px-3 font-mono text-xs text-foreground truncate" title={row.assembly}>{row.assembly}</div>
-                  <div className="px-3 text-center font-mono font-semibold text-foreground">{row.qty.toLocaleString()}</div>
-                  <div className="px-3 text-center font-mono text-xs text-foreground">
-                    {smhUnit !== null ? smhUnit.toFixed(4) : <span className="text-muted-foreground/50">—</span>}
-                  </div>
-                  <div className="px-3 text-center font-mono text-sm font-semibold text-foreground">
-                    {outputSmh !== null ? outputSmh.toFixed(2) : <span className="text-muted-foreground/50">—</span>}
-                  </div>
+            const smhUnit = smhMap.get(`${row.workcell}|${row.assembly}`) ?? null;
+            const outputSmh = smhUnit !== null ? row.qty * smhUnit : null;
+            const idx = (page - 1) * PAGE_SIZE + i;
+            return (
+              <div key={`${row.workcell}-${row.assembly}-${row.date}-${row.shift}-${idx}`}
+                className="grid items-center text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                style={{ gridTemplateColumns: PROD_GT, height: ROW_HEIGHT }}>
+                <div className="px-4 text-center text-xs text-muted-foreground font-mono">{idx + 1}</div>
+                <div className="px-3 flex items-center gap-2.5">
+                  <WorkcellBadge name={row.workcell} status="idle" />
+                  <span className="font-semibold text-foreground truncate">{row.workcell}</span>
                 </div>
-              );
-            })
+                <div className="px-3 font-mono text-xs text-foreground">{fmtDate(row.date)}</div>
+                <div className="px-3 text-center font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
+                <div className="px-3"><span className="text-xs font-medium text-muted-foreground">{row.sub_workcell}</span></div>
+                <div className="px-3 font-mono text-xs text-foreground truncate" title={row.assembly}>{row.assembly}</div>
+                <div className="px-3 text-center font-mono font-semibold text-foreground">{row.qty.toLocaleString()}</div>
+                <div className="px-3 text-center font-mono text-xs text-foreground">
+                  {smhUnit !== null ? smhUnit.toFixed(4) : <span className="text-muted-foreground/50">—</span>}
+                </div>
+                <div className="px-3 text-center font-mono text-sm font-semibold text-foreground">
+                  {outputSmh !== null ? outputSmh.toFixed(2) : <span className="text-muted-foreground/50">—</span>}
+                </div>
+              </div>
+            );
+          })
         }
       </div>
       <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
@@ -751,35 +762,35 @@ export default function OLEHome1() {
   const [activeTab, setActiveTab] = useState<TabId>('site');
 
   // ── Shared filter state — single source of truth for all tabs ──
-  const [search,   setSearch]   = useState('');
+  const [search, setSearch] = useState('');
   const [workcell, setWorkcell] = useState('');
-  const [plant,    setPlant]    = useState('');
+  const [plant, setPlant] = useState('');
   const [dateFrom, setDateFrom] = useState('');
-  const [dateTo,   setDateTo]   = useState('');
-  const [shift,    setShift]    = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [shift, setShift] = useState('');
 
   // Reset page when filters change
   useEffect(() => { /* tabs handle their own pagination */ }, [workcell, plant, dateFrom, dateTo, shift, search]);
 
-  const workcellsHook   = useOleWorkcells();
+  const workcellsHook = useOleWorkcells();
   const workcellConfigs = workcellsHook.data ?? [];
-  const summaryHook     = useOleSummary();
+  const summaryHook = useOleSummary();
 
   const plantOptions = useMemo(() =>
     Array.from(new Set(workcellConfigs.map(c => c.plant))).sort()
-  , [workcellConfigs]);
+    , [workcellConfigs]);
 
   const workcellOptions = useMemo(() =>
     Array.from(new Set((summaryHook.data ?? []).map(r => r.workcell))).sort()
-  , [summaryHook.data]);
+    , [summaryHook.data]);
 
   // Which filters are shown per tab
-  const showSearch   = activeTab !== 'site';
-  const showPlant    = activeTab !== 'site';
+  const showSearch = activeTab !== 'site';
+  const showPlant = activeTab !== 'site';
   const showWorkcell = activeTab !== 'site';
-  const showDate     = ['labor', 'output', 'projection'].includes(activeTab);
-  const showShift    = activeTab === 'labor';
-  const showFilters  = activeTab !== 'site' && activeTab !== 'projection';
+  const showDate = ['labor', 'output', 'projection'].includes(activeTab);
+  const showShift = activeTab === 'labor';
+  const showFilters = activeTab !== 'site' && activeTab !== 'projection';
 
   const onNavigate = useCallback((tab: TabId, wc?: string) => {
     setActiveTab(tab);
