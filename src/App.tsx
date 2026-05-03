@@ -22,6 +22,7 @@ import OLEHome2 from "@/pages/ole/OLEHome2";
 import OLEHome3 from "@/pages/ole/OLEHome3";
 import OLEHome4 from "@/pages/ole/OLEHome4";
 import OLEHome5 from "@/pages/ole/OLEHome5";
+import OLEWorkcell4 from "@/pages/ole/OLEWorkcell4";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import IEBaseline from "@/pages/iebaseline/IEBaseline";
 import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
@@ -85,6 +86,7 @@ function AppShell() {
             <Route path="/ole/home3" element={<OLEHome3 />} />
             <Route path="/ole/home4" element={<OLEHome4 />} />
             <Route path="/ole/home5" element={<OLEHome5 />} />
+            <Route path="/ole/wc4/:workcell" element={<OLEWorkcell4 />} />
             <Route path="/ole/:workcell" element={<OLEWorkcell />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ole-mart-api" element={<OleMartApiTest />} />

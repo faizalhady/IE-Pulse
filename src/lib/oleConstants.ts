@@ -58,21 +58,24 @@ export const WORKCELL_LOGOS: Record<string, string> = {
   wabtec: '/workcell logo/wabtec.png',
 };
 
+// ─── OLE Target ────────────────────────────────────────────────────────────
+export const OLE_TARGET = 61;
+
 // ─── Status Utilities ───────────────────────────────────────────────────────
 export type OleStatus = 'optimal' | 'warning' | 'critical' | 'idle';
 
 export function getOleStatus(pct: number | null): OleStatus {
   if (pct === null) return 'idle';
-  if (pct >= 80) return 'optimal';
-  if (pct >= 60) return 'warning';
+  if (pct >= OLE_TARGET) return 'optimal';
+  if (pct >= 45) return 'warning';
   return 'critical';
 }
 
 export function oleColor(pct: number | null): string {
   if (pct === null) return 'hsl(var(--muted-foreground))';
-  if (pct >= 80) return '#22c55e'; // emerald
-  if (pct >= 60) return '#f59e0b'; // amber
-  return '#ef4444'; // red
+  if (pct >= OLE_TARGET) return '#22c55e'; // emerald
+  if (pct >= 45) return '#f59e0b';         // amber
+  return '#ef4444';                         // red
 }
 
 // ─── Badge Classes ──────────────────────────────────────────────────────────

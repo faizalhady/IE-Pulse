@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import {
   getOleStatus, oleColor,
   OLE_COLOR, OLE_BAR, STATUS_BADGE, STATUS_LABEL,
-  WORKCELL_LOGOS, fmtDate, shiftLabel,
+  WORKCELL_LOGOS, fmtDate, shiftLabel, OLE_TARGET,
 } from '@/lib/oleConstants';
 import {
   MOCK_SUMMARY, MOCK_WEEKLY, MOCK_MH_BREAKDOWN, MOCK_MH_BY_WC,
@@ -361,7 +361,7 @@ export default function OLEHome5() {
         <AccordionSection
           num={1} open={openSections.has(1)} onToggle={() => toggle(1)}
           title="Site Performance"
-          summary={`Penang · ${filteredSummary.length} active workcells · Target: 80%`}
+          summary={`Penang · ${filteredSummary.length} active workcells · Target: ${OLE_TARGET}%`}
           badge={`${siteOle.toFixed(1)}%`}
           badgeColor={siteColor}>
           <div className="p-6 space-y-5">
@@ -411,8 +411,8 @@ export default function OLEHome5() {
             {/* Plant comparison */}
             <div className="grid grid-cols-2 gap-4">
               {[
-                { label: 'Plant 1', sub: 'Penang Main', data: p1 },
-                { label: 'Plant 2', sub: 'Batu Kawan',  data: p2 },
+                { label: 'Plant 1', data: p1 },
+                { label: 'Plant 2', data: p2 },
               ].map(({ label, sub, data }) => {
                 const clr = oleColor(data.ole_pct);
                 const st  = getOleStatus(data.ole_pct);
@@ -422,7 +422,6 @@ export default function OLEHome5() {
                     <div className="flex items-center justify-between mb-2">
                       <div>
                         <p className="text-xs font-bold text-foreground">{label}</p>
-                        <p className="text-[10px] text-muted-foreground">{sub}</p>
                       </div>
                       <span className="text-2xl font-mono font-black" style={{ color: clr }}>
                         {data.ole_pct.toFixed(1)}%
@@ -446,7 +445,7 @@ export default function OLEHome5() {
         <AccordionSection
           num={2} open={openSections.has(2)} onToggle={() => toggle(2)}
           title="Weekly OLE Trend — FY26"
-          summary={`${siteWeekly.length} weeks of data · latest: ${siteWeekly[siteWeekly.length - 1]?.ole.toFixed(1)}% · click bars to drill down`}
+          summary={`${siteWeekly.length} weeks of data · latest: ${siteWeekly[siteWeekly.length - 1]?.ole.toFixed(1)}% · target: ${OLE_TARGET}%`}
           badge={trendDiff ? `${trendUp ? '▲' : '▼'} ${trendDiff}%` : undefined}
           badgeColor={trendUp ? '#22c55e' : '#ef4444'}>
           <div className="p-6">
@@ -459,11 +458,11 @@ export default function OLEHome5() {
                   <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']}
                     cursor={{ fill: 'hsl(var(--primary) / 0.08)' }} />
-                  <ReferenceLine y={80} stroke="#22c55e" strokeDasharray="4 3" strokeWidth={1.5}
-                    label={{ value: '80% Target', fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }} />
+                  <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="4 3" strokeWidth={1.5}
+                    label={{ value: `${OLE_TARGET}% Target`, fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }} />
                   <Bar dataKey="ole" radius={[4, 4, 0, 0]} maxBarSize={32} cursor="pointer">
                     {siteWeekly.map((d, i) => (
-                      <Cell key={i} fill={d.ole >= 80 ? '#22c55e' : d.ole >= 60 ? '#f59e0b' : '#ef4444'} />
+                      <Cell key={i} fill={d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444'} />
                     ))}
                   </Bar>
                 </ComposedChart>
@@ -472,44 +471,6 @@ export default function OLEHome5() {
             <p className="text-[10px] text-muted-foreground text-center mt-2 flex items-center justify-center gap-1">
               <Info className="h-3 w-3" /> Click any bar to explore the OLE formula breakdown
             </p>
-          </div>
-        </AccordionSection>
-
-        {/* ── SECTION 3: OLE Formula ── */}
-        <AccordionSection
-          num={3} open={openSections.has(3)} onToggle={() => toggle(3)}
-          title="OLE Formula Breakdown"
-          summary="Output SMH ÷ Input Hours × 100% — click each component to understand what drives it"
-          badge={`${siteOle.toFixed(1)}%`}
-          badgeColor={siteColor}>
-          <div className="p-6 space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <button onClick={() => setDrawer({ kind: 'ole_formula' })}
-                className="rounded-xl border-2 border-primary/30 bg-primary/5 p-5 text-center hover:bg-primary/10 transition-colors group">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Output SMH</p>
-                <p className="text-3xl font-mono font-bold text-primary">{(site.total_output_smh / 1000).toFixed(1)}k</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Σ(Assembly Qty × SMH/unit)</p>
-                <p className="text-[10px] text-primary mt-2 opacity-0 group-hover:opacity-100 transition-opacity">see assembly breakdown →</p>
-              </button>
-              <div className="flex flex-col items-center justify-center gap-2">
-                <span className="text-5xl font-light text-muted-foreground">÷</span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">÷</span>
-                <div className="w-px h-4 bg-border" />
-                <p className="text-3xl font-mono font-bold" style={{ color: siteColor }}>{siteOle.toFixed(1)}%</p>
-                <span className="text-[10px] text-muted-foreground">= OLE</span>
-              </div>
-              <button onClick={() => setDrawer({ kind: 'ole_formula' })}
-                className="rounded-xl border-2 border-violet-500/30 bg-violet-500/5 p-5 text-center hover:bg-violet-500/10 transition-colors group">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Input Hours</p>
-                <p className="text-3xl font-mono font-bold text-violet-400">{(site.total_input_hours / 1000).toFixed(1)}k</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Σ(Paid Direct Hours)</p>
-                <p className="text-[10px] text-violet-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">see employee breakdown →</p>
-              </button>
-            </div>
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-xs text-blue-400 flex items-start gap-2">
-              <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-              <span>SMH (Standard Man Hours) per assembly comes from OLE Webtools. Missing SMH values reduce reported OLE. Check SMH Coverage for gaps.</span>
-            </div>
           </div>
         </AccordionSection>
 
