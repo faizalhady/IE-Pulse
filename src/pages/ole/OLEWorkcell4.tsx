@@ -9,29 +9,41 @@
  *    (columns match OLEOverview labor/production tabs exactly)
  */
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useOlePaidHours, useOleProduction, useOleResults, useOleWeekly, useOleWorkcells, useSmhLookup } from '@/hooks/useOleData';
+import type { OleWeeklyResult } from '@/lib/oleApi';
+import {
+  OLE_COLOR,
+  OLE_TARGET,
+  STATUS_BADGE, STATUS_LABEL,
+  WORKCELL_LOGOS, fmtDate,
+  getOleStatus, oleColor,
+  shiftLabel,
+} from '@/lib/oleConstants';
 import { cn } from '@/lib/utils';
 import {
-  getOleStatus, oleColor,
-  OLE_COLOR, STATUS_BADGE, STATUS_LABEL,
-  WORKCELL_LOGOS, fmtDate, shiftLabel, OLE_TARGET,
-} from '@/lib/oleConstants';
-import { useOleWeekly, useOleWorkcells, useOleResults, useOleProduction, useOlePaidHours, useSmhLookup } from '@/hooks/useOleData';
-import type { OleWeeklyResult } from '@/lib/oleApi';
+  AlertTriangle,
+  Info,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  X
+} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  Bar,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis, YAxis,
+} from 'recharts';
+import { DatePickerField } from './OLEFilters';
 
 type WeekRow = { isoWeek: number; label: string; start: string; end: string };
-import {
-  AlertTriangle, ChevronRight, TrendingUp, TrendingDown,
-  X, ArrowRight, Info, ChevronDown, ChevronUp,
-} from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DatePickerField } from './OLEFilters';
-import {
-  ComposedChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, ReferenceLine,
-} from 'recharts';
 
 const TT = {
   background: 'hsl(var(--card))',
@@ -40,24 +52,128 @@ const TT = {
   color: 'hsl(var(--foreground))',
 };
 
-// ─── Column layouts (match OLEOverview exactly) ───────────────────────────────
-const LABOR_GT  = '2.5rem 6rem 4rem 7rem 6rem 6.5rem 6.5rem 5.5rem 7rem';
-const PROD_GT   = '2.5rem 6rem 4rem 5rem 12rem 5rem 6rem 7rem';
+// ─── Table font sizes ───────────────────────────────────────────────────────
+const TH = 'text-[10px]'; // header cells
+const TD = 'text-xs';     // data cells
+const ROW_H = 52;         // row height px
+
+// ─── Column layouts ───────────────────────────────────────────────────────
+const LABOR_GT = '2.5rem 6rem 4rem 7rem 6rem 6.5rem 6.5rem 5.5rem 7rem';
+const PROD_GT = '2.5rem 6rem 4rem 5rem 12rem 5rem 6rem 7rem';
 
 // ─── Static fallback week list (replaced by live data once loaded) ──────────
 const ALL_WEEKS: { isoWeek: number; label: string; start: string; end: string }[] = [];
+
+// ─── Shift drawer ─────────────────────────────────────────────────────────────
+interface ShiftDrawerData {
+  workcell: string;
+  date: string;
+  shift: number;
+  ole_pct: number | null;
+  smh_coverage_pct: number | null;
+  effective_output_smh: number;
+  total_input_hours: number;
+  total_qty: number;
+  assembly_count: number;
+  employees: {
+    name: string;
+    value_type: string;
+    thc_direct: number;
+    tph_direct: number;
+    total_input_hours: number;
+  }[];
+}
+
+function ShiftDrawer({ data, onClose }: { data: ShiftDrawerData; onClose: () => void }) {
+  const status = getOleStatus(data.ole_pct ?? 0);
+  const clr = oleColor(data.ole_pct ?? 0);
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="w-[680px] bg-card border-l border-border flex flex-col overflow-hidden shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
+          <div>
+            <p className="text-sm font-bold text-foreground">
+              {data.workcell} · {fmtDate(data.date)} · {shiftLabel(data.shift)} Shift
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Labor input breakdown · {data.employees.length} operator{data.employees.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* KPI strip */}
+        <div className="grid grid-cols-4 divide-x divide-border border-b border-border flex-shrink-0">
+          {[
+            { label: 'OLE', value: data.ole_pct !== null ? `${data.ole_pct.toFixed(1)}%` : '—', color: clr },
+            { label: 'Output SMH', value: data.effective_output_smh.toFixed(1), color: undefined },
+            { label: 'Input Hrs', value: data.total_input_hours.toFixed(1), color: undefined },
+            { label: 'SMH Cov.', value: data.smh_coverage_pct !== null ? `${data.smh_coverage_pct}%` : '—', color: undefined },
+          ].map(k => (
+            <div key={k.label} className="px-4 py-3">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{k.label}</p>
+              <p className="text-xl font-mono font-bold mt-0.5" style={{ color: k.color }}>{k.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Operator table */}
+        <div className="flex-1 overflow-y-auto">
+          {data.employees.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
+              <Users className="h-6 w-6 opacity-40" />
+              <p className="text-xs">No operator data for this shift</p>
+            </div>
+          ) : (
+            <>
+              {/* Table header */}
+              <div className="grid bg-muted/100 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border sticky top-0"
+                style={{ gridTemplateColumns: '2.5rem 1fr 5rem 5.5rem 6rem 7rem' }}>
+                {['#', 'Operator', 'Type', 'HC', 'Direct Hrs', 'Total Input'].map(h => (
+                  <div key={h} className="px-4 py-2.5">{h}</div>
+                ))}
+              </div>
+              {data.employees.map((emp, i) => (
+                <div key={i}
+                  className="grid items-center border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                  style={{ gridTemplateColumns: '2.5rem 1fr 5rem 5.5rem 6rem 7rem', height: 52 }}>
+                  <div className="px-4 text-xs text-muted-foreground font-mono">{i + 1}</div>
+                  <div className="px-4 text-sm font-medium text-foreground truncate">{emp.name || '—'}</div>
+                  <div className="px-4">
+                    <span className={cn(
+                      'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
+                      emp.value_type === 'VA'
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-red-500/15 text-red-400 border-red-500/30'
+                    )}>{emp.value_type}</span>
+                  </div>
+                  <div className="px-4 text-sm font-mono text-foreground text-center">{emp.thc_direct}</div>
+                  <div className="px-4 text-sm font-mono text-foreground text-center">{emp.tph_direct.toFixed(2)}</div>
+                  <div className="px-4 text-sm font-mono font-semibold text-foreground text-center">{emp.total_input_hours.toFixed(2)}</div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Aggregate live weekly rows for a single workcell ─────────────────────────
 function aggregateWcWeekly(rows: OleWeeklyResult[]) {
   const out = rows.reduce((s, r) => s + r.total_output_smh, 0);
   const inp = rows.reduce((s, r) => s + r.total_input_hours, 0);
   return {
-    ole_pct:           inp > 0 ? (out / inp) * 100 : 0,
-    total_output_smh:  out,
+    ole_pct: inp > 0 ? (out / inp) * 100 : 0,
+    total_output_smh: out,
     total_input_hours: inp,
-    total_qty:         rows.reduce((s, r) => s + r.total_qty, 0),
-    total_shifts:      rows.reduce((s, r) => s + r.shift_count, 0),
-    flagged_shifts:    rows.reduce((s, r) => s + r.shifts_flagged, 0),
+    total_qty: rows.reduce((s, r) => s + r.total_qty, 0),
+    total_shifts: rows.reduce((s, r) => s + r.shift_count, 0),
+    flagged_shifts: rows.reduce((s, r) => s + r.shifts_flagged, 0),
   };
 }
 
@@ -71,19 +187,19 @@ export default function OLEWorkcell4() {
   const [searchParams] = useSearchParams();
 
   // ── Live data ──────────────────────────────────────────────────────────────
-  const weeklyHook     = useOleWeekly();
-  const workcellsHook  = useOleWorkcells();
-  const resultsHook    = useOleResults();
+  const weeklyHook = useOleWeekly();
+  const workcellsHook = useOleWorkcells();
+  const resultsHook = useOleResults();
   const productionHook = useOleProduction();
-  const paidHoursHook  = useOlePaidHours();
-  const smhLookupHook  = useSmhLookup();
+  const paidHoursHook = useOlePaidHours();
+  const smhLookupHook = useSmhLookup();
 
-  const rawWeekly       = weeklyHook.data     ?? [];
-  const workcellConfigs = workcellsHook.data  ?? [];
-  const rawResults      = resultsHook.data    ?? [];
-  const rawProduction   = productionHook.data ?? [];
-  const rawPaidHours    = paidHoursHook.data  ?? [];
-  const smhList         = smhLookupHook.data  ?? [];
+  const rawWeekly = weeklyHook.data ?? [];
+  const workcellConfigs = workcellsHook.data ?? [];
+  const rawResults = resultsHook.data ?? [];
+  const rawProduction = productionHook.data ?? [];
+  const rawPaidHours = paidHoursHook.data ?? [];
+  const smhList = smhLookupHook.data ?? [];
 
   const smhMap = useMemo(() => {
     const m = new Map<string, number>();
@@ -108,15 +224,15 @@ export default function OLEWorkcell4() {
   // ── Initialise from URL params passed by Home4 ──────────────────────────────
   const initWeek = searchParams.get('week') ? Number(searchParams.get('week')) : null;
   const initFrom = searchParams.get('from') ?? '';
-  const initTo   = searchParams.get('to')   ?? '';
+  const initTo = searchParams.get('to') ?? '';
 
   // ── Filter state ─────────────────────────────────────────────────────────────
-  const [workcell, setWorkcell]         = useState<string>(decodeURIComponent(paramWc ?? ''));
+  const [workcell, setWorkcell] = useState<string>(decodeURIComponent(paramWc ?? ''));
   const [selectedWeek, setSelectedWeek] = useState<number | null>(initWeek);
-  const [dateFrom, setDateFrom]         = useState<string>(initFrom);
-  const [dateTo, setDateTo]             = useState<string>(initTo);
-  const [tableTab, setTableTab]         = useState<'labor' | 'production'>('labor');
-  const [expandedShifts, setExpandedShifts] = useState<Set<string>>(new Set());
+  const [dateFrom, setDateFrom] = useState<string>(initFrom);
+  const [dateTo, setDateTo] = useState<string>(initTo);
+  const [tableTab, setTableTab] = useState<'labor' | 'production'>('labor');
+  const [drawerShift, setDrawerShift] = useState<ShiftDrawerData | null>(null);
 
   function selectWeek(w: WeekRow) {
     setSelectedWeek(w.isoWeek);
@@ -124,7 +240,7 @@ export default function OLEWorkcell4() {
     setDateTo(w.end);
   }
   function handleDateFrom(val: string) { setDateFrom(val); setSelectedWeek(null); }
-  function handleDateTo(val: string)   { setDateTo(val);   setSelectedWeek(null); }
+  function handleDateTo(val: string) { setDateTo(val); setSelectedWeek(null); }
 
   const weekLabel = selectedWeek !== null
     ? `WW${String(selectedWeek).padStart(2, '0')}` : 'Custom';
@@ -138,7 +254,7 @@ export default function OLEWorkcell4() {
         ((!dateFrom || r.week_start_date <= dateTo) && (!dateTo || r.week_end_date >= dateFrom));
       return inDate;
     })
-  , [rawWeekly, workcell, dateFrom, dateTo, selectedWeek]);
+    , [rawWeekly, workcell, dateFrom, dateTo, selectedWeek]);
 
   // ── Aggregates ───────────────────────────────────────────────────────────────
   const agg = useMemo(() => aggregateWcWeekly(filteredWeekly), [filteredWeekly]);
@@ -149,27 +265,29 @@ export default function OLEWorkcell4() {
       .filter(r => r.workcell === workcell)
       .sort((a, b) => a.iso_week - b.iso_week)
       .map(r => ({ w: `WW${String(r.iso_week).padStart(2, '0')}`, isoWeek: r.iso_week, ole: r.ole_pct ?? 0 }))
-  , [rawWeekly, workcell]);
+    , [rawWeekly, workcell]);
 
   // ── MH breakdown for selected workcell ────────────────────────────────────
-  const mh = { total_input_hours: agg.total_input_hours, slices: [
-    { name: 'Output SMH',    value: agg.total_output_smh,                                   color: '#22c55e' },
-    { name: 'Unaccounted',   value: Math.max(0, agg.total_input_hours - agg.total_output_smh), color: '#94a3b8' },
-  ]};
+  const mh = {
+    total_input_hours: agg.total_input_hours, slices: [
+      { name: 'Output SMH', value: agg.total_output_smh, color: '#22c55e' },
+      { name: 'Unaccounted', value: Math.max(0, agg.total_input_hours - agg.total_output_smh), color: '#94a3b8' },
+    ]
+  };
 
   const flaggedCount = useMemo(() =>
     rawResults.filter(r => r.workcell === workcell && r.data_quality !== 'OK').length
-  , [rawResults, workcell]);
+    , [rawResults, workcell]);
 
   const laborRows = useMemo(() =>
     rawResults.filter(r => {
       if (r.workcell !== workcell) return false;
       if (selectedWeek !== null) return filteredWeekly.some(w => r.date >= w.week_start_date && r.date <= w.week_end_date);
       if (dateFrom && r.date < dateFrom) return false;
-      if (dateTo   && r.date > dateTo)   return false;
+      if (dateTo && r.date > dateTo) return false;
       return true;
     })
-  , [rawResults, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
+    , [rawResults, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
 
   const paidHoursByKey = useMemo(() => {
     const map = new Map<string, typeof rawPaidHours>();
@@ -186,78 +304,88 @@ export default function OLEWorkcell4() {
       if (r.workcell !== workcell) return false;
       if (selectedWeek !== null) return filteredWeekly.some(w => r.date >= w.week_start_date && r.date <= w.week_end_date);
       if (dateFrom && r.date < dateFrom) return false;
-      if (dateTo   && r.date > dateTo)   return false;
+      if (dateTo && r.date > dateTo) return false;
       return true;
     })
-  , [rawProduction, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
+    , [rawProduction, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
 
-  const siteOle    = agg.ole_pct;
+  const siteOle = agg.ole_pct;
   const siteStatus = getOleStatus(siteOle);
-  const siteColor  = oleColor(siteOle);
-  const oles       = wcWeekly.map(d => d.ole).filter(Boolean);
-  const yMin       = oles.length ? Math.max(0, Math.floor(Math.min(...oles) / 10) * 10 - 10) : 0;
-  const yMax       = oles.length ? Math.ceil(Math.max(...oles) / 10) * 10 + 10 : 100;
+  const siteColor = oleColor(siteOle);
+  const oles = wcWeekly.map(d => d.ole).filter(Boolean);
+  const yMin = oles.length ? Math.max(0, Math.floor(Math.min(...oles) / 10) * 10 - 10) : 0;
+  const yMax = oles.length ? Math.ceil(Math.max(...oles) / 10) * 10 + 10 : 100;
 
   // WoW trend
-  const last2     = wcWeekly.slice(-2);
-  const trendUp   = last2.length === 2 && last2[1].ole > last2[0].ole;
+  const last2 = wcWeekly.slice(-2);
+  const trendUp = last2.length === 2 && last2[1].ole > last2[0].ole;
   const trendDiff = last2.length === 2 ? Math.abs(last2[1].ole - last2[0].ole).toFixed(1) : null;
 
   // Logo
-  const k    = workcell.toLowerCase().replace(/[^a-z]/g, '');
-  const lk   = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
+  const k = workcell.toLowerCase().replace(/[^a-z]/g, '');
+  const lk = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
   const logo = lk ? WORKCELL_LOGOS[lk] : null;
 
   return (
     <div className="relative">
+      {drawerShift && <ShiftDrawer data={drawerShift} onClose={() => setDrawerShift(null)} />}
 
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
-        <div className="px-6 py-2 flex items-center gap-3 flex-wrap">
-
-          {/* Back */}
+        <div className="px-6 py-3 flex items-center gap-3">
           <button onClick={() => navigate('/ole/home4')}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors mr-1">
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             ← Home
           </button>
-
-          {/* Workcell */}
-          <Select value={workcell} onValueChange={setWorkcell}>
-            <SelectTrigger className="h-8 w-[200px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {workcellNames.map(w => (
-                <SelectItem key={w} value={w}>{w}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Week */}
-          <Select
-            value={selectedWeek !== null ? String(selectedWeek) : 'custom'}
-            onValueChange={(v) => {
-              if (v === 'custom') return;
-              const found = weeks.find(w => w.isoWeek === Number(v));
-              if (found) selectWeek(found);
-            }}
-          >
-            <SelectTrigger className="h-8 w-[110px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {selectedWeek === null && <SelectItem value="custom">All Weeks</SelectItem>}
-              {weeks.map(w => (
-                <SelectItem key={w.isoWeek} value={String(w.isoWeek)}>{w.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <DatePickerField id="wc4-from" label="" value={dateFrom} onChange={handleDateFrom} />
-          <DatePickerField id="wc4-to"   label="" value={dateTo}   onChange={handleDateTo} />
+          <span className="text-sm font-bold text-foreground">{workcell}</span>
         </div>
       </div>
 
-      <div className="p-5 flex gap-5" style={{ minHeight: 'calc(100vh - 48px)' }}>
+      {/* ── Filter bar ── */}
+      <div className="px-5 pt-4 pb-3 flex items-center gap-3 flex-wrap border-b border-border">
+        <Select value={workcell} onValueChange={setWorkcell}>
+          <SelectTrigger className="h-8 w-[200px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {workcellNames.map(w => (
+              <SelectItem key={w} value={w}>{w}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={selectedWeek !== null ? String(selectedWeek) : 'custom'}
+          onValueChange={(v) => {
+            if (v === 'custom') return;
+            const found = weeks.find(w => w.isoWeek === Number(v));
+            if (found) selectWeek(found);
+          }}
+        >
+          <SelectTrigger className="h-8 w-[110px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {selectedWeek === null && <SelectItem value="custom">All Weeks</SelectItem>}
+            {weeks.map(w => (
+              <SelectItem key={w.isoWeek} value={String(w.isoWeek)}>{w.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <DatePickerField id="wc4-from" label="" value={dateFrom} onChange={handleDateFrom} />
+        <DatePickerField id="wc4-to" label="" value={dateTo} onChange={handleDateTo} />
+
+        {(selectedWeek !== null || dateFrom || dateTo) && (
+          <button
+            onClick={() => { setSelectedWeek(null); setDateFrom(''); setDateTo(''); }}
+            className="h-8 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className="p-5 flex gap-5" style={{ height: 'calc(100vh - 137px)' }}>
 
         {/* ── LEFT COLUMN ── */}
-        <div className="w-[300px] flex-shrink-0 flex flex-col gap-4">
+        <div className="w-[300px] flex-shrink-0 flex flex-col gap-4 overflow-y-auto">
 
           {/* Workcell OLE hero */}
           <div className="rounded-xl border border-border bg-card p-5">
@@ -350,7 +478,7 @@ export default function OLEWorkcell4() {
         </div>
 
         {/* ── RIGHT COLUMN ── */}
-        <div className="flex-1 flex flex-col gap-4 min-w-0">
+        <div className="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
 
           {/* Weekly chart */}
           <div className="rounded-xl border border-border bg-card p-4">
@@ -384,7 +512,7 @@ export default function OLEWorkcell4() {
                   <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer">
                     {wcWeekly.map((d, i) => {
                       const isSelected = d.isoWeek === selectedWeek;
-                      const baseColor  = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
                       return <Cell key={i} fill={baseColor} opacity={isSelected ? 1 : 0.4} />;
                     })}
                   </Bar>
@@ -394,7 +522,7 @@ export default function OLEWorkcell4() {
           </div>
 
           {/* Data table with Labor / Production toggle */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden flex-1">
+          <div className="rounded-xl border border-border bg-card overflow-hidden flex-1 min-h-0 flex flex-col">
 
             {/* Table header + toggle */}
             <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
@@ -416,13 +544,13 @@ export default function OLEWorkcell4() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
 
               {/* ── LABOR INPUT ── */}
               {tableTab === 'labor' && (
                 <>
                   {/* Header */}
-                  <div className="grid bg-muted/40 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
+                  <div className={`grid bg-muted/40 ${TH} text-muted-foreground uppercase tracking-wider font-semibold border-b border-border`}
                     style={{ gridTemplateColumns: LABOR_GT }}>
                     {['', 'Date', 'Shift', 'OLE %', 'SMH Cov.', 'Output SMH', 'Input Hrs', 'Qty', 'Assemblies'].map(h => (
                       <div key={h} className="px-3 py-2">{h}</div>
@@ -432,70 +560,53 @@ export default function OLEWorkcell4() {
                   {laborRows.length === 0
                     ? <div className="py-8 text-center text-[10px] text-muted-foreground">No labor data</div>
                     : laborRows.map((row) => {
-                      const key      = `${row.workcell}|${row.date}|${row.shift}`;
-                      const expanded = expandedShifts.has(key);
-                      const status   = getOleStatus(row.ole_pct);
-                      const empRows  = paidHoursByKey.get(key) ?? [];
+                      const key = `${row.workcell}|${row.date}|${row.shift}`;
+                      const status = getOleStatus(row.ole_pct);
+                      const empRows = paidHoursByKey.get(key) ?? [];
                       return (
-                        <div key={key} className="border-b border-border last:border-0">
-                          <div
-                            className="grid items-center hover:bg-muted/30 transition-colors cursor-pointer"
-                            style={{ gridTemplateColumns: LABOR_GT, height: 44 }}
-                            onClick={() => empRows.length > 0 && setExpandedShifts(prev => {
-                              const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;
-                            })}
-                          >
-                            {/* expand toggle */}
-                            <div className="px-3 flex items-center justify-center text-muted-foreground">
-                              {empRows.length > 0
-                                ? expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                                : null}
-                            </div>
-                            <div className="px-3 font-mono text-[9px] text-foreground">{fmtDate(row.date)}</div>
-                            <div className="px-3 text-[9px] font-mono font-semibold text-foreground">{shiftLabel(row.shift)}</div>
-                            <div className="px-3">
-                              <span className={cn('text-sm font-mono font-bold', OLE_COLOR[status])}>
-                                {row.ole_pct !== null ? `${row.ole_pct}%` : '—'}
-                              </span>
-                            </div>
-                            <div className="px-3">
-                              <span className={cn('text-[9px] font-mono font-semibold',
-                                (row.smh_coverage_pct ?? 0) >= 90 ? 'text-emerald-400' :
-                                (row.smh_coverage_pct ?? 0) >= 70 ? 'text-amber-400' : 'text-red-400'
-                              )}>{row.smh_coverage_pct !== null ? `${row.smh_coverage_pct}%` : '—'}</span>
-                            </div>
-                            <div className="px-3 font-mono text-[9px] text-foreground">{row.effective_output_smh.toFixed(2)}</div>
-                            <div className="px-3 font-mono text-[9px] text-foreground">{row.total_input_hours.toFixed(2)}</div>
-                            <div className="px-3 font-mono text-[9px] text-foreground">{row.total_qty.toLocaleString()}</div>
-                            <div className="px-3 font-mono text-[9px] text-foreground">{row.assembly_count}</div>
+                        <div
+                          key={key}
+                          className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                          style={{ gridTemplateColumns: LABOR_GT, height: ROW_H }}
+                          onClick={() => setDrawerShift({
+                            workcell: row.workcell,
+                            date: row.date,
+                            shift: row.shift,
+                            ole_pct: row.ole_pct,
+                            smh_coverage_pct: row.smh_coverage_pct,
+                            effective_output_smh: row.effective_output_smh,
+                            total_input_hours: row.total_input_hours,
+                            total_qty: row.total_qty,
+                            assembly_count: row.assembly_count,
+                            employees: empRows.map(e => ({
+                              name: e.name,
+                              value_type: e.value_type,
+                              thc_direct: e.thc_direct,
+                              tph_direct: e.tph_direct,
+                              total_input_hours: e.total_input_hours,
+                            })),
+                          })}
+                        >
+                          <div className="px-3 flex items-center justify-center">
+                            <Users className="w-3.5 h-3.5 text-muted-foreground/50" />
                           </div>
-
-                          {/* Employee sub-rows */}
-                          {expanded && empRows.length > 0 && (
-                            <div className="bg-muted/20 border-t border-border/50">
-                              <div className="grid text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border/30"
-                                style={{ gridTemplateColumns: '3rem 1fr 5rem 5rem 6rem 7rem' }}>
-                                {['', 'Employee', 'Type', 'HC', 'Direct Hrs', 'Total Input'].map(h => (
-                                  <div key={h} className="px-3 py-1.5">{h}</div>
-                                ))}
-                              </div>
-                              {empRows.map((emp, ei) => (
-                                <div key={ei} className="grid items-center text-[9px] border-b border-border/20 last:border-0 hover:bg-muted/30"
-                                  style={{ gridTemplateColumns: '3rem 1fr 5rem 5rem 6rem 7rem', height: 36 }}>
-                                  <div className="px-3 text-center text-muted-foreground font-mono">{ei + 1}</div>
-                                  <div className="px-3 text-foreground truncate">{emp.name || '—'}</div>
-                                  <div className="px-3 flex justify-center">
-                                    <span className={cn('text-[8px] font-semibold px-1.5 py-0.5 rounded-full border',
-                                      emp.value_type === 'VA' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-red-500/15 text-red-400 border-red-500/30'
-                                    )}>{emp.value_type}</span>
-                                  </div>
-                                  <div className="px-3 text-center font-mono text-foreground">{emp.thc_direct}</div>
-                                  <div className="px-3 text-center font-mono text-foreground">{emp.tph_direct.toFixed(2)}</div>
-                                  <div className="px-3 text-center font-mono font-semibold text-foreground">{emp.total_input_hours.toFixed(2)}</div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>{fmtDate(row.date)}</div>
+                          <div className={`px-3 ${TD} font-mono font-semibold text-foreground`}>{shiftLabel(row.shift)}</div>
+                          <div className="px-3">
+                            <span className={cn('text-sm font-mono font-bold', OLE_COLOR[status])}>
+                              {row.ole_pct !== null ? `${row.ole_pct}%` : '—'}
+                            </span>
+                          </div>
+                          <div className="px-3">
+                            <span className={cn(`${TD} font-mono font-semibold`,
+                              (row.smh_coverage_pct ?? 0) >= 90 ? 'text-emerald-400' :
+                                (row.smh_coverage_pct ?? 0) >= 70 ? 'text-amber-400' : 'text-red-400'
+                            )}>{row.smh_coverage_pct !== null ? `${row.smh_coverage_pct}%` : '—'}</span>
+                          </div>
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>{row.effective_output_smh.toFixed(2)}</div>
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>{row.total_input_hours.toFixed(2)}</div>
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>{row.total_qty.toLocaleString()}</div>
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>{row.assembly_count}</div>
                         </div>
                       );
                     })
@@ -506,7 +617,7 @@ export default function OLEWorkcell4() {
               {/* ── PRODUCTION OUTPUT ── */}
               {tableTab === 'production' && (
                 <>
-                  <div className="grid bg-muted/40 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
+                  <div className={`grid bg-muted/40 ${TH} text-muted-foreground uppercase tracking-wider font-semibold border-b border-border`}
                     style={{ gridTemplateColumns: PROD_GT }}>
                     {['#', 'Date', 'Shift', 'Stage', 'Assembly', 'Qty', 'SMH/unit', 'Output SMH'].map(h => (
                       <div key={h} className="px-3 py-2">{h}</div>
@@ -516,21 +627,21 @@ export default function OLEWorkcell4() {
                   {prodRows.length === 0
                     ? <div className="py-8 text-center text-[10px] text-muted-foreground">No production data</div>
                     : prodRows.map((row, idx) => {
-                      const smhUnit   = smhMap.get(`${row.workcell}|${row.assembly}`) ?? null;
+                      const smhUnit = smhMap.get(`${row.workcell}|${row.assembly}`) ?? null;
                       const outputSmh = smhUnit !== null ? row.qty * smhUnit : null;
                       return (
                         <div key={idx} className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                          style={{ gridTemplateColumns: PROD_GT, height: 44 }}>
-                          <div className="px-3 text-[9px] text-muted-foreground font-mono">{idx + 1}</div>
-                          <div className="px-3 font-mono text-[9px] text-foreground">{fmtDate(row.date)}</div>
-                          <div className="px-3 font-mono text-[9px] font-semibold text-foreground">{shiftLabel(row.shift)}</div>
-                          <div className="px-3 text-[9px] text-muted-foreground">{row.sub_workcell}</div>
-                          <div className="px-3 font-mono text-[9px] text-foreground truncate" title={row.assembly}>{row.assembly}</div>
-                          <div className="px-3 font-mono text-[9px] font-semibold text-foreground">{row.qty.toLocaleString()}</div>
-                          <div className="px-3 font-mono text-[9px] text-foreground">
+                          style={{ gridTemplateColumns: PROD_GT, height: ROW_H }}>
+                          <div className={`px-3 ${TD} text-muted-foreground font-mono`}>{idx + 1}</div>
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>{fmtDate(row.date)}</div>
+                          <div className={`px-3 font-mono ${TD} font-semibold text-foreground`}>{shiftLabel(row.shift)}</div>
+                          <div className={`px-3 ${TD} text-muted-foreground`}>{row.sub_workcell}</div>
+                          <div className={`px-3 font-mono ${TD} text-foreground truncate`} title={row.assembly}>{row.assembly}</div>
+                          <div className={`px-3 font-mono ${TD} font-semibold text-foreground`}>{row.qty.toLocaleString()}</div>
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>
                             {smhUnit !== null ? smhUnit.toFixed(4) : <span className="text-muted-foreground/50">—</span>}
                           </div>
-                          <div className="px-3 font-mono text-[9px] font-semibold text-foreground">
+                          <div className={`px-3 font-mono ${TD} font-semibold text-foreground`}>
                             {outputSmh !== null ? outputSmh.toFixed(2) : <span className="text-muted-foreground/50">—</span>}
                           </div>
                         </div>

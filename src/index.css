@@ -89,6 +89,12 @@
     --sidebar-accent-foreground: 0 0% 95%;
     --sidebar-border: 220 22% 14%;
   }
+  .maplibregl-popup-content {
+    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+  }
+  .maplibregl-popup-tip {
+    @apply hidden!;
+  }
 }
 
 @layer base {
@@ -134,4 +140,13 @@
 }
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* Strip mapcn popup shell — background, border, padding, shadow all removed */
+.maplibregl-popup-content {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
 }

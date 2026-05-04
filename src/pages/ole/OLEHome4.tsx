@@ -1,21 +1,22 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useOleWeekly, useOleWorkcells } from '@/hooks/useOleData';
+import type { OleWeeklyResult } from '@/lib/oleApi';
 import {
-  OLE_COLOR, STATUS_BADGE, STATUS_LABEL,
-  WORKCELL_LOGOS, fmtDate,
-  getOleStatus, oleColor,
-  shiftLabel, OLE_TARGET,
+  OLE_COLOR,
+  OLE_TARGET,
+  STATUS_BADGE, STATUS_LABEL,
+  WORKCELL_LOGOS,
+  getOleStatus, oleColor
 } from '@/lib/oleConstants';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle,
-  ChevronRight,
   Info,
   TrendingDown,
-  TrendingUp,
+  TrendingUp
 } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DatePickerField } from './OLEFilters';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Bar,
   CartesianGrid,
@@ -26,8 +27,7 @@ import {
   Tooltip,
   XAxis, YAxis,
 } from 'recharts';
-import { useOleWeekly, useOleWorkcells } from '@/hooks/useOleData';
-import type { OleWeeklyResult } from '@/lib/oleApi';
+import { DatePickerField } from './OLEFilters';
 
 const TT = {
   background: 'hsl(var(--card))',
@@ -60,11 +60,11 @@ function aggregateFromWeekly(rows: OleWeeklyResult[]) {
       };
     }
     const m = map[r.workcell];
-    m.total_output_smh  += r.total_output_smh;
+    m.total_output_smh += r.total_output_smh;
     m.total_input_hours += r.total_input_hours;
-    m.total_qty         += r.total_qty;
-    m.total_shifts      += r.shift_count;
-    m.flagged_shifts    += r.shifts_flagged;
+    m.total_qty += r.total_qty;
+    m.total_shifts += r.shift_count;
+    m.flagged_shifts += r.shifts_flagged;
   });
   return Object.values(map);
 }
@@ -74,17 +74,19 @@ function aggregateFromWeekly(rows: OleWeeklyResult[]) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function OLEHome4() {
-  const navigate   = useNavigate();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const weekBarRef = useRef<HTMLDivElement>(null);
-  const [plant, setPlant] = useState<'all' | 'Plant 1' | 'Plant 2'>('all');
+  const initialPlant = (searchParams.get('plant') ?? 'all') as 'all' | 'Plant 1' | 'Plant 2';
+  const [plant, setPlant] = useState<'all' | 'Plant 1' | 'Plant 2'>(initialPlant);
 
   // ── Live data ───────────────────────────────────────────────────────────────
-  const weeklyHook     = useOleWeekly();
-  const workcellsHook  = useOleWorkcells();
+  const weeklyHook = useOleWeekly();
+  const workcellsHook = useOleWorkcells();
 
-  const rawWeekly       = weeklyHook.data    ?? [];
+  const rawWeekly = weeklyHook.data ?? [];
   const workcellConfigs = workcellsHook.data ?? [];
-  const isLoading       = weeklyHook.loading && rawWeekly.length === 0;
+  const isLoading = weeklyHook.loading && rawWeekly.length === 0;
 
   // ── Derive week list from live data ─────────────────────────────────────────
   const weeks = useMemo((): WeekRow[] => {
@@ -95,9 +97,9 @@ export default function OLEHome4() {
         seen.add(r.week_label);
         list.push({
           isoWeek: r.iso_week,
-          label:   `WW${String(r.iso_week).padStart(2, '0')}`,
-          start:   r.week_start_date,
-          end:     r.week_end_date,
+          label: `WW${String(r.iso_week).padStart(2, '0')}`,
+          start: r.week_start_date,
+          end: r.week_end_date,
         });
       }
     });
@@ -105,9 +107,21 @@ export default function OLEHome4() {
   }, [rawWeekly]);
 
   // ── Filter state ────────────────────────────────────────────────────────────
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
-  const [dateFrom, setDateFrom]         = useState<string>('');
-  const [dateTo, setDateTo]             = useState<string>('');
+  const initWeek = searchParams.get('week') ? Number(searchParams.get('week')) : null;
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(initWeek);
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+
+  // Once weeks load, seed dateFrom/dateTo from the URL week param
+  useEffect(() => {
+    if (!initWeek || !weeks.length) return;
+    const found = weeks.find(w => w.isoWeek === initWeek);
+    if (found && !dateFrom && !dateTo) {
+      setDateFrom(found.start);
+      setDateTo(found.end);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weeks]);
 
   function selectWeek(w: WeekRow) {
     setSelectedWeek(w.isoWeek);
@@ -115,7 +129,7 @@ export default function OLEHome4() {
     setDateTo(w.end);
   }
   function handleDateFrom(val: string) { setDateFrom(val); setSelectedWeek(null); }
-  function handleDateTo(val: string)   { setDateTo(val);   setSelectedWeek(null); }
+  function handleDateTo(val: string) { setDateTo(val); setSelectedWeek(null); }
 
   // ── Filter by date + plant ──────────────────────────────────────────────────
   const filteredWeekly = useMemo(() => {
@@ -142,14 +156,14 @@ export default function OLEHome4() {
   // ── Site aggregate ───────────────────────────────────────────────────────────
   const site = useMemo(() => {
     const totalOut = workcellsSorted.reduce((s, r) => s + r.total_output_smh, 0);
-    const totalIn  = workcellsSorted.reduce((s, r) => s + r.total_input_hours, 0);
+    const totalIn = workcellsSorted.reduce((s, r) => s + r.total_input_hours, 0);
     return {
-      ole_pct:           totalIn > 0 ? (totalOut / totalIn) * 100 : 0,
-      total_output_smh:  totalOut,
+      ole_pct: totalIn > 0 ? (totalOut / totalIn) * 100 : 0,
+      total_output_smh: totalOut,
       total_input_hours: totalIn,
-      total_qty:         workcellsSorted.reduce((s, r) => s + r.total_qty, 0),
-      total_shifts:      workcellsSorted.reduce((s, r) => s + r.total_shifts, 0),
-      flagged_shifts:    workcellsSorted.reduce((s, r) => s + r.flagged_shifts, 0),
+      total_qty: workcellsSorted.reduce((s, r) => s + r.total_qty, 0),
+      total_shifts: workcellsSorted.reduce((s, r) => s + r.total_shifts, 0),
+      flagged_shifts: workcellsSorted.reduce((s, r) => s + r.flagged_shifts, 0),
     };
   }, [workcellsSorted]);
 
@@ -178,9 +192,9 @@ export default function OLEHome4() {
     return Object.values(byWeek)
       .sort((a, b) => a.week - b.week)
       .map(w => ({
-        w:       `WW${String(w.week).padStart(2, '0')}`,
+        w: `WW${String(w.week).padStart(2, '0')}`,
         isoWeek: w.week,
-        ole:     w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : 0,
+        ole: w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : 0,
       }));
   }, [rawWeekly, plant, workcellConfigs]);
 
@@ -188,22 +202,22 @@ export default function OLEHome4() {
   const attention = useMemo(() =>
     workcellsSorted.slice(0, 3).filter(r => r.ole_pct < OLE_TARGET).map(r => ({
       workcell: r.workcell,
-      ole_pct:  r.ole_pct,
+      ole_pct: r.ole_pct,
       severity: r.ole_pct < 45 ? 'high' as const : 'medium' as const,
-      message:  r.ole_pct < 45 ? 'OLE critically below target' : 'OLE below target',
-      value:    `${r.ole_pct.toFixed(1)}%`,
-      flagged:  r.flagged_shifts,
+      message: r.ole_pct < 45 ? 'OLE critically below target' : 'OLE below target',
+      value: `${r.ole_pct.toFixed(1)}%`,
+      flagged: r.flagged_shifts,
     }))
-  , [workcellsSorted]);
+    , [workcellsSorted]);
 
   const hasFilters = selectedWeek !== null || plant !== 'all' || !!dateFrom || !!dateTo;
 
-  const last2     = siteWeekly.slice(-2);
-  const trendUp   = last2.length === 2 && last2[1].ole > last2[0].ole;
+  const last2 = siteWeekly.slice(-2);
+  const trendUp = last2.length === 2 && last2[1].ole > last2[0].ole;
   const trendDiff = last2.length === 2 ? Math.abs(last2[1].ole - last2[0].ole).toFixed(1) : null;
-  const siteOle    = site.ole_pct;
+  const siteOle = site.ole_pct;
   const siteStatus = getOleStatus(siteOle);
-  const siteColor  = oleColor(siteOle);
+  const siteColor = oleColor(siteOle);
   const oles = siteWeekly.map(d => d.ole).filter(Boolean);
   const yMin = 0;
   const yMax = oles.length ? Math.ceil(Math.max(...oles) / 10) * 10 + 10 : 100;
@@ -216,46 +230,8 @@ export default function OLEHome4() {
 
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
-        <div className="px-6 py-2 flex items-center gap-3 flex-wrap">
-          <span className="text-sm font-bold text-foreground mr-2">OLE Overview</span>
-
-          <Select value={plant} onValueChange={(v) => setPlant(v as 'all' | 'Plant 1' | 'Plant 2')}>
-            <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Plant" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Plants</SelectItem>
-              <SelectItem value="Plant 1">Plant 1</SelectItem>
-              <SelectItem value="Plant 2">Plant 2</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={selectedWeek !== null ? String(selectedWeek) : 'all'}
-            onValueChange={(v) => {
-              if (v === 'all') { setSelectedWeek(null); setDateFrom(''); setDateTo(''); return; }
-              const found = weeks.find(w => w.isoWeek === Number(v));
-              if (found) selectWeek(found);
-            }}
-          >
-            <SelectTrigger className="h-8 w-[110px]"><SelectValue placeholder="Week" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Weeks</SelectItem>
-              {weeks.map(w => (
-                <SelectItem key={w.isoWeek} value={String(w.isoWeek)}>{w.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <DatePickerField id="home4-from" label="" value={dateFrom} onChange={handleDateFrom} />
-          <DatePickerField id="home4-to"   label="" value={dateTo}   onChange={handleDateTo} />
-
-          {hasFilters && (
-            <button
-              onClick={() => { setPlant('all'); setSelectedWeek(null); setDateFrom(''); setDateTo(''); }}
-              className="h-9 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-colors whitespace-nowrap"
-            >
-              Clear all
-            </button>
-          )}
+        <div className="px-6 py-3 flex items-center">
+          <span className="text-sm font-bold text-foreground">OLE Overview</span>
         </div>
       </div>
 
@@ -265,7 +241,47 @@ export default function OLEHome4() {
         </div>
       )}
 
-      <div className="p-5 flex gap-5" style={{ minHeight: 'calc(100vh - 48px)' }}>
+      <div className="px-5 pt-4 pb-3 flex items-center gap-3 flex-wrap border-b border-border">
+        <Select value={plant} onValueChange={(v) => setPlant(v as 'all' | 'Plant 1' | 'Plant 2')}>
+          <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Plant" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Plants</SelectItem>
+            <SelectItem value="Plant 1">Plant 1</SelectItem>
+            <SelectItem value="Plant 2">Plant 2</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={selectedWeek !== null ? String(selectedWeek) : 'all'}
+          onValueChange={(v) => {
+            if (v === 'all') { setSelectedWeek(null); setDateFrom(''); setDateTo(''); return; }
+            const found = weeks.find(w => w.isoWeek === Number(v));
+            if (found) selectWeek(found);
+          }}
+        >
+          <SelectTrigger className="h-8 w-[110px]"><SelectValue placeholder="Week" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Weeks</SelectItem>
+            {weeks.map(w => (
+              <SelectItem key={w.isoWeek} value={String(w.isoWeek)}>{w.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <DatePickerField id="home4-from" label="" value={dateFrom} onChange={handleDateFrom} />
+        <DatePickerField id="home4-to" label="" value={dateTo} onChange={handleDateTo} />
+
+        {hasFilters && (
+          <button
+            onClick={() => { setPlant('all'); setSelectedWeek(null); setDateFrom(''); setDateTo(''); }}
+            className="h-8 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-colors whitespace-nowrap"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+
+      <div className="p-5 flex gap-5">
 
         {/* ── LEFT COLUMN ── */}
         <div className="w-[340px] flex-shrink-0 flex flex-col gap-4">
@@ -275,7 +291,7 @@ export default function OLEHome4() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold">
-                  Site OLE · {weekLabel}
+                  {plant} · {weekLabel}
                 </p>
                 <p className="text-5xl font-mono font-black mt-1 leading-none" style={{ color: siteColor }}>
                   {siteOle.toFixed(1)}%
@@ -351,8 +367,8 @@ export default function OLEHome4() {
             <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider mb-3">Hours Distribution</p>
             <div className="space-y-2">
               {[
-                { name: 'Output SMH',  value: site.total_output_smh,                                        color: '#22c55e' },
-                { name: 'Unaccounted', value: Math.max(0, site.total_input_hours - site.total_output_smh),  color: '#94a3b8' },
+                { name: 'Output SMH', value: site.total_output_smh, color: '#22c55e' },
+                { name: 'Unaccounted', value: Math.max(0, site.total_input_hours - site.total_output_smh), color: '#94a3b8' },
               ].map(s => (
                 <div key={s.name} className="w-full flex items-center gap-2 px-1 py-0.5">
                   <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: s.color }} />
@@ -366,7 +382,7 @@ export default function OLEHome4() {
           </div>
 
           {/* Attention items */}
-          {attention.length > 0 && (
+          {/* {attention.length > 0 && (
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <div className="px-4 py-2.5 border-b border-border">
                 <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Attention</p>
@@ -395,7 +411,7 @@ export default function OLEHome4() {
                 </button>
               ))}
             </div>
-          )}
+          )} */}
         </div>
 
         {/* ── RIGHT COLUMN ── */}
@@ -424,7 +440,7 @@ export default function OLEHome4() {
                   margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
                   onClick={(d) => {
                     if (!d?.activePayload) return;
-                    const iw    = d.activePayload[0]?.payload?.isoWeek;
+                    const iw = d.activePayload[0]?.payload?.isoWeek;
                     const found = weeks.find(w => w.isoWeek === iw);
                     if (found) selectWeek(found);
                   }}
@@ -438,7 +454,7 @@ export default function OLEHome4() {
                   <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer">
                     {siteWeekly.map((d, i) => {
                       const isSelected = d.isoWeek === selectedWeek;
-                      const baseColor  = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
                       return (
                         <Cell
                           key={i}
@@ -456,7 +472,7 @@ export default function OLEHome4() {
           </div>
 
           {/* Workcell table */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden flex-1">
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
               <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">
                 Workcell Performance · {workcellsSorted.length} workcells · {weekLabel}
@@ -471,12 +487,12 @@ export default function OLEHome4() {
                 ))}
               </div>
               {workcellsSorted.map((wc, idx) => {
-                const st     = getOleStatus(wc.ole_pct);
-                const clr    = oleColor(wc.ole_pct);
+                const st = getOleStatus(wc.ole_pct);
+                const clr = oleColor(wc.ole_pct);
                 const wcConf = workcellConfigs.find(w => w.workcell === wc.workcell);
-                const k      = wc.workcell.toLowerCase().replace(/[^a-z]/g, '');
-                const lk     = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
-                const logo   = lk ? WORKCELL_LOGOS[lk] : null;
+                const k = wc.workcell.toLowerCase().replace(/[^a-z]/g, '');
+                const lk = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
+                const logo = lk ? WORKCELL_LOGOS[lk] : null;
                 return (
                   <div key={wc.workcell}
                     className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
@@ -493,7 +509,7 @@ export default function OLEHome4() {
                           const params = new URLSearchParams();
                           if (selectedWeek !== null) params.set('week', String(selectedWeek));
                           if (dateFrom) params.set('from', dateFrom);
-                          if (dateTo)   params.set('to',   dateTo);
+                          if (dateTo) params.set('to', dateTo);
                           if (plant !== 'all') params.set('plant', plant);
                           const qs = params.toString();
                           navigate(`/ole/wc4/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);

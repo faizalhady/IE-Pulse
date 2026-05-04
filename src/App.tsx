@@ -1,35 +1,35 @@
 import Sidebar from "@/components/layout/Sidebar";
-import { AppProvider } from "@/context/AppContext";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppProvider } from "@/context/AppContext";
 import BayDetail from "@/pages/BayDetail";
 import Documents from "@/pages/Documents";
+import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import FloorMap from "@/pages/FloorMap";
+import BayManagement from "@/pages/fsms/BayManagement";
+import LayoutEditor from "@/pages/fsms/LayoutEditor";
 import GlobalOverview from "@/pages/GlobalOverview";
+import IEBaseline from "@/pages/iebaseline/IEBaseline";
+import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
+import ModuleAdmin from "@/pages/iebaseline/ModuleAdmin";
+import ModuleOverview from "@/pages/iebaseline/ModuleOverview";
 import KioskMode from "@/pages/KioskMode";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
-import OLEOverview from "@/pages/ole/OLEOverview";
-import FourQGenerator from "@/pages/ole/FourQGenerator";
-import OLEWorkcell from "@/pages/ole/OLEWorkcell";
-import SMHStatus from "@/pages/ole/SMHStatus";
 import DowntimeManagement from "@/pages/ole/DowntimeManagement";
-import TransferManHour from "@/pages/ole/TransferManHour";
-import OLEWoWAnalysis from "@/pages/ole/OLEWoWAnalysis";
+import FourQGenerator from "@/pages/ole/FourQGenerator";
 import OLEHome1 from "@/pages/ole/OLEHome1";
 import OLEHome2 from "@/pages/ole/OLEHome2";
 import OLEHome3 from "@/pages/ole/OLEHome3";
 import OLEHome4 from "@/pages/ole/OLEHome4";
 import OLEHome5 from "@/pages/ole/OLEHome5";
+import OLEOverview from "@/pages/ole/OLEOverview";
+import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import OLEWorkcell4 from "@/pages/ole/OLEWorkcell4";
-import EBuildPlan from "@/pages/ebuild/eBuildPlan";
-import IEBaseline from "@/pages/iebaseline/IEBaseline";
-import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
-import ModuleOverview from "@/pages/iebaseline/ModuleOverview";
-import ModuleAdmin from "@/pages/iebaseline/ModuleAdmin";
-import LayoutEditor from "@/pages/fsms/LayoutEditor";
-import BayManagement from "@/pages/fsms/BayManagement";
+import OLEWoWAnalysis from "@/pages/ole/OLEWoWAnalysis";
+import SMHStatus from "@/pages/ole/SMHStatus";
+import TransferManHour from "@/pages/ole/TransferManHour";
 import OleMartApiTest from "@/pages/OleMartApiTest";
 import Plants from "@/pages/Plants";
 import Reports from "@/pages/Reports";
@@ -38,14 +38,15 @@ import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import MapPage from "./pages/MapPage";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-  <TooltipProvider>
-  <Toaster />
-  <Sonner />
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
       <BrowserRouter>
         <AppProvider>
           <Routes>
@@ -68,6 +69,7 @@ function AppShell() {
         <main className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<GlobalOverview />} />
+            <Route path="/map" element={<MapPage />} />
             <Route path="/workcells" element={<WorkcellsTable />} />
             <Route path="/workcell/:id" element={<WorkcellView />} />
             <Route path="/bay/:id" element={<BayDetail />} />
