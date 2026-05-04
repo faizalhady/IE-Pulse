@@ -861,15 +861,17 @@ export default function FourQGenerator() {
                 </div>
               </div>
 
+              {/* Q4 — Paynter Chart */}
+              <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
+                <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} isPrint />
+              </div>
+
               {/* Q3 — Improvement Plan */}
               <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
                 <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} isPrint />
               </div>
 
-              {/* Q4 — Paynter Chart */}
-              <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
-                <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} isPrint />
-              </div>
+
 
             </div>
           </div>
@@ -1429,7 +1431,7 @@ export default function FourQGenerator() {
                                     <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">{p}</p>
                                     <div className="flex flex-wrap gap-1.5">
                                       {byPlant[p]?.map(wc => (
-                                        <button key={wc} 
+                                        <button key={wc}
                                           onClick={() => setSelectedWorkcells(selectedWorkcells.includes(wc) ? selectedWorkcells.filter(x => x !== wc) : [...selectedWorkcells, wc])}
                                           className={cn('px-2 py-1 rounded-md border text-[10px] font-medium transition-all',
                                             selectedWorkcells.includes(wc) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
@@ -1443,8 +1445,8 @@ export default function FourQGenerator() {
                             </div>
                           )}
 
-                          <Button 
-                            onClick={handleGenerate} 
+                          <Button
+                            onClick={handleGenerate}
                             disabled={generating || (mode === 'plant' && !selectedPlant) || (mode === 'workcell' && selectedWorkcells.length === 0)}
                             className="w-full h-8 text-xs font-bold"
                           >
