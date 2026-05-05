@@ -31,8 +31,7 @@ type Theme = "light" | "dark";
 function getDocumentTheme(): Theme | null {
   if (typeof document === "undefined") return null;
   if (document.documentElement.classList.contains("dark")) return "dark";
-  if (document.documentElement.classList.contains("light")) return "light";
-  return null;
+  return "light"; // Absence of "dark" class implies light mode in this app
 }
 
 // Get system preference
