@@ -1,12 +1,12 @@
+import AppSwitcher from '@/components/layout/AppSwitcher';
 import { StatusDot } from '@/components/StatusIndicator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useApp } from '@/context/AppContext';
 import { useProductionSummary, useWorkcells } from '@/hooks/useMesData';
 import { cn } from '@/lib/utils';
 import { currentUser } from '@/mocks/data';
-import { useApp } from '@/context/AppContext';
-import AppSwitcher from '@/components/layout/AppSwitcher';
 import {
   ChevronDown,
   Factory, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun

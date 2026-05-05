@@ -198,19 +198,20 @@ function buildPareto(data: { name: string; value: number; color: string }[]): Pa
 
 function SetupStep({
   workcellConfigs, mode, setMode,
-  selectedPlant, setSelectedPlant,
+  selectedPlants, setSelectedPlants,
   selectedWorkcells, setSelectedWorkcells,
   onGenerate, generating,
   plants, byPlant
 }: {
   workcellConfigs: OleWorkcellConfig[];
   mode: SetupMode; setMode: (m: SetupMode) => void;
-  selectedPlant: string; setSelectedPlant: (p: string) => void;
+  selectedPlants: string[]; setSelectedPlants: (p: string[]) => void;
   selectedWorkcells: string[]; setSelectedWorkcells: (w: string[]) => void;
   onGenerate: () => void; generating: boolean;
   plants: string[]; byPlant: Record<string, string[]>;
 }) {
-  const canGen = (mode === 'plant' && !!selectedPlant) || (mode === 'workcell' && selectedWorkcells.length > 0);
+  const canGen = (mode === 'plant' && selectedPlants.length > 0) || (mode === 'workcell' && selectedWorkcells.length > 0);
+  const togglePlant = (p: string) => setSelectedPlants(selectedPlants.includes(p) ? selectedPlants.filter(x => x !== p) : [...selectedPlants, p]);
   const toggleWC = (wc: string) => setSelectedWorkcells(selectedWorkcells.includes(wc) ? selectedWorkcells.filter(x => x !== wc) : [...selectedWorkcells, wc]);
 
   return (
@@ -234,21 +235,23 @@ function SetupStep({
         </div>
         {mode === 'plant' && (
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Select Plant</Label>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Select Plants <span className="text-primary">({selectedPlants.length} selected)</span>
+            </Label>
             <div className="flex gap-3">
               {plants.map(p => (
-                <button key={p} onClick={() => setSelectedPlant(p)}
+                <button key={p} onClick={() => togglePlant(p)}
                   className={cn('flex-1 py-3 px-4 rounded-xl border text-sm font-semibold transition-all',
-                    selectedPlant === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
+                    selectedPlants.includes(p) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
                   {p}<p className="text-[10px] font-normal mt-0.5 opacity-70">{byPlant[p]?.length ?? 0} workcells</p>
                 </button>
               ))}
             </div>
-            {selectedPlant && (
+            {selectedPlants.length > 0 && (
               <div className="rounded-xl border border-border bg-muted/20 p-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Included workcells</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {byPlant[selectedPlant]?.map(wc => (
+                  {selectedPlants.flatMap(p => byPlant[p] ?? []).map(wc => (
                     <span key={wc} className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">{wc}</span>
                   ))}
                 </div>
@@ -719,7 +722,7 @@ export default function FourQGenerator() {
 
   const [workcellConfigs, setWorkcellConfigs] = useState<OleWorkcellConfig[]>([]);
   const [mode, setMode] = useState<SetupMode>('plant');
-  const [selectedPlant, setSelectedPlant] = useState('');
+  const [selectedPlants, setSelectedPlants] = useState<string[]>([]);
   const [selectedWorkcells, setSelectedWorkcells] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
 
@@ -770,13 +773,13 @@ export default function FourQGenerator() {
       } as OleWeeklyResult));
   }, [weeklyRows]);
 
-  const scopeWorkcells = mode === 'workcell' ? selectedWorkcells : [];
+  const scopeWorkcells = mode === 'workcell' ? selectedWorkcells : selectedPlants.flatMap(p => byPlant[p] ?? []);
 
   async function handleGenerate() {
     setGenerating(true);
     try {
       let rows: OleWeeklyResult[] = []; let label = '';
-      if (mode === 'plant') { rows = await oleApi.ole.weekly({ plant: selectedPlant }); label = selectedPlant; }
+      if (mode === 'plant') { const res = await Promise.all(selectedPlants.map(p => oleApi.ole.weekly({ plant: p }))); rows = res.flat(); label = selectedPlants.join(' + '); }
       else { const res = await Promise.all(selectedWorkcells.map(wc => oleApi.ole.weekly({ workcell: wc }))); rows = res.flat(); label = selectedWorkcells.join(', '); }
       setWeeklyRows(rows); setTrendScope(label);
 
@@ -854,7 +857,7 @@ export default function FourQGenerator() {
                   <Q2Section
                     aggregateRows={aggregateRows}
                     scopeWorkcells={scopeWorkcells}
-                    scopePlant={mode === 'plant' ? selectedPlant : ''}
+                    scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''}
                     compact
                     onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }}
                   />
@@ -863,7 +866,7 @@ export default function FourQGenerator() {
 
               {/* Q4 — Paynter Chart */}
               <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
-                <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} isPrint />
+                <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''} isPrint />
               </div>
 
               {/* Q3 — Improvement Plan */}
@@ -903,7 +906,7 @@ export default function FourQGenerator() {
         {tab === 'setup' && (
           <SetupStep
             workcellConfigs={workcellConfigs} mode={mode} setMode={setMode}
-            selectedPlant={selectedPlant} setSelectedPlant={setSelectedPlant}
+            selectedPlants={selectedPlants} setSelectedPlants={setSelectedPlants}
             selectedWorkcells={selectedWorkcells} setSelectedWorkcells={setSelectedWorkcells}
             onGenerate={handleGenerate} generating={generating}
             plants={plants} byPlant={byPlant}
@@ -941,7 +944,7 @@ export default function FourQGenerator() {
                   <Q2Section
                     aggregateRows={aggregateRows}
                     scopeWorkcells={scopeWorkcells}
-                    scopePlant={mode === 'plant' ? selectedPlant : ''}
+                    scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''}
                     onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }}
                   />
                 </section>
@@ -967,7 +970,7 @@ export default function FourQGenerator() {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlant : ''} />
+                    <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''} />
                   </div>
                 </section>
 
@@ -1407,12 +1410,14 @@ export default function FourQGenerator() {
 
                           {mode === 'plant' && (
                             <div className="space-y-2">
-                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Select Plant</Label>
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                Select Plants <span className="text-primary">({selectedPlants.length} selected)</span>
+                              </Label>
                               <div className="flex gap-2">
                                 {plants.map(p => (
-                                  <button key={p} onClick={() => setSelectedPlant(p)}
+                                  <button key={p} onClick={() => setSelectedPlants(selectedPlants.includes(p) ? selectedPlants.filter(x => x !== p) : [...selectedPlants, p])}
                                     className={cn('flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all',
-                                      selectedPlant === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
+                                      selectedPlants.includes(p) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
                                     {p}
                                   </button>
                                 ))}
@@ -1447,7 +1452,7 @@ export default function FourQGenerator() {
 
                           <Button
                             onClick={handleGenerate}
-                            disabled={generating || (mode === 'plant' && !selectedPlant) || (mode === 'workcell' && selectedWorkcells.length === 0)}
+                            disabled={generating || (mode === 'plant' && selectedPlants.length === 0) || (mode === 'workcell' && selectedWorkcells.length === 0)}
                             className="w-full h-8 text-xs font-bold"
                           >
                             {generating ? 'Updating...' : 'Update Report Scope'}

@@ -13,11 +13,14 @@ import {
   AlertTriangle,
   Info,
   TrendingDown,
-  TrendingUp
+  TrendingUp,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  Area,
+  AreaChart,
   Bar,
   CartesianGrid,
   Cell,
@@ -35,6 +38,100 @@ const TT = {
   borderRadius: 8, fontSize: 10,
   color: 'hsl(var(--foreground))',
 };
+
+const TT_AREA = {
+  contentStyle: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6, fontSize: 11 },
+  labelStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
+  itemStyle: { color: 'hsl(var(--muted-foreground))' },
+  cursor: { fill: 'hsl(var(--muted-foreground) / 0.08)' },
+};
+
+// ─── Trend Modal ─────────────────────────────────────────────────────────────
+function TrendModal({ open, onClose, data, selectedWeek }: {
+  open: boolean;
+  onClose: () => void;
+  data: { w: string; isoWeek: number; ole: number; smh: number; hrs: number }[];
+  selectedWeek: number | null;
+}) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    if (open) document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [open, onClose]);
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
+        style={{ transition: 'opacity 0.25s ease', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
+      />
+      <div
+        className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl flex flex-col"
+        style={{
+          width: '72vw', height: '68vh', top: '50%', left: '50%',
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
+          opacity: open ? 1 : 0,
+          transform: open ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -52%) scale(0.96)',
+          pointerEvents: open ? 'auto' : 'none',
+        }}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+          <span className="text-sm font-semibold text-foreground uppercase tracking-wide">Output SMH &amp; Input Hours — Weekly Trend</span>
+          <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 p-5 grid grid-cols-2 gap-4">
+          {/* Output SMH */}
+          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Output SMH <span className="text-primary">(Σ Qty × SMH/unit)</span></p>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="smhGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={38} />
+                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${(v / 1000).toFixed(1)}k hrs`, 'Output SMH']} />
+                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke="#ffffff" strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
+                  <Area type="monotone" dataKey="smh" stroke="#22c55e" strokeWidth={2} fill="url(#smhGrad)" dot={false} activeDot={{ r: 4, fill: '#22c55e' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          {/* Input Hours */}
+          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Input Hours <span className="text-violet-400">(Σ Paid Direct Hrs)</span></p>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="hrsGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={38} />
+                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${(v / 1000).toFixed(1)}k hrs`, 'Input Hours']} />
+                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke="#ffffff" strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
+                  <Area type="monotone" dataKey="hrs" stroke="#a78bfa" strokeWidth={2} fill="url(#hrsGrad)" dot={false} activeDot={{ r: 4, fill: '#a78bfa' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 type WeekRow = { isoWeek: number; label: string; start: string; end: string };
 
@@ -179,6 +276,29 @@ export default function OLEHome4() {
     return { p1: agg(p1rows), p2: agg(p2rows) };
   }, [workcellsSorted, workcellConfigs]);
 
+  const [trendModalOpen, setTrendModalOpen] = useState(false);
+
+  // ── Weekly trend data with smh + hrs for modal ──────────────────────────────
+  const siteWeeklyFull = useMemo(() => {
+    const byWeek: Record<string, { smh: number; hrs: number; week: number }> = {};
+    rawWeekly
+      .filter(r => plant === 'all' || workcellConfigs.find(w => w.workcell === r.workcell)?.plant === plant)
+      .forEach(r => {
+        if (!byWeek[r.week_label]) byWeek[r.week_label] = { smh: 0, hrs: 0, week: r.iso_week };
+        byWeek[r.week_label].smh += r.total_output_smh;
+        byWeek[r.week_label].hrs += r.total_input_hours;
+      });
+    return Object.values(byWeek)
+      .sort((a, b) => a.week - b.week)
+      .map(w => ({
+        w: `WW${String(w.week).padStart(2, '0')}`,
+        isoWeek: w.week,
+        ole: w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : 0,
+        smh: w.smh,
+        hrs: w.hrs,
+      }));
+  }, [rawWeekly, plant, workcellConfigs]);
+
   // ── Weekly trend chart (all weeks, plant-filtered) ───────────────────────────
   const siteWeekly = useMemo(() => {
     const byWeek: Record<string, { smh: number; hrs: number; week: number }> = {};
@@ -220,7 +340,7 @@ export default function OLEHome4() {
   const siteColor = oleColor(siteOle);
   const oles = siteWeekly.map(d => d.ole).filter(Boolean);
   const yMin = 0;
-  const yMax = oles.length ? Math.ceil(Math.max(...oles) / 10) * 10 + 10 : 100;
+  const yMax = oles.length ? Math.max(OLE_TARGET + 5, Math.ceil(Math.max(...oles) / 10) * 10 + 10) : 100;
   const weekLabel = selectedWeek !== null
     ? `WW${String(selectedWeek).padStart(2, '0')}`
     : 'All Weeks';
@@ -283,6 +403,9 @@ export default function OLEHome4() {
 
       <div className="p-5 flex gap-5">
 
+        {/* ── Trend Modal ── */}
+        <TrendModal open={trendModalOpen} onClose={() => setTrendModalOpen(false)} data={siteWeeklyFull} selectedWeek={selectedWeek} />
+
         {/* ── LEFT COLUMN ── */}
         <div className="w-[340px] flex-shrink-0 flex flex-col gap-4">
 
@@ -316,24 +439,27 @@ export default function OLEHome4() {
           </div>
 
           {/* Output / Input strip */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <button
+            onClick={() => setTrendModalOpen(true)}
+            className="rounded-xl border border-border bg-card overflow-hidden w-full text-left hover:border-primary/40 hover:bg-muted/20 transition-colors group"
+          >
             <div className="grid grid-cols-2 divide-x divide-border">
               <div className="p-3">
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Output SMH</p>
-                <p className="text-xl font-mono font-bold text-primary mt-0.5">
+                <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">
                   {(site.total_output_smh / 1000).toFixed(1)}k
                 </p>
-                <p className="text-[9px] text-muted-foreground">Σ(Qty × SMH/unit)</p>
+                <p className="text-[9px] text-muted-foreground">Σ(Qty × SMH/unit) · <span className="text-primary/60">view trend ↗</span></p>
               </div>
               <div className="p-3">
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
-                <p className="text-xl font-mono font-bold text-violet-400 mt-0.5">
+                <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">
                   {(site.total_input_hours / 1000).toFixed(1)}k
                 </p>
-                <p className="text-[9px] text-muted-foreground">Σ(Paid Direct Hrs)</p>
+                <p className="text-[9px] text-muted-foreground">Σ(Paid Direct Hrs) · <span className="text-violet-400/60">view trend ↗</span></p>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Plant comparison */}
           <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -437,7 +563,7 @@ export default function OLEHome4() {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={siteWeekly}
-                  margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
+                  margin={{ top: 24, right: 4, left: -24, bottom: 0 }}
                   onClick={(d) => {
                     if (!d?.activePayload) return;
                     const iw = d.activePayload[0]?.payload?.isoWeek;
@@ -451,7 +577,37 @@ export default function OLEHome4() {
                   <Tooltip contentStyle={TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']}
                     cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
                   <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
-                  <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer">
+                  {selectedWeek !== null && (
+                    <ReferenceLine
+                      x={`WW${String(selectedWeek).padStart(2, '0')}`}
+                      stroke="hsl(var(--foreground))"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 2"
+                      strokeOpacity={0.4}
+                    />
+                  )}
+                  <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer"
+                    label={(props: any) => {
+                      const { x, y, width, value } = props;
+                      const d = siteWeekly[props.index];
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      return (
+                        <text
+                          x={x + width / 2}
+                          y={y - 4}
+                          textAnchor="middle"
+                          fontSize={15}
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                          fill={baseColor}
+                          opacity={1}
+                          fillOpacity={1}
+                        >
+                          {Number(value).toFixed(1)}%
+                        </text>
+                      );
+                    }}
+                  >
                     {siteWeekly.map((d, i) => {
                       const isSelected = d.isoWeek === selectedWeek;
                       const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
@@ -495,8 +651,17 @@ export default function OLEHome4() {
                 const logo = lk ? WORKCELL_LOGOS[lk] : null;
                 return (
                   <div key={wc.workcell}
-                    className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                    style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem', height: 44 }}>
+                    className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                    style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem', height: 44 }}
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      if (selectedWeek !== null) params.set('week', String(selectedWeek));
+                      if (dateFrom) params.set('from', dateFrom);
+                      if (dateTo) params.set('to', dateTo);
+                      if (plant !== 'all') params.set('plant', plant);
+                      const qs = params.toString();
+                      navigate(`/ole/wc4/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
+                    }}>
                     <div className="px-2 text-[9px] text-muted-foreground font-mono">{idx + 1}</div>
                     <div className="px-2 flex items-center gap-2">
                       {logo && (

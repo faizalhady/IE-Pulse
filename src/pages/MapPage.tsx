@@ -81,7 +81,6 @@ export default function MapPage() {
       return { ...plant, ole_pct, ww };
     });
   }, [rawWeekly, workcellConfigs, currentIsoWeek]);
-
   const loading = weeklyHook.loading && rawWeekly.length === 0;
 
   return (
@@ -92,16 +91,20 @@ export default function MapPage() {
         {plantKPIs.map(plant => (
           <div
             key={plant.id}
-            onClick={() => navigate(`/ole/home4?plant=${encodeURIComponent(plant.label)}&week=${currentIsoWeek}`)}
+            onClick={() => {
+              if (plant.id !== 'bk') {
+                navigate(`/ole/home4?plant=${encodeURIComponent(plant.label)}&week=${currentIsoWeek}`);
+              }
+            }}
             className="bg-card/90 backdrop-blur-sm border border-border rounded-xl px-5 py-4 shadow-lg min-w-[190px] cursor-pointer hover:bg-card transition-colors"
             style={{ borderLeft: `4px solid ${plant.color}` }}
           >
             <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: plant.color }}>{plant.label}</p>
             <p className="text-3xl font-mono font-bold mt-1" style={{ color: plant.ole_pct !== null ? plant.color : undefined }}>
-              {loading ? '…' : plant.ole_pct !== null ? `${plant.ole_pct}%` : '—'}
+              {loading ? '…' : plant.ole_pct !== null ? `${plant.ole_pct}%` : 'N/A'}
             </p>
             <p className="text-[11px] text-muted-foreground mt-1.5">
-              OLE this week · <span className="font-semibold text-foreground">{plant.ww}</span>
+              <span className="font-semibold text-foreground">OLE · {plant.ww}</span>
             </p>
           </div>
         ))}
@@ -190,21 +193,34 @@ export default function MapPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={() => navigate(`/ole/home4?plant=${encodeURIComponent(plant.label)}&week=${currentIsoWeek}`)}
-                    className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-md text-xs font-semibold text-white transition-opacity hover:opacity-90"
-                    style={{ background: plant.color }}
-                  >
-                    View OLE Dashboard
-                  </button>
-                  <button
-                    onClick={() => window.open(plant.mapsUrl, '_blank')}
-                    className="flex items-center justify-center w-8 h-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  >
-                    <ExternalLink className="size-3.5" />
-                  </button>
-                </div>
+                {plant.id !== 'bk' && (
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => navigate(`/ole/home4?plant=${encodeURIComponent(plant.label)}&week=${currentIsoWeek}`)}
+                      className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-md text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                      style={{ background: plant.color }}
+                    >
+                      View OLE Dashboard
+                    </button>
+                    <button
+                      onClick={() => window.open(plant.mapsUrl, '_blank')}
+                      className="flex items-center justify-center w-8 h-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    >
+                      <ExternalLink className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+                {plant.id === 'bk' && (
+                  <div className="flex gap-2 pt-1">
+                    {/* <button
+                      onClick={() => window.open(plant.mapsUrl, '_blank')}
+                      className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-md text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                      style={{ background: plant.color }}
+                    >
+                      View in Google Maps
+                    </button> */}
+                  </div>
+                )}
               </div>
             </MarkerPopup>
           </MapMarker>

@@ -15,7 +15,6 @@ import type { OleWeeklyResult } from '@/lib/oleApi';
 import {
   OLE_COLOR,
   OLE_TARGET,
-  STATUS_BADGE, STATUS_LABEL,
   WORKCELL_LOGOS, fmtDate,
   getOleStatus, oleColor,
   shiftLabel,
@@ -24,14 +23,14 @@ import { cn } from '@/lib/utils';
 import {
   AlertTriangle,
   Info,
-  TrendingDown,
-  TrendingUp,
   Users,
   X
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+  Area,
+  AreaChart,
   Bar,
   CartesianGrid,
   Cell,
@@ -51,6 +50,101 @@ const TT = {
   borderRadius: 8, fontSize: 10,
   color: 'hsl(var(--foreground))',
 };
+
+const TT_AREA = {
+  contentStyle: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6, fontSize: 11 },
+  labelStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
+  itemStyle: { color: 'hsl(var(--muted-foreground))' },
+  cursor: { fill: 'hsl(var(--muted-foreground) / 0.08)' },
+};
+
+// ─── Trend Modal ─────────────────────────────────────────────────────────────
+function TrendModal({ open, onClose, data, workcell, selectedWeek }: {
+  open: boolean;
+  onClose: () => void;
+  data: { w: string; isoWeek: number; ole: number; smh: number; hrs: number }[];
+  workcell: string;
+  selectedWeek: number | null;
+}) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    if (open) document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [open, onClose]);
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
+        style={{ transition: 'opacity 0.25s ease', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
+      />
+      <div
+        className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl flex flex-col"
+        style={{
+          width: '72vw', height: '68vh', top: '50%', left: '50%',
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
+          opacity: open ? 1 : 0,
+          transform: open ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -52%) scale(0.96)',
+          pointerEvents: open ? 'auto' : 'none',
+        }}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+          <span className="text-sm font-semibold text-foreground uppercase tracking-wide">{workcell} — Output SMH &amp; Input Hours Trend</span>
+          <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 p-5 grid grid-cols-2 gap-4">
+          {/* Output SMH */}
+          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Output SMH <span className="text-primary">(Σ Qty × SMH/unit)</span></p>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="wcSmhGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={v => `${v.toFixed(0)}`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={42} />
+                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${v.toFixed(1)} hrs`, 'Output SMH']} />
+                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.80} />}
+                  <Area type="monotone" dataKey="smh" stroke="#22c55e" strokeWidth={2} fill="url(#wcSmhGrad)" dot={false} activeDot={{ r: 4, fill: '#22c55e' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          {/* Input Hours */}
+          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Input Hours <span className="text-violet-400">(Σ Paid Direct Hrs)</span></p>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="wcHrsGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={v => `${v.toFixed(0)}`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={42} />
+                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${v.toFixed(1)} hrs`, 'Input Hours']} />
+                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.8} />}
+                  <Area type="monotone" dataKey="hrs" stroke="#a78bfa" strokeWidth={2} fill="url(#wcHrsGrad)" dot={false} activeDot={{ r: 4, fill: '#a78bfa' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 // ─── Table font sizes ───────────────────────────────────────────────────────
 const TH = 'text-[10px]'; // header cells
@@ -148,7 +242,7 @@ function ShiftDrawer({ data, onClose }: { data: ShiftDrawerData; onClose: () => 
                       emp.value_type === 'VA'
                         ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                         : 'bg-red-500/15 text-red-400 border-red-500/30'
-                    )}>{emp.value_type}</span>
+                    )}>{emp.value_type && emp.value_type !== 'VA' ? emp.value_type : emp.value_type === 'VA' ? 'VA' : 'NVA'}</span>
                   </div>
                   <div className="px-4 text-sm font-mono text-foreground text-center">{emp.thc_direct}</div>
                   <div className="px-4 text-sm font-mono text-foreground text-center">{emp.tph_direct.toFixed(2)}</div>
@@ -233,6 +327,7 @@ export default function OLEWorkcell4() {
   const [dateTo, setDateTo] = useState<string>(initTo);
   const [tableTab, setTableTab] = useState<'labor' | 'production'>('labor');
   const [drawerShift, setDrawerShift] = useState<ShiftDrawerData | null>(null);
+  const [trendModalOpen, setTrendModalOpen] = useState(false);
 
   function selectWeek(w: WeekRow) {
     setSelectedWeek(w.isoWeek);
@@ -258,6 +353,20 @@ export default function OLEWorkcell4() {
 
   // ── Aggregates ───────────────────────────────────────────────────────────────
   const agg = useMemo(() => aggregateWcWeekly(filteredWeekly), [filteredWeekly]);
+
+  // ── Enriched weekly data for this workcell (smh + hrs for modal) ──────────────
+  const wcWeeklyFull = useMemo(() =>
+    rawWeekly
+      .filter(r => r.workcell === workcell)
+      .sort((a, b) => a.iso_week - b.iso_week)
+      .map(r => ({
+        w: `WW${String(r.iso_week).padStart(2, '0')}`,
+        isoWeek: r.iso_week,
+        ole: r.ole_pct ?? 0,
+        smh: r.total_output_smh,
+        hrs: r.total_input_hours,
+      }))
+    , [rawWeekly, workcell]);
 
   // ── Weekly trend chart (all weeks for this workcell) ──────────────────────
   const wcWeekly = useMemo(() =>
@@ -329,6 +438,7 @@ export default function OLEWorkcell4() {
   return (
     <div className="relative">
       {drawerShift && <ShiftDrawer data={drawerShift} onClose={() => setDrawerShift(null)} />}
+      <TrendModal open={trendModalOpen} onClose={() => setTrendModalOpen(false)} data={wcWeeklyFull} workcell={workcell} selectedWeek={selectedWeek} />
 
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
@@ -408,39 +518,30 @@ export default function OLEWorkcell4() {
             <div className="mt-3 h-1 rounded-full bg-muted/40 overflow-hidden">
               <div className="h-full rounded-full" style={{ width: `${Math.min(siteOle, 100)}%`, background: siteColor }} />
             </div>
-            <div className="flex items-center justify-between mt-2">
-              <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border', STATUS_BADGE[siteStatus])}>
-                {STATUS_LABEL[siteStatus]}
-              </span>
-              {trendDiff && (
-                <span className={cn('text-[10px] flex items-center gap-1 font-medium', trendUp ? 'text-emerald-400' : 'text-red-400')}>
-                  {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {trendDiff}% WoW
-                </span>
-              )}
-            </div>
-            <p className="text-[9px] text-muted-foreground mt-1.5">Target {OLE_TARGET}% · Gap {Math.max(0, OLE_TARGET - siteOle).toFixed(1)}pp</p>
           </div>
 
           {/* Output / Input strip */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <button
+            onClick={() => setTrendModalOpen(true)}
+            className="rounded-xl border border-border bg-card overflow-hidden w-full text-left hover:border-primary/40 hover:bg-muted/20 transition-colors group"
+          >
             <div className="grid grid-cols-2 divide-x divide-border">
               <div className="p-3">
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Output SMH</p>
-                <p className="text-xl font-mono font-bold text-primary mt-0.5">
+                <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">
                   {agg.total_output_smh.toFixed(1)}
                 </p>
-                <p className="text-[9px] text-muted-foreground">Σ(Qty × SMH/unit)</p>
+                <p className="text-[9px] text-muted-foreground">Σ(Qty × SMH/unit) · <span className="text-primary/60">view trend ↗</span></p>
               </div>
               <div className="p-3">
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
-                <p className="text-xl font-mono font-bold text-violet-400 mt-0.5">
+                <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">
                   {agg.total_input_hours.toFixed(1)}
                 </p>
-                <p className="text-[9px] text-muted-foreground">Σ(Paid Direct Hrs)</p>
+                <p className="text-[9px] text-muted-foreground">Σ(Paid Direct Hrs) · <span className="text-violet-400/60">view trend ↗</span></p>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Hours distribution */}
           <div className="rounded-xl border border-border bg-card p-4">
@@ -497,7 +598,7 @@ export default function OLEWorkcell4() {
             </div>
             <div style={{ height: 160 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={wcWeekly} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
+                <ComposedChart data={wcWeekly} margin={{ top: 24, right: 4, left: -24, bottom: 0 }}
                   onClick={(d) => {
                     if (!d?.activePayload) return;
                     const iw = d.activePayload[0]?.payload?.isoWeek;
@@ -509,7 +610,37 @@ export default function OLEWorkcell4() {
                   <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']} cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
                   <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
-                  <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer">
+                  {selectedWeek !== null && (
+                    <ReferenceLine
+                      x={`WW${String(selectedWeek).padStart(2, '0')}`}
+                      stroke="hsl(var(--foreground))"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 2"
+                      strokeOpacity={0.4}
+                    />
+                  )}
+                  <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer"
+                    label={(props: any) => {
+                      const { x, y, width, value } = props;
+                      const d = wcWeekly[props.index];
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      return (
+                        <text
+                          x={x + width / 2}
+                          y={y - 4}
+                          textAnchor="middle"
+                          fontSize={15}
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                          fill={baseColor}
+                          opacity={1}
+                          fillOpacity={1}
+                        >
+                          {Number(value).toFixed(1)}%
+                        </text>
+                      );
+                    }}
+                  >
                     {wcWeekly.map((d, i) => {
                       const isSelected = d.isoWeek === selectedWeek;
                       const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
