@@ -10,27 +10,49 @@ import type { OleWeeklyResult, OleWorkcellConfig } from '@/lib/oleApi';
 import { oleApi } from '@/lib/oleApi';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { CalendarIcon, ChevronLeft, ChevronRight, Eye, GripVertical, Info, Plus, Printer, Settings, Trash2 } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Info, Plus, Printer, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar, CartesianGrid, Cell, ComposedChart, Line,
-  ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type SetupMode = 'plant' | 'workcell';
 type ActionItem = { id: string; issue: string; problemDescription: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; commitDate: string; status: string; };
-type TrendPoint = { id: string; label: string; ole: number; target: number; projected?: boolean };
+type TrendPoint = { id: string; label: string; ole: number; target: number; projected?: boolean; hidden?: boolean };
 
 const genId = () => Math.random().toString(36).substr(2, 9);
 
-const TT = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border))',
-  borderRadius: 8, fontSize: 11,
-  color: 'hsl(var(--foreground))',
-};
+// ─── Custom Tooltip (theme-aware, readable) ───────────────────────────────────
+function ChartTooltip({ active, payload, label, labelFormatter }: any) {
+  if (!active || !payload?.length) return null;
+  const displayLabel = labelFormatter ? labelFormatter(label) : label;
+  return (
+    <div style={{
+      background: 'hsl(var(--card))',
+      border: '1px solid hsl(var(--border))',
+      borderRadius: 10,
+      padding: '8px 12px',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+      minWidth: 110,
+    }}>
+      <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11, fontWeight: 600, marginBottom: 4, letterSpacing: '0.04em' }}>
+        {displayLabel}
+      </p>
+      {payload.map((p: any, i: number) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color || p.fill || 'hsl(var(--primary))', flexShrink: 0 }} />
+          <span style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11 }}>{p.name}</span>
+          <span style={{ color: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 700, marginLeft: 'auto', fontFamily: 'monospace', paddingLeft: 8 }}>
+            {typeof p.value === 'number' ? `${Number(p.value).toFixed(1)}%` : p.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const SLICE_COLORS: Record<string, string> = {
   'Output SMH': '#22c55e',
@@ -121,7 +143,7 @@ function chartDataToTrend(points: ChartPoint[], best: FormulaKey | null): TrendP
     ole: p.projected
       ? (best && p[best] != null ? Math.round((p[best] as number) * 100) / 100 : 0)
       : (p.actual ?? 0),
-    target: 80,
+    target: 61,
     projected: p.projected ?? false,
   }));
 }
@@ -188,10 +210,15 @@ function DatePickerField({ id, label, value, onChange }: {
 interface ParetoBar { name: string; value: number; color: string; cum: number; }
 
 function buildPareto(data: { name: string; value: number; color: string }[]): ParetoBar[] {
-  const sorted = [...data].sort((a, b) => b.value - a.value);
+  // Use absolute values — negative slices (e.g. Unexplained Lost) still represent loss magnitude
+  const abs = data.map(x => ({ ...x, value: Math.abs(x.value) })).filter(x => x.value > 0);
+  const sorted = abs.sort((a, b) => b.value - a.value);
   const total = sorted.reduce((s, x) => s + x.value, 0);
   let cum = 0;
-  return sorted.map(x => { cum += x.value; return { ...x, cum: total > 0 ? (cum / total) * 100 : 0 }; });
+  return sorted.map(x => {
+    cum += x.value;
+    return { ...x, cum: total > 0 ? Math.min((cum / total) * 100, 100) : 0 };
+  });
 }
 
 // ─── Setup Step ───────────────────────────────────────────────────────────────
@@ -248,12 +275,23 @@ function SetupStep({
               ))}
             </div>
             {selectedPlants.length > 0 && (
-              <div className="rounded-xl border border-border bg-muted/20 p-3">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Included workcells</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedPlants.flatMap(p => byPlant[p] ?? []).map(wc => (
-                    <span key={wc} className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">{wc}</span>
-                  ))}
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-3">
+                  Included Workcells
+                </p>
+
+                {/* Grid container for two columns */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  {selectedPlants
+                    .flatMap((p) => byPlant[p] ?? [])
+                    .map((wc, index) => (
+                      <div key={wc} className="flex gap-2 text-[11px] text-foreground/80 tabular-nums">
+                        <span className="text-muted-foreground font-medium w-4 shrink-0">
+                          {index + 1}.
+                        </span>
+                        <span className="truncate">{wc}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}
@@ -298,31 +336,22 @@ function SetupStep({
 // ─── Q1 Chart ─────────────────────────────────────────────────────────────────
 
 function Q1Chart({ trendData, fillHeight = false }: { trendData: TrendPoint[]; fillHeight?: boolean }) {
-  if (!trendData.length) return (
+  const visible = trendData.filter(p => !p.hidden);
+  if (!visible.length) return (
     <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">No data — go back to setup</div>
   );
-  const firstProj = trendData.find(p => p.projected)?.label;
-
   return (
     <div style={fillHeight ? { height: '100%' } : { height: 240 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={trendData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <ComposedChart data={visible} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
           <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmtWeekLabel} />
-          <YAxis domain={[0, 120]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} labelFormatter={fmtWeekLabel} />
-          {firstProj && <ReferenceArea x1={firstProj} fill="hsl(var(--primary) / 0.05)" strokeOpacity={0} />}
+          <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+          <Tooltip content={<ChartTooltip labelFormatter={fmtWeekLabel} />} cursor={{ fill: 'hsl(var(--primary) / 0.08)' }} />
           <Bar dataKey="ole" name="OLE %" maxBarSize={32} radius={[4, 4, 0, 0]}>
-            {trendData.map((e, i) => (
-              <Cell key={i}
-                fill={e.projected ? 'hsl(var(--primary) / 0.15)' : 'hsl(var(--primary))'}
-                stroke={e.projected ? 'hsl(var(--primary))' : 'none'}
-                strokeWidth={e.projected ? 1.5 : 0}
-                strokeDasharray={e.projected ? '5 3' : '0'}
-              />
-            ))}
+            {visible.map((_, i) => <Cell key={i} fill="hsl(var(--primary))" />)}
           </Bar>
-          <Line type="monotone" dataKey="target" name="Target 80%" stroke="#22c55e"
+          <Line type="monotone" dataKey="target" name="Target 61%" stroke="#22c55e"
             strokeWidth={1.5} strokeDasharray="5 4" dot={false} activeDot={false} />
         </ComposedChart>
       </ResponsiveContainer>
@@ -369,10 +398,12 @@ function SmallPareto({ title, data, loading, height = 180, fillHeight = false }:
           <ComposedChart data={data} margin={{ top: 2, right: 18, left: -22, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
             <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={24} tick={<WrappedTick />} />
-            <YAxis yAxisId="left" tick={{ fontSize: 8 }} tickLine={false} axisLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
+            <YAxis yAxisId="left" domain={[0, 'auto']} tick={{ fontSize: 8 }} tickLine={false} axisLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 8 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
-            <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
-            <Bar yAxisId="left" dataKey="value" name="Share %" radius={[3, 3, 0, 0]} maxBarSize={40} fill="hsl(var(--primary))" />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'hsl(var(--primary) / 0.08)' }} />
+            <Bar yAxisId="left" dataKey="value" name="Share %" radius={[3, 3, 0, 0]} maxBarSize={40}>
+              {data.map((entry, i) => <Cell key={i} fill="hsl(var(--primary)" />)}
+            </Bar>
             <Line yAxisId="right" type="monotone" dataKey="cum" name="Cumulative %"
               stroke="#ef4444" strokeWidth={1.5} dot={{ r: 3, fill: '#ef4444' }} connectNulls />
           </ComposedChart>
@@ -482,12 +513,12 @@ const MH_ROWS = [
   { key: 'nva', label: 'NVA Input', color: '#ef4444' },
   { key: 'lunch', label: 'Lunch / Break', color: '#94a3b8' },
   { key: 'mfg_dt', label: 'MFG DT', color: '#f59e0b' },
-  { key: 'unexplained', label: 'Unexplained Lost Hrs', color: '#6366f1' },
+  { key: 'non_identified', label: 'Non Identified Loss', color: '#6366f1' },
 ];
 
 interface MhWeekData {
   week_label: string;
-  nva: number; lunch: number; mfg_dt: number; unexplained: number;
+  nva: number; lunch: number; mfg_dt: number; non_identified: number;
   total: number; // sum of loss categories only
 }
 
@@ -536,10 +567,10 @@ function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = fal
             const nva = pct('NVA Input');
             const lunch = pct('Lunch / Break');
             const mfg = pct('MFG DT');
-            const unexp = pct('Unexplained Lost Hours');
+            const nonId = pct('Unexplained Lost Hours');
             return {
-              week_label: w.week_label, nva, lunch, mfg_dt: mfg, unexplained: unexp,
-              total: parseFloat((nva + lunch + mfg + unexp).toFixed(2))
+              week_label: w.week_label, nva, lunch, mfg_dt: mfg, non_identified: nonId,
+              total: parseFloat((nva + lunch + mfg + nonId).toFixed(2))
             } as MhWeekData;
           } catch { return null; }
         }));
@@ -796,7 +827,7 @@ export default function FourQGenerator() {
         ole_pct: w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : null,
         ole_pct_avg_shifts: null, shifts_ok: 0, shifts_flagged: 0, smh_coverage_pct: null,
       } as OleWeeklyResult));
-      const basePoints = buildChartData(aggRows, 3);
+      const basePoints = buildChartData(aggRows, 0);
       const best = getBestFormula(basePoints);
       setTrendData(chartDataToTrend(injectProjBars(basePoints, best), best));
       setTab('editor');
@@ -890,7 +921,7 @@ export default function FourQGenerator() {
           <div>
             <h1 className="text-xl font-semibold text-foreground">4Q Generator</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {tab === 'setup' ? 'Set up scope to generate trend data' : `Scope: ${trendScope} · ${trendData.filter(p => !p.projected).length} weeks`}
+              {tab === 'setup' ? 'Set up scope to generate trend data' : `Scope: ${trendScope} · ${trendData.filter(p => !p.hidden).length} weeks visible`}
             </p>
           </div>
           {tab === 'editor' && (
@@ -1021,14 +1052,16 @@ export default function FourQGenerator() {
 
                       <TabsContent value="q1" className="m-0 space-y-3">
                         <div className="flex items-center justify-between">
-                          <p className="text-[11px] text-muted-foreground">Auto-populated · edit or reorder as needed.</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Auto-populated · {trendData.filter(p => !p.hidden).length} of {trendData.length} weeks visible.
+                          </p>
                           <Button variant="outline" size="sm" className="h-7 text-[11px]"
-                            onClick={() => setTrendData([...trendData, { id: genId(), label: `WW${String(trendData.length + 1).padStart(2, '0')}`, ole: 0, target: 80, projected: false }])}>
+                            onClick={() => setTrendData([...trendData, { id: genId(), label: `WW${String(trendData.length + 1).padStart(2, '00')}`, ole: 0, target: 61, projected: false, hidden: false }])}>
                             <Plus className="w-3 h-3 mr-1" /> Add
                           </Button>
                         </div>
-                        <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider px-7 gap-2" style={{ gridTemplateColumns: '1fr 5rem 5rem' }}>
-                          <span>Label</span><span className="text-right">OLE %</span><span className="text-right">Target</span>
+                        <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider px-7 gap-2" style={{ gridTemplateColumns: '1fr 5rem 5rem 2rem' }}>
+                          <span>Label</span><span className="text-right">OLE %</span><span className="text-right">Target</span><span />
                         </div>
                         {trendData.map((t, i) => (
                           <div key={t.id}
@@ -1037,21 +1070,36 @@ export default function FourQGenerator() {
                             onDragOver={e => e.preventDefault()}
                             onDrop={e => { e.preventDefault(); handleTrendDrop(Number(e.dataTransfer.getData('text/plain')), i); }}
                             className={cn(
-                              'flex items-center gap-2 p-2 rounded border cursor-grab active:cursor-grabbing active:opacity-60 transition-opacity',
-                              t.projected ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 border-border'
+                              'flex items-center gap-2 p-2 rounded border transition-all',
+                              t.hidden
+                                ? 'bg-muted/10 border-border/40 opacity-50 cursor-grab active:cursor-grabbing'
+                                : 'bg-muted/30 border-border cursor-grab active:cursor-grabbing active:opacity-60'
                             )}>
                             <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
                             <div className="flex items-center gap-2 flex-1" style={{ display: 'grid', gridTemplateColumns: '1fr 5rem 5rem' }}>
-                              <div className="flex items-center gap-1">
-                                <Input value={t.label} onChange={e => { const n = [...trendData]; n[i] = { ...n[i], label: e.target.value }; setTrendData(n); }} placeholder="Label" className="h-7 text-xs" />
-                                {t.projected && <span className="text-[9px] text-primary font-semibold flex-shrink-0">▲</span>}
-                              </div>
-                              <Input type="number" value={t.ole} onChange={e => { const n = [...trendData]; n[i] = { ...n[i], ole: Number(e.target.value) }; setTrendData(n); }} className="h-7 text-xs" />
-                              <Input type="number" value={t.target} onChange={e => { const n = [...trendData]; n[i] = { ...n[i], target: Number(e.target.value) }; setTrendData(n); }} className="h-7 text-xs" />
+                              <Input
+                                value={t.label}
+                                onChange={e => { const n = [...trendData]; n[i] = { ...n[i], label: e.target.value }; setTrendData(n); }}
+                                placeholder="Label"
+                                className={cn('h-7 text-xs', t.hidden && 'text-muted-foreground line-through')}
+                              />
+                              <Input type="number" value={t.ole} onChange={e => { const n = [...trendData]; n[i] = { ...n[i], ole: Number(e.target.value) }; setTrendData(n); }} className="h-7 text-xs" disabled={t.hidden} />
+                              <Input type="number" value={t.target} onChange={e => { const n = [...trendData]; n[i] = { ...n[i], target: Number(e.target.value) }; setTrendData(n); }} className="h-7 text-xs" disabled={t.hidden} />
                             </div>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive flex-shrink-0" onClick={() => setTrendData(trendData.filter((_, j) => j !== i))}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                            <button
+                              title={t.hidden ? 'Show week' : 'Hide week'}
+                              onClick={() => { const n = [...trendData]; n[i] = { ...n[i], hidden: !n[i].hidden }; setTrendData(n); }}
+                              className={cn(
+                                'h-7 w-7 flex items-center justify-center rounded flex-shrink-0 transition-colors',
+                                t.hidden
+                                  ? 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/40'
+                                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                              )}
+                            >
+                              {t.hidden
+                                ? <EyeOff className="w-3.5 h-3.5" />
+                                : <Eye className="w-3.5 h-3.5" />}
+                            </button>
                           </div>
                         ))}
                       </TabsContent>

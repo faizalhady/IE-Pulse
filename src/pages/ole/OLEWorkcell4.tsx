@@ -45,10 +45,16 @@ import { DatePickerField } from './OLEFilters';
 type WeekRow = { isoWeek: number; label: string; start: string; end: string };
 
 const TT = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border))',
-  borderRadius: 8, fontSize: 10,
-  color: 'hsl(var(--foreground))',
+  contentStyle: {
+    background: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 8,
+    fontSize: 13,
+    color: 'hsl(var(--foreground))',
+    padding: '8px 12px',
+  },
+  labelStyle: { color: 'hsl(var(--muted-foreground))', fontWeight: 600, fontSize: 12, marginBottom: 2 },
+  itemStyle: { color: 'hsl(var(--foreground))', fontWeight: 700, fontSize: 14 },
 };
 
 const TT_AREA = {
@@ -418,7 +424,12 @@ export default function OLEWorkcell4() {
     })
     , [rawProduction, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
 
-  const siteOle = agg.ole_pct;
+  // KPI card sums directly from shift-level rows so it respects all filters
+  const kpiSmh = useMemo(() => laborRows.reduce((s, r) => s + r.effective_output_smh, 0), [laborRows]);
+  const kpiHrs = useMemo(() => laborRows.reduce((s, r) => s + r.total_input_hours, 0), [laborRows]);
+  const kpiOle = kpiHrs > 0 ? (kpiSmh / kpiHrs) * 100 : 0;
+
+  const siteOle = kpiOle;
   const siteStatus = getOleStatus(siteOle);
   const siteColor = oleColor(siteOle);
   const oles = wcWeekly.map(d => d.ole).filter(Boolean);
@@ -447,7 +458,7 @@ export default function OLEWorkcell4() {
             className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             ← Home
           </button>
-          <span className="text-sm font-bold text-foreground">{workcell}</span>
+          <span className="text-sm font-bold text-foreground">OLE Report - {workcell} </span>
         </div>
       </div>
 
@@ -529,14 +540,14 @@ export default function OLEWorkcell4() {
               <div className="p-3">
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Output SMH</p>
                 <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">
-                  {agg.total_output_smh.toFixed(1)}
+                  {kpiSmh.toFixed(1)}
                 </p>
                 <p className="text-[9px] text-muted-foreground">Σ(Qty × SMH/unit) · <span className="text-primary/60">view trend ↗</span></p>
               </div>
               <div className="p-3">
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
                 <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">
-                  {agg.total_input_hours.toFixed(1)}
+                  {kpiHrs.toFixed(1)}
                 </p>
                 <p className="text-[9px] text-muted-foreground">Σ(Paid Direct Hrs) · <span className="text-violet-400/60">view trend ↗</span></p>
               </div>
@@ -608,7 +619,7 @@ export default function OLEWorkcell4() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="w" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                   <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']} cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
+                  <Tooltip {...TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']} cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
                   <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
                   {selectedWeek !== null && (
                     <ReferenceLine

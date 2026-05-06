@@ -3,41 +3,16 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider } from "@/context/AppContext";
-import BayDetail from "@/pages/BayDetail";
-import Documents from "@/pages/Documents";
-import EBuildPlan from "@/pages/ebuild/eBuildPlan";
-import FloorMap from "@/pages/FloorMap";
-import BayManagement from "@/pages/fsms/BayManagement";
-import LayoutEditor from "@/pages/fsms/LayoutEditor";
-import GlobalOverview from "@/pages/GlobalOverview";
-import IEBaseline from "@/pages/iebaseline/IEBaseline";
-import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
-import ModuleAdmin from "@/pages/iebaseline/ModuleAdmin";
-import ModuleOverview from "@/pages/iebaseline/ModuleOverview";
 import KioskMode from "@/pages/KioskMode";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
-import DowntimeManagement from "@/pages/ole/DowntimeManagement";
 import FourQGenerator from "@/pages/ole/FourQGenerator";
-import OLEHome1 from "@/pages/ole/OLEHome1";
-import OLEHome2 from "@/pages/ole/OLEHome2";
-import OLEHome3 from "@/pages/ole/OLEHome3";
 import OLEHome4 from "@/pages/ole/OLEHome4";
-import OLEHome5 from "@/pages/ole/OLEHome5";
-import OLEOverview from "@/pages/ole/OLEOverview";
-import OLEWorkcell from "@/pages/ole/OLEWorkcell";
 import OLEWorkcell4 from "@/pages/ole/OLEWorkcell4";
 import OLEWoWAnalysis from "@/pages/ole/OLEWoWAnalysis";
 import SMHStatus from "@/pages/ole/SMHStatus";
-import TransferManHour from "@/pages/ole/TransferManHour";
-import OleMartApiTest from "@/pages/OleMartApiTest";
-import Plants from "@/pages/Plants";
-import Reports from "@/pages/Reports";
-import Settings from "@/pages/Settings";
-import WorkcellsTable from "@/pages/WorkcellsTable";
-import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import MapPage from "./pages/MapPage";
 
 const queryClient = new QueryClient();
@@ -68,37 +43,37 @@ function AppShell() {
         {/* <Header /> */}
         <main className="flex-1 overflow-y-auto">
           <Routes>
-            <Route path="/" element={<GlobalOverview />} />
+            <Route path="/" element={<Navigate to="/map" replace />} />
             <Route path="/map" element={<MapPage />} />
-            <Route path="/workcells" element={<WorkcellsTable />} />
-            <Route path="/workcell/:id" element={<WorkcellView />} />
-            <Route path="/bay/:id" element={<BayDetail />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/plants" element={<Plants />} />
-            <Route path="/floor-map" element={<FloorMap />} />
-            <Route path="/ole" element={<OLEOverview />} />
             <Route path="/ole/smh-status" element={<SMHStatus />} />
             <Route path="/ole/4q" element={<FourQGenerator />} />
-            <Route path="/ole/downtime" element={<DowntimeManagement />} />
-            <Route path="/ole/transfer" element={<TransferManHour />} />
             <Route path="/ole/analysis" element={<OLEWoWAnalysis />} />
-            <Route path="/ole/home1" element={<OLEHome1 />} />
-            <Route path="/ole/home2" element={<OLEHome2 />} />
-            <Route path="/ole/home3" element={<OLEHome3 />} />
             <Route path="/ole/home4" element={<OLEHome4 />} />
-            <Route path="/ole/home5" element={<OLEHome5 />} />
             <Route path="/ole/wc4/:workcell" element={<OLEWorkcell4 />} />
-            <Route path="/ole/:workcell" element={<OLEWorkcell />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/ole-mart-api" element={<OleMartApiTest />} />
-            <Route path="/ebuild" element={<EBuildPlan />} />
-            <Route path="/iebaseline" element={<IEBaseline />} />
-            <Route path="/iebaseline/edit" element={<IEBaselineEdit />} />
-            <Route path="/iebaseline/module/:moduleId" element={<ModuleOverview />} />
-            <Route path="/iebaseline/admin/:moduleId" element={<ModuleAdmin />} />
-            <Route path="/fsms/editor" element={<LayoutEditor />} />
-            <Route path="/fsms/bays" element={<BayManagement />} />
+            {/* <Route path="/workcells" element={<WorkcellsTable />} /> */}
+            {/* <Route path="/workcell/:id" element={<WorkcellView />} /> */}
+            {/* <Route path="/bay/:id" element={<BayDetail />} /> */}
+            {/* <Route path="/documents" element={<Documents />} /> */}
+            {/* <Route path="/reports" element={<Reports />} /> */}
+            {/* <Route path="/plants" element={<Plants />} /> */}
+            {/* <Route path="/floor-map" element={<FloorMap />} /> */}
+            {/* <Route path="/ole" element={<OLEOverview />} /> */}
+            {/* <Route path="/ole/downtime" element={<DowntimeManagement />} /> */}
+            {/* <Route path="/ole/transfer" element={<TransferManHour />} /> */}
+            {/* <Route path="/ole/home1" element={<OLEHome1 />} /> */}
+            {/* <Route path="/ole/home2" element={<OLEHome2 />} /> */}
+            {/* <Route path="/ole/home3" element={<OLEHome3 />} /> */}
+            {/* <Route path="/ole/home5" element={<OLEHome5 />} /> */}
+            {/* <Route path="/ole/:workcell" element={<OLEWorkcell />} /> */}
+            {/* <Route path="/settings" element={<Settings />} /> */}
+            {/* <Route path="/ole-mart-api" element={<OleMartApiTest />} /> */}
+            {/* <Route path="/ebuild" element={<EBuildPlan />} /> */}
+            {/* <Route path="/iebaseline" element={<IEBaseline />} /> */}
+            {/* <Route path="/iebaseline/edit" element={<IEBaselineEdit />} /> */}
+            {/* <Route path="/iebaseline/module/:moduleId" element={<ModuleOverview />} /> */}
+            {/* <Route path="/iebaseline/admin/:moduleId" element={<ModuleAdmin />} /> */}
+            {/* <Route path="/fsms/editor" element={<LayoutEditor />} /> */}
+            {/* <Route path="/fsms/bays" element={<BayManagement />} /> */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

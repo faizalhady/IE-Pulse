@@ -20,7 +20,7 @@
 import { useState, useEffect, useMemo } from 'react';
 
 export const PLANT_OLE_GOAL = 0.61; // 61%
-const API_BASE = 'http://localhost:8000';
+const API_BASE = '/ole-api';
 
 // ─── DL Weekly — manual until eTMS DB linked ─────────────────────────────────
 

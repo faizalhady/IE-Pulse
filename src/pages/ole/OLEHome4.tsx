@@ -33,10 +33,16 @@ import {
 import { DatePickerField } from './OLEFilters';
 
 const TT = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border))',
-  borderRadius: 8, fontSize: 10,
-  color: 'hsl(var(--foreground))',
+  contentStyle: {
+    background: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 8,
+    fontSize: 13,
+    color: 'hsl(var(--foreground))',
+    padding: '8px 12px',
+  },
+  labelStyle: { color: 'hsl(var(--muted-foreground))', fontWeight: 600, fontSize: 12, marginBottom: 2 },
+  itemStyle: { color: 'hsl(var(--foreground))', fontWeight: 700, fontSize: 14 },
 };
 
 const TT_AREA = {
@@ -351,7 +357,7 @@ export default function OLEHome4() {
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
         <div className="px-6 py-3 flex items-center">
-          <span className="text-sm font-bold text-foreground">OLE Overview</span>
+          <span className="text-sm font-bold text-foreground">OLE Report - Plant Level</span>
         </div>
       </div>
 
@@ -574,8 +580,9 @@ export default function OLEHome4() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="w" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                   <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']}
-                    cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
+                  <Tooltip {...TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']}
+                    cursor={{ fill: 'hsl(var(--primary) / 0.06)' }}
+                  />
                   <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
                   {selectedWeek !== null && (
                     <ReferenceLine

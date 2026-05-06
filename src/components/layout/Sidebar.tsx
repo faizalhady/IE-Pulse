@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 import { currentUser } from '@/mocks/data';
 import {
   ChevronDown,
-  Factory, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun
+  Factory, Moon, PanelLeftClose, PanelLeftOpen,
+  Sun
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -165,7 +166,7 @@ export default function Sidebar() {
             <span>{dark ? 'Light mode' : 'Dark mode'}</span>
           </button>
         )}
-        <SidebarLink to="/settings" icon={Settings} label="Settings" collapsed={collapsed} />
+        {/* <SidebarLink to="/settings" icon={Settings} label="Settings" collapsed={collapsed} /> */}
         {!collapsed && (
           <div className="flex items-center gap-2 px-2 py-1.5">
             <Avatar className="h-7 w-7">

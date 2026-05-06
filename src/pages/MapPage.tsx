@@ -30,7 +30,7 @@ const PLANTS = [
     address: 'Plot 1242, Lebuh Kampung Jawa, Bayan Lepas Free Industrial Zone Phase 3, 11900 Bayan Lepas',
     image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=300&h=160&fit=crop',
     mapsUrl: 'https://www.google.com/maps/place/Jabil+Penang+(Plant+2)/data=!4m2!3m1!1s0x0:0x52f61908b9e58a68?sa=X&ved=1t:2428&ictx=111',
-    lat: 5.3195088,
+    lat: 5.3220088,
     lng: 100.2964318,
     color: '#7c3aed',
   },
@@ -48,8 +48,8 @@ const PLANTS = [
 ] as const;
 
 // Center of Bayan Lepas — both plants visible at zoom 14
-const PENANG_CENTER: [number, number] = [100.380433, 5.272718];
-const DEFAULT_ZOOM = 11.72;
+const PENANG_CENTER: [number, number] = [100.353138, 5.279591];
+const DEFAULT_ZOOM = 11.13;
 
 export default function MapPage() {
   const navigate = useNavigate();
@@ -117,10 +117,10 @@ export default function MapPage() {
         className="w-full h-full"
         onViewportChange={(vp) => console.log(`lng: ${vp.center[0].toFixed(6)}, lat: ${vp.center[1].toFixed(6)}, zoom: ${vp.zoom.toFixed(2)}`)}
 
-        dragRotate={false}
-        dragPan={false}
-        touchPitch={false}
-        touchZoomRotate={false}
+      // dragRotate={false}
+      // dragPan={false}
+      // touchPitch={false}
+      // touchZoomRotate={false}
       // touchZoom={false}
       // touchRotate={false}
       // touchDragPan={false}
@@ -130,8 +130,8 @@ export default function MapPage() {
           position="top-right"
           showCompass
           showFullscreen
-        // showZoom
-        // showLocate
+          showZoom
+          showLocate
         />
 
         {plantKPIs.map(plant => (
@@ -142,15 +142,25 @@ export default function MapPage() {
           >
             {/* Simple circle marker — scaled up */}
             <MarkerContent>
-              <div
-                className="size-8 cursor-pointer rounded-full border-[3px] border-white shadow-xl transition-transform hover:scale-110"
-                style={{ background: plant.color }}
-              />
-              <MarkerLabel position="bottom">
-                <span className="text-xl font-bold tracking-wide" style={{ color: plant.color }}>
-                  {plant.label}
-                </span>
-              </MarkerLabel>
+              <div className="flex flex-col items-center">
+                {/* The Marker Circle */}
+                <div
+                  className="size-8 cursor-pointer rounded-full border-[3px] border-white shadow-xl transition-transform hover:scale-110"
+                  style={{ background: plant.color }}
+                />
+
+                {/* The Label - No 'position' prop, use negative margin to pull it up */}
+                <MarkerLabel>
+                  <div className="-mt-5"> {/* Adjust this negative margin to move it up or down */}
+                    <span
+                      className="text-xl font-bold tracking-tight leading-none block"
+                      style={{ color: plant.color }}
+                    >
+                      {plant.label.toUpperCase()}
+                    </span>
+                  </div>
+                </MarkerLabel>
+              </div>
             </MarkerContent>
 
             {/* Rich popup — no white wrapper */}

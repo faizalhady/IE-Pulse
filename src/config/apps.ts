@@ -1,23 +1,11 @@
 import {
-  Activity,
-  AlertTriangle,
-  BookOpen,
-  Building2,
-  CalendarDays,
-  ClipboardList,
-  Factory,
   FileSpreadsheet,
-  FileText,
   FlaskConical,
-  Home,
   LineChart,
   LucideIcon,
-  Map,
   MapPin,
-  Pencil,
-  TableProperties,
-  TrendingUp,
-  Users
+  Microscope,
+  TrendingUp
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,21 +35,21 @@ export interface AppConfig {
 // ─── App Definitions ──────────────────────────────────────────────────────────
 
 export const APPS: AppConfig[] = [
-  {
-    id: 'pulse',
-    label: 'IE Pulse',
-    description: 'Production monitoring dashboard',
-    icon: Activity,
-    color: 'text-blue-500',
-    iconBg: 'bg-blue-500/15',
-    navItems: [
-      { label: 'Overview', to: '/', icon: Home },
-      { label: 'Plants / Layouts', to: '/plants', icon: MapPin },
-      { label: 'Workcells', to: '/workcells', icon: Factory },
-      { label: 'Reports', to: '/reports', icon: LineChart },
-      { label: 'Documents', to: '/documents', icon: FileText },
-    ],
-  },
+  // {
+  //   id: 'pulse',
+  //   label: 'IE Pulse',
+  //   description: 'Production monitoring dashboard',
+  //   icon: Activity,
+  //   color: 'text-blue-500',
+  //   iconBg: 'bg-blue-500/15',
+  //   navItems: [
+  //     { label: 'Overview', to: '/', icon: Home },
+  //     { label: 'Plants / Layouts', to: '/plants', icon: MapPin },
+  //     { label: 'Workcells', to: '/workcells', icon: Factory },
+  //     { label: 'Reports', to: '/reports', icon: LineChart },
+  //     { label: 'Documents', to: '/documents', icon: FileText },
+  //   ],
+  // },
   {
     id: 'ole',
     label: 'OLE Analyzer',
@@ -70,58 +58,58 @@ export const APPS: AppConfig[] = [
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     navItems: [
-      { label: 'IE Map', to: '/map', icon: Map },
-      { label: 'Home', to: '/ole/home4', icon: Home },
+      { label: 'Map', to: '/map', icon: MapPin },
+      { label: 'Report', to: '/ole/home4', icon: LineChart },
       { label: '4Q Generator', to: '/ole/4q', icon: FileSpreadsheet },
-      { label: 'Analysis', to: '/ole/analysis', icon: LineChart },
+      { label: 'Analysis', to: '/ole/analysis', icon: Microscope },
       // { label: 'Home 0', to: '/ole', icon: TrendingUp },
+      { label: 'Standard Man-Hour', to: '/ole/smh-status', icon: FlaskConical },
       // { label: 'Home 1', to: '/ole/home1', icon: TrendingUp },
       // { label: 'Home 2', to: '/ole/home2', icon: TrendingUp },
       // { label: 'Home 3', to: '/ole/home3', icon: TrendingUp },
       // { label: 'Home 5', to: '/ole/home5', icon: TrendingUp },
-      { label: 'Standard Man-Hour', to: '/ole/smh-status', icon: FlaskConical },
-      { label: 'Downtime Management', to: '/ole/downtime', icon: AlertTriangle },
-      { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
+      // { label: 'Downtime Management', to: '/ole/downtime', icon: AlertTriangle },
+      // { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
       // { label: 'API Test', to: '/ole-mart-api', icon: Database },
     ],
   },
-  {
-    id: 'fsms',
-    label: 'FSMS',
-    description: 'Floor space management system',
-    icon: Building2,
-    color: 'text-violet-500',
-    iconBg: 'bg-violet-500/15',
-    navItems: [
-      { label: 'Plants', to: '/plants', icon: MapPin },
-      { label: 'Floor Map', to: '/floor-map', icon: ClipboardList },
-      { label: 'Layout Editor', to: '/fsms/editor', icon: Pencil },
-      { label: 'Bay Management', to: '/fsms/bays', icon: TableProperties },
-    ],
-  },
-  {
-    id: 'ebuild',
-    label: 'eBuild Plan',
-    description: 'Demand & output planning',
-    icon: CalendarDays,
-    color: 'text-orange-500',
-    iconBg: 'bg-orange-500/15',
-    navItems: [
-      { label: 'Build Plan', to: '/ebuild', icon: Home },
-    ],
-  },
-  {
-    id: 'iebaseline',
-    label: 'IE Baseline',
-    description: 'Learn everything about IE Baseline',
-    icon: BookOpen,
-    color: 'text-orange-500',
-    iconBg: 'bg-orange-500/15',
-    navItems: [
-      { label: 'Overview', to: '/iebaseline', icon: Home },
-      { label: 'Edit', to: '/iebaseline/edit', icon: Pencil },
-    ],
-  },
+  // {
+  //   id: 'fsms',
+  //   label: 'FSMS',
+  //   description: 'Floor space management system',
+  //   icon: Building2,
+  //   color: 'text-violet-500',
+  //   iconBg: 'bg-violet-500/15',
+  //   navItems: [
+  //     { label: 'Plants', to: '/plants', icon: MapPin },
+  //     { label: 'Floor Map', to: '/floor-map', icon: ClipboardList },
+  //     { label: 'Layout Editor', to: '/fsms/editor', icon: Pencil },
+  //     { label: 'Bay Management', to: '/fsms/bays', icon: TableProperties },
+  //   ],
+  // },
+  // {
+  //   id: 'ebuild',
+  //   label: 'eBuild Plan',
+  //   description: 'Demand & output planning',
+  //   icon: CalendarDays,
+  //   color: 'text-orange-500',
+  //   iconBg: 'bg-orange-500/15',
+  //   navItems: [
+  //     { label: 'Build Plan', to: '/ebuild', icon: Home },
+  //   ],
+  // },
+  // {
+  //   id: 'iebaseline',
+  //   label: 'IE Baseline',
+  //   description: 'Learn everything about IE Baseline',
+  //   icon: BookOpen,
+  //   color: 'text-orange-500',
+  //   iconBg: 'bg-orange-500/15',
+  //   navItems: [
+  //     { label: 'Overview', to: '/iebaseline', icon: Home },
+  //     { label: 'Edit', to: '/iebaseline/edit', icon: Pencil },
+  //   ],
+  // },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
