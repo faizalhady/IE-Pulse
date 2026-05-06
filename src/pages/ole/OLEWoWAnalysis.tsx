@@ -31,10 +31,17 @@ const MOCK_DL = DL_WEEKLY_DATA;
 const CARD = 'bg-card border border-border rounded-lg p-4 flex flex-col';
 const TITLE = 'text-xs font-semibold text-muted-foreground uppercase tracking-wider';
 const TT = {
-  contentStyle: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6, fontSize: 11, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
-  labelStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
-  itemStyle: { color: 'hsl(var(--muted-foreground))' },
-  cursor: { fill: 'hsl(var(--muted-foreground) / 0.12)' },
+  contentStyle: {
+    background: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 8,
+    fontSize: 11,
+    padding: '8px 12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+  },
+  labelStyle: { color: 'hsl(var(--muted-foreground))', fontWeight: 500, marginBottom: 4 },
+  itemStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
+  cursor: { fill: 'hsl(var(--muted-foreground) / 0.1)' },
 };
 
 function ExpandModal({ title, open, onClose, children }: { title: string; open: boolean; onClose: () => void; children: React.ReactNode }) {

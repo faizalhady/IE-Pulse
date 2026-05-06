@@ -25,11 +25,18 @@ type TrendPoint = { id: string; label: string; ole: number; target: number; proj
 
 const genId = () => Math.random().toString(36).substr(2, 9);
 
-const TT = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border))',
-  borderRadius: 8, fontSize: 11,
-  color: 'hsl(var(--foreground))',
+const TT_PROPS = {
+  contentStyle: {
+    background: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 8,
+    fontSize: 11,
+    padding: '8px 12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+  },
+  itemStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
+  labelStyle: { color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontWeight: 500 },
+  cursor: { fill: 'hsl(var(--muted-foreground) / 0.08)' },
 };
 
 const SLICE_COLORS: Record<string, string> = {
@@ -325,7 +332,7 @@ function Q1Chart({ trendData, fillHeight = false }: { trendData: TrendPoint[]; f
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
           <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmtWeekLabel} />
           <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} labelFormatter={fmtWeekLabel} />
+          <Tooltip {...TT_PROPS} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} labelFormatter={fmtWeekLabel} />
           <Bar dataKey="ole" name="OLE %" maxBarSize={32} radius={[4, 4, 0, 0]}>
             {visible.map((_, i) => <Cell key={i} fill="hsl(var(--primary))" />)}
           </Bar>
@@ -378,7 +385,7 @@ function SmallPareto({ title, data, loading, height = 180, fillHeight = false }:
             <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={24} tick={<WrappedTick />} />
             <YAxis yAxisId="left" domain={[0, 'auto']} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
-            <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+            <Tooltip {...TT_PROPS} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
             <Bar yAxisId="left" dataKey="value" name="Share %" radius={[3, 3, 0, 0]} maxBarSize={40}>
               {data.map((entry, i) => <Cell key={i} fill="hsl(var(--primary)" />)}
             </Bar>
