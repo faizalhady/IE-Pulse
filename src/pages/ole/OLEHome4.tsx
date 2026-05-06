@@ -1,3 +1,4 @@
+import { format, parseISO } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOleWeekly, useOleWorkcells } from '@/hooks/useOleData';
 import type { OleWeeklyResult } from '@/lib/oleApi';
@@ -353,9 +354,15 @@ export default function OLEHome4() {
   const oles = siteWeekly.map(d => d.ole).filter(Boolean);
   const yMin = 0;
   const yMax = oles.length ? Math.max(OLE_TARGET + 5, Math.ceil(Math.max(...oles) / 10) * 10 + 10) : 100;
-  const weekLabel = selectedWeek !== null
-    ? `WW${String(selectedWeek).padStart(2, '0')}`
-    : 'All Weeks';
+  const weekLabel = useMemo(() => {
+    if (selectedWeek !== null) return `WW${String(selectedWeek).padStart(2, '0')}`;
+    if (dateFrom && dateTo) {
+      return `${format(parseISO(dateFrom), 'd MMMM yyyy')} - ${format(parseISO(dateTo), 'd MMMM yyyy')}`;
+    }
+    if (dateFrom) return `From ${format(parseISO(dateFrom), 'd MMMM yyyy')}`;
+    if (dateTo) return `Until ${format(parseISO(dateTo), 'd MMMM yyyy')}`;
+    return 'All Weeks';
+  }, [selectedWeek, dateFrom, dateTo]);
 
   return (
     <div className="relative">

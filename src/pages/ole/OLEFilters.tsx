@@ -44,7 +44,7 @@ export function DatePickerField({ id, label, value, onChange }: {
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={date}
+          <Calendar mode="single" selected={date} defaultMonth={date}
             onSelect={d => { onChange(d ? toYmd(d) : ''); setOpen(false); }}
             initialFocus
           />

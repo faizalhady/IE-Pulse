@@ -101,8 +101,18 @@
   * {
     @apply border-border;
   }
+  html {
+    @apply h-full overflow-hidden;
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased h-full overflow-hidden;
+    touch-action: pan-x pan-y;
+  }
+  #root {
+    @apply h-full w-full overflow-hidden;
   }
 }
 

@@ -14,6 +14,7 @@ import {
   shiftLabel,
 } from '@/lib/oleConstants';
 import { cn } from '@/lib/utils';
+import { format, parseISO } from 'date-fns';
 import {
   AlertTriangle,
   Info,
@@ -341,7 +342,15 @@ export default function OLEWorkcell4() {
   function handleDateFrom(val: string) { setDateFrom(val); setSelectedWeek(null); }
   function handleDateTo(val: string) { setDateTo(val); setSelectedWeek(null); }
 
-  const weekLabel = selectedWeek !== null ? `WW${String(selectedWeek).padStart(2, '0')}` : 'Custom';
+  const weekLabel = useMemo(() => {
+    if (selectedWeek !== null) return `WW${String(selectedWeek).padStart(2, '0')}`;
+    if (dateFrom && dateTo) {
+      return `${format(parseISO(dateFrom), 'd MMMM yyyy')} - ${format(parseISO(dateTo), 'd MMMM yyyy')}`;
+    }
+    if (dateFrom) return `From ${format(parseISO(dateFrom), 'd MMMM yyyy')}`;
+    if (dateTo) return `Until ${format(parseISO(dateTo), 'd MMMM yyyy')}`;
+    return 'All Weeks';
+  }, [selectedWeek, dateFrom, dateTo]);
 
   const filteredWeekly = useMemo(() =>
     rawWeekly.filter(r => {
@@ -445,7 +454,7 @@ export default function OLEWorkcell4() {
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
         <div className="px-6 py-3 flex items-center gap-3">
           <button onClick={() => navigate('/ole/home4')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            ← Home
+            ← Plant Level
           </button>
           <span className="text-sm font-bold text-foreground">OLE Report - {workcell}</span>
         </div>

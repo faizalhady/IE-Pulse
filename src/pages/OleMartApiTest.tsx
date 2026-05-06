@@ -151,6 +151,7 @@ function DatePickerField({
           <Calendar
             mode="single"
             selected={date}
+            defaultMonth={date}
             onSelect={d => {
               onChange(d ? toYmd(d) : '');
               setOpen(false);
