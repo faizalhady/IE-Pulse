@@ -115,23 +115,22 @@ export default function MapPage() {
         center={PENANG_CENTER}
         zoom={DEFAULT_ZOOM}
         className="w-full h-full"
-        onViewportChange={(vp) => console.log(`lng: ${vp.center[0].toFixed(6)}, lat: ${vp.center[1].toFixed(6)}, zoom: ${vp.zoom.toFixed(2)}`)}
+        // onViewportChange={(vp) => console.log(`lng: ${vp.center[0].toFixed(6)}, lat: ${vp.center[1].toFixed(6)}, zoom: ${vp.zoom.toFixed(2)}`)}
 
-      // dragRotate={false}
-      // dragPan={false}
-      // touchPitch={false}
-      // touchZoomRotate={false}
-      // touchZoom={false}
+        dragRotate={false}
+        dragPan={false}
+        touchPitch={false}
+        touchZoomRotate={false}
       // touchRotate={false}
       // touchDragPan={false}
       // dragZoom={false}
       >
         <MapControls
           position="top-right"
-          showCompass
-          showFullscreen
-          showZoom
-          showLocate
+        // showCompass
+        // showFullscreen
+        // showZoom
+        // showLocate
         />
 
         {plantKPIs.map(plant => (

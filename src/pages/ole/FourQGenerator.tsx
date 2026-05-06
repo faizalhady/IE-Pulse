@@ -10,7 +10,7 @@ import type { OleWeeklyResult, OleWorkcellConfig } from '@/lib/oleApi';
 import { oleApi } from '@/lib/oleApi';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { CalendarIcon, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Info, Plus, Printer, Settings, Trash2 } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight, Download, Eye, EyeOff, GripVertical, Info, Plus, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar, CartesianGrid, Cell, ComposedChart, Line,
@@ -25,34 +25,12 @@ type TrendPoint = { id: string; label: string; ole: number; target: number; proj
 
 const genId = () => Math.random().toString(36).substr(2, 9);
 
-// ─── Custom Tooltip (theme-aware, readable) ───────────────────────────────────
-function ChartTooltip({ active, payload, label, labelFormatter }: any) {
-  if (!active || !payload?.length) return null;
-  const displayLabel = labelFormatter ? labelFormatter(label) : label;
-  return (
-    <div style={{
-      background: 'hsl(var(--card))',
-      border: '1px solid hsl(var(--border))',
-      borderRadius: 10,
-      padding: '8px 12px',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-      minWidth: 110,
-    }}>
-      <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11, fontWeight: 600, marginBottom: 4, letterSpacing: '0.04em' }}>
-        {displayLabel}
-      </p>
-      {payload.map((p: any, i: number) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color || p.fill || 'hsl(var(--primary))', flexShrink: 0 }} />
-          <span style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11 }}>{p.name}</span>
-          <span style={{ color: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 700, marginLeft: 'auto', fontFamily: 'monospace', paddingLeft: 8 }}>
-            {typeof p.value === 'number' ? `${Number(p.value).toFixed(1)}%` : p.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
+const TT = {
+  background: 'hsl(var(--card))',
+  border: '1px solid hsl(var(--border))',
+  borderRadius: 8, fontSize: 11,
+  color: 'hsl(var(--foreground))',
+};
 
 const SLICE_COLORS: Record<string, string> = {
   'Output SMH': '#22c55e',
@@ -347,7 +325,7 @@ function Q1Chart({ trendData, fillHeight = false }: { trendData: TrendPoint[]; f
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
           <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmtWeekLabel} />
           <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-          <Tooltip content={<ChartTooltip labelFormatter={fmtWeekLabel} />} cursor={{ fill: 'hsl(var(--primary) / 0.08)' }} />
+          <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} labelFormatter={fmtWeekLabel} />
           <Bar dataKey="ole" name="OLE %" maxBarSize={32} radius={[4, 4, 0, 0]}>
             {visible.map((_, i) => <Cell key={i} fill="hsl(var(--primary))" />)}
           </Bar>
@@ -375,7 +353,7 @@ const WrappedTick = ({ x, y, payload }: any) => {
   return (
     <g transform={`translate(${x},${y + 2})`}>
       {shown.map((line, i) => (
-        <text key={i} x={0} y={0} dy={i * 9} textAnchor="middle" fontSize={7} fill="hsl(var(--muted-foreground))">
+        <text key={i} x={0} y={0} dy={i * 10} textAnchor="middle" fontSize={8.5} fill="hsl(var(--muted-foreground))">
           {line}
         </text>
       ))}
@@ -398,9 +376,9 @@ function SmallPareto({ title, data, loading, height = 180, fillHeight = false }:
           <ComposedChart data={data} margin={{ top: 2, right: 18, left: -22, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
             <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={24} tick={<WrappedTick />} />
-            <YAxis yAxisId="left" domain={[0, 'auto']} tick={{ fontSize: 8 }} tickLine={false} axisLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 8 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'hsl(var(--primary) / 0.08)' }} />
+            <YAxis yAxisId="left" domain={[0, 'auto']} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
+            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+            <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
             <Bar yAxisId="left" dataKey="value" name="Share %" radius={[3, 3, 0, 0]} maxBarSize={40}>
               {data.map((entry, i) => <Cell key={i} fill="hsl(var(--primary)" />)}
             </Bar>
@@ -415,10 +393,10 @@ function SmallPareto({ title, data, loading, height = 180, fillHeight = false }:
 
 // ─── Q2 Section ───────────────────────────────────────────────────────────────
 
-function Q2Section({ aggregateRows, scopeWorkcells, scopePlant, compact = false, onCatsChange }: {
+function Q2Section({ aggregateRows, scopeWorkcells, scopePlants, compact = false, onCatsChange }: {
   aggregateRows: OleWeeklyResult[];
   scopeWorkcells: string[];
-  scopePlant: string;
+  scopePlants: string[];
   compact?: boolean;
   onCatsChange?: (c1: string, c2: string) => void;
 }) {
@@ -441,26 +419,42 @@ function Q2Section({ aggregateRows, scopeWorkcells, scopePlant, compact = false,
         if (!actWeeks.length) { setLoading(false); return; }
         const dateFrom = actWeeks[0].week_start_date;
         const dateTo = actWeeks[actWeeks.length - 1].week_end_date;
-        const siteBd = await oleApi.ole.mhBreakdown({
-          date_from: dateFrom, date_to: dateTo,
-          plant: scopePlant || undefined,
-          workcell: !scopePlant && scopeWorkcells.length === 1 ? scopeWorkcells[0] : undefined,
-        });
-        const total = siteBd.total_input_hours;
-        const lossSlices = siteBd.slices.filter((s: any) => LOSS_CATS.includes(s.name));
-        const p1raw = lossSlices.map((s: any) => ({
-          name: s.name,
-          value: total > 0 ? parseFloat(((s.value / total) * 100).toFixed(2)) : 0,
-          color: s.color,
+
+        // Fetch and aggregate site breakdown
+        let total = 0;
+        const sliceSums: Record<string, number> = {};
+
+        if (scopePlants.length > 1) {
+          const bds = await Promise.all(scopePlants.map(p => oleApi.ole.mhBreakdown({ plant: p, date_from: dateFrom, date_to: dateTo })));
+          bds.forEach(bd => {
+            total += bd.total_input_hours;
+            bd.slices.forEach(s => { sliceSums[s.name] = (sliceSums[s.name] ?? 0) + s.value; });
+          });
+        } else {
+          const siteBd = await oleApi.ole.mhBreakdown({
+            date_from: dateFrom, date_to: dateTo,
+            plant: scopePlants[0] || undefined,
+            workcell: !scopePlants.length && scopeWorkcells.length === 1 ? scopeWorkcells[0] : undefined,
+          });
+          total = siteBd.total_input_hours;
+          siteBd.slices.forEach(s => { sliceSums[s.name] = s.value; });
+        }
+
+        const p1raw = LOSS_CATS.map(name => ({
+          name,
+          value: total > 0 ? parseFloat(((sliceSums[name] / total) * 100).toFixed(2)) : 0,
+          color: SLICE_COLORS[name] || '#94a3b8',
         }));
+
         const p1 = buildPareto(p1raw);
         setPareto1(p1);
         const cat1 = p1[0]?.name ?? ''; const cat2 = p1[1]?.name ?? '';
         setTop1Cat(cat1); setTop2Cat(cat2);
         onCatsChange?.(cat1, cat2);
+
         const allWcList = scopeWorkcells.length > 0
           ? scopeWorkcells
-          : (await oleApi.workcells.list()).filter((w: any) => !scopePlant || w.plant === scopePlant).map((w: any) => w.workcell);
+          : (await oleApi.workcells.list()).filter((w: any) => !scopePlants.length || scopePlants.includes(w.plant)).map((w: any) => w.workcell);
         const wcBds = await Promise.all(
           allWcList.map((wc: string) => oleApi.ole.mhBreakdown({ workcell: wc, date_from: dateFrom, date_to: dateTo })
             .then((res: any) => ({ wc, res })).catch(() => null))
@@ -479,7 +473,7 @@ function Q2Section({ aggregateRows, scopeWorkcells, scopePlant, compact = false,
       } catch (e) { console.error('Q2 load failed', e); }
       finally { setLoading(false); }
     })();
-  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.slice().sort().join('|'), scopePlant]);
+  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.slice().sort().join('|'), scopePlants.join('|')]);
 
   if (compact) {
     return (
@@ -522,10 +516,10 @@ interface MhWeekData {
   total: number; // sum of loss categories only
 }
 
-function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = false }: {
+function PaynterTable({ aggregateRows, scopeWorkcells, scopePlants, isPrint = false }: {
   aggregateRows: OleWeeklyResult[];
   scopeWorkcells: string[];
-  scopePlant: string;
+  scopePlants: string[];
   isPrint?: boolean;
 }) {
   const [weekData, setWeekData] = useState<MhWeekData[]>([]);
@@ -542,12 +536,20 @@ function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = fal
 
         const results = await Promise.all(actWeeks.map(async w => {
           try {
-            // When multiple workcells selected: fetch each and sum raw hours, then compute pct
             let totalHours = 0;
             const sliceSums: Record<string, number> = {};
-            if (!scopePlant && scopeWorkcells.length > 1) {
+
+            if (!scopePlants.length && scopeWorkcells.length > 1) {
               const bds = await Promise.all(
                 scopeWorkcells.map(wc => oleApi.ole.mhBreakdown({ workcell: wc, date_from: w.week_start_date, date_to: w.week_end_date }).catch(() => null))
+              );
+              bds.filter(Boolean).forEach((bd: any) => {
+                totalHours += bd.total_input_hours ?? 0;
+                bd.slices?.forEach((sl: any) => { sliceSums[sl.name] = (sliceSums[sl.name] ?? 0) + (sl.value ?? 0); });
+              });
+            } else if (scopePlants.length > 1) {
+              const bds = await Promise.all(
+                scopePlants.map(p => oleApi.ole.mhBreakdown({ plant: p, date_from: w.week_start_date, date_to: w.week_end_date }).catch(() => null))
               );
               bds.filter(Boolean).forEach((bd: any) => {
                 totalHours += bd.total_input_hours ?? 0;
@@ -556,12 +558,13 @@ function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = fal
             } else {
               const bd = await oleApi.ole.mhBreakdown({
                 date_from: w.week_start_date, date_to: w.week_end_date,
-                plant: scopePlant || undefined,
-                workcell: !scopePlant && scopeWorkcells.length === 1 ? scopeWorkcells[0] : undefined,
+                plant: scopePlants[0] || undefined,
+                workcell: !scopePlants.length && scopeWorkcells.length === 1 ? scopeWorkcells[0] : undefined,
               });
               totalHours = bd.total_input_hours ?? 0;
               bd.slices?.forEach((sl: any) => { sliceSums[sl.name] = (sl.value ?? 0); });
             }
+
             if (!totalHours) return null;
             const pct = (name: string) => sliceSums[name] ? parseFloat(((sliceSums[name] / totalHours) * 100).toFixed(2)) : 0;
             const nva = pct('NVA Input');
@@ -578,15 +581,15 @@ function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = fal
       } catch (e) { console.error('Q3 mh load failed', e); }
       finally { setLoading(false); }
     })();
-  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.slice().sort().join('|'), scopePlant]);
+  }, [aggregateRows.map(r => r.week_label).join(','), scopeWorkcells.slice().sort().join('|'), scopePlants.join('|')]);
 
   const last4 = weekData.slice(-4);
   const avg4 = (key: keyof Omit<MhWeekData, 'week_label'>) =>
     last4.length ? last4.reduce((s, w) => s + w[key], 0) / last4.length : null;
 
-  const fs = isPrint ? 'text-[9px]' : 'text-xs';
-  const px = isPrint ? 'px-2 py-1' : 'px-3 py-1.5';
-  const ph = isPrint ? 'px-2 py-1.5' : 'px-3 py-2';
+  const fs = isPrint ? 'text-[10px]' : 'text-xs';
+  const px = isPrint ? 'px-1.5 py-1' : 'px-3 py-1.5';
+  const ph = isPrint ? 'px-1.5 py-1.5' : 'px-3 py-2';
 
   if (loading) return (
     <div className="h-32 flex items-center justify-center text-xs text-muted-foreground animate-pulse">Loading Paynter data…</div>
@@ -596,27 +599,27 @@ function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = fal
   );
 
   return (
-    <div className={cn('overflow-x-auto w-full h-full rounded-xl', !isPrint && 'bg-card')}>
-      <table className={cn('w-full h-full text-left border-collapse', fs)}>
+    <div className={cn(isPrint ? 'w-full h-full overflow-hidden flex flex-col' : 'overflow-x-auto rounded-xl bg-card w-full h-full')}>
+      <table className={cn('w-full text-left border-collapse table-fixed', isPrint ? 'h-full' : '', fs)}>
         <thead>
           {isPrint && (
             <tr>
-              <th colSpan={weekData.length + 2} className="text-center py-1.5 text-xs font-bold uppercase text-primary-foreground bg-primary border-0">
+              <th colSpan={weekData.length + 2} className="text-center py-1 text-[10px] font-bold uppercase text-primary-foreground bg-primary border-0">
                 Fourth Quadrant — Paynter Chart
               </th>
             </tr>
           )}
           <tr className="bg-primary text-primary-foreground uppercase tracking-wider">
-            <th className={cn(ph, 'border border-primary/70 font-semibold sticky left-0 bg-primary z-10 w-24 max-w-[96px] leading-snug', !isPrint && 'text-[10px]')}>
-              Man Hrs Distribution
+            <th className={cn(ph, 'border border-primary/70 font-semibold', isPrint ? 'text-[9px] w-28' : 'sticky left-0 bg-primary z-10 w-24 max-w-[96px] text-[10px]')}>
+              {isPrint ? 'Category' : 'Man Hrs Distribution'}
             </th>
             {weekData.map(w => (
-              <th key={w.week_label} className={cn(ph, 'border border-primary/70 text-right font-semibold whitespace-nowrap')}>
+              <th key={w.week_label} className={cn(ph, 'border border-primary/70 text-right font-semibold')}>
                 {fmtWeekLabel(w.week_label)}
               </th>
             ))}
-            <th className={cn(ph, 'border border-primary/70 text-right font-bold whitespace-nowrap bg-primary/80')}>
-              Avg 4 Wks
+            <th className={cn(ph, 'border border-primary/70 text-right font-bold bg-primary/80')}>
+              Avg
             </th>
           </tr>
         </thead>
@@ -625,26 +628,23 @@ function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = fal
             const key = row.key as keyof Omit<MhWeekData, 'week_label'>;
             const a4 = avg4(key);
             return (
-              <tr key={row.key} className="border-b border-border hover:bg-muted/20 transition-colors">
-                <td className={cn(px, 'border border-border font-semibold sticky left-0 bg-card z-10 w-24 max-w-[96px] leading-snug')}>
-                  <div className={cn("flex items-center gap-1.5", !isPrint && row.key === 'unexplained' && 'text-[10px]')}>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0 inline-block" style={{ backgroundColor: row.color }} />
-                    {row.label}
-                  </div>
+              <tr key={row.key} className="border-b border-border">
+                <td className={cn(px, 'border border-border font-semibold', isPrint ? 'break-words' : 'sticky left-0 bg-card z-10 w-24 max-w-[96px] leading-snug')}>
+                  {row.label}
                 </td>
                 {weekData.map(w => (
                   <td key={w.week_label} className={cn(px, 'border border-border text-right font-mono tabular-nums')}>
                     {w[key].toFixed(2)}%
                   </td>
                 ))}
-                <td className={cn(px, 'border border-primary/20 text-right font-mono font-bold tabular-nums bg-primary/8 text-primary')}>
+                <td className={cn(px, 'border border-primary/20 text-right font-mono font-bold tabular-nums text-primary')}>
                   {a4 != null ? `${a4.toFixed(2)}%` : '—'}
                 </td>
               </tr>
             );
           })}
-          <tr className="bg-muted/60 font-bold text-foreground">
-            <td className={cn(px, 'border border-border sticky left-0 bg-muted/60 z-10 uppercase tracking-wider w-24 max-w-[96px] leading-snug')}>Total</td>
+          <tr className="font-bold text-foreground bg-muted/60">
+            <td className={cn(px, 'border border-border uppercase tracking-wider', isPrint ? '' : 'sticky left-0 bg-muted/60 z-10 w-24 max-w-[96px]')}>Total</td>
             {weekData.map(w => (
               <td key={w.week_label} className={cn(px, 'border border-border text-right font-mono tabular-nums')}>
                 {w.total.toFixed(2)}%
@@ -665,9 +665,9 @@ function PaynterTable({ aggregateRows, scopeWorkcells, scopePlant, isPrint = fal
 function ImprovementTable({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: {
   actions: ActionItem[]; isPrint?: boolean; top1Cat?: string; top2Cat?: string;
 }) {
-  const sz = isPrint ? 'text-[9px]' : 'text-xs';
-  const ph = isPrint ? 'px-1 py-1' : 'px-2 py-1.5';
-  const pd = isPrint ? 'px-1 py-1' : 'px-2 py-2';
+  const sz = isPrint ? 'text-[10px]' : 'text-xs';
+  const ph = isPrint ? 'px-1.5 py-1' : 'px-2 py-1.5';
+  const pd = isPrint ? 'px-1.5 py-1.5' : 'px-2 py-2';
 
   const issueOrder: string[] = [];
   [top1Cat, top2Cat].filter(Boolean).forEach(c => { if (!issueOrder.includes(c)) issueOrder.push(c); });
@@ -712,9 +712,9 @@ function ImprovementTable({ actions, isPrint = false, top1Cat = '', top2Cat = ''
     <div className={cn('overflow-x-auto rounded-xl w-full', !isPrint && 'bg-card')}>
       <table className={cn('w-full text-left border-collapse', sz)}>
         <thead>
-          {isPrint && <tr><th colSpan={11} className="text-center py-1.5 text-xs font-bold uppercase text-primary-foreground bg-primary border-0">Third Quadrant — Improvement Plan</th></tr>}
+          {isPrint && <tr><th colSpan={11} className="text-center py-1 text-[8px] font-bold uppercase text-primary-foreground bg-primary border-0">Third Quadrant — Improvement Plan</th></tr>}
           <tr className="bg-primary text-primary-foreground uppercase">
-            {COLS.map(c => <th key={c.label} className={cn(ph, 'border border-primary/70 font-semibold leading-snug', c.th)}>{c.label}</th>)}
+            {COLS.map(c => <th key={c.label} className={cn(ph, 'border border-primary/70 font-semibold leading-snug', isPrint ? 'text-[8px]' : 'text-[8px]', c.th)}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -839,80 +839,111 @@ export default function FourQGenerator() {
     const n = [...trendData]; const [moved] = n.splice(fromIdx, 1); n.splice(toIdx, 0, moved); setTrendData(n);
   }
 
-  const PreviewModal = () => (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="default" size="sm" className="gap-2"><Eye className="w-4 h-4" /> Preview Report</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-[98vw] w-[98vw] h-[98vh] p-0 flex flex-col gap-0 border border-border bg-card shadow-2xl rounded-xl overflow-hidden">
-        <div className="bg-card border-b border-border px-4 py-3 flex items-center gap-4 flex-shrink-0 print:hidden">
-          <Button onClick={() => window.print()} size="sm" className="gap-2 flex-shrink-0 h-9 px-4">
-            <Printer className="w-4 h-4" /> Print PDF
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-semibold text-base leading-tight">Report Preview</h2>
-            <p className="text-xs text-muted-foreground">Print-ready layout</p>
-          </div>
-          <div className="w-10 flex-shrink-0" />
-        </div>
+  const PreviewModal = () => {
+    const canvasRef = useRef<HTMLDivElement>(null);
+    const [downloading, setDownloading] = useState(false);
 
-        {/* White report canvas — fills modal minus header, no scroll */}
-        <div className="flex-1 overflow-hidden bg-muted/40 p-4 min-h-0">
-          <div className="bg-card text-foreground h-full w-full rounded-lg shadow-sm p-5 flex flex-col gap-3 overflow-hidden" style={{ minWidth: 900 }}>
+    async function handleDownload() {
+      if (!canvasRef.current) return;
+      setDownloading(true);
+      try {
+        const { toPng } = await import('html-to-image');
+        const dataUrl = await toPng(canvasRef.current, {
+          cacheBust: true,
+          pixelRatio: 2,
+        });
+        const link = document.createElement('a');
+        link.download = `4Q-Report-${title.replace(/\s+/g, '-')}.png`;
+        link.href = dataUrl;
+        link.click();
+      } catch (e) {
+        console.error('Download failed', e);
+      } finally {
+        setDownloading(false);
+      }
+    }
 
-            {/* Report title bar */}
-            <div className="border-b-2 border-primary pb-2 flex items-center justify-between flex-shrink-0">
-              <h1 className="text-lg font-bold uppercase tracking-wide">{title}</h1>
-              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">JABIL 4Q REPORT</span>
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button variant="default" size="sm" className="gap-2"><Eye className="w-4 h-4" /> Preview Report</Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-[98vw] w-[98vw] h-[98vh] p-0 flex flex-col gap-0 border border-border bg-card shadow-2xl rounded-xl overflow-hidden">
+          <div className="bg-card border-b border-border px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+            <Button onClick={handleDownload} disabled={downloading} size="sm" className="gap-2 flex-shrink-0 h-8 px-3">
+              <Download className="w-3.5 h-3.5" />
+              {downloading ? 'Capturing...' : 'Download Image'}
+            </Button>
+            {/* Dark / Light toggle removed */}
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-sm leading-tight">Report Preview</h2>
+              <p className="text-xs text-muted-foreground">PNG download at 2x resolution</p>
             </div>
+            <div className="w-10 flex-shrink-0" />
+          </div>
 
-            {/* 2×2 grid — each cell gets exactly 1/2 of remaining height */}
-            <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 min-h-0 overflow-hidden">
+          {/* Report canvas — theme controlled by previewDark, not the app theme */}
+          <div className="flex-1 overflow-hidden bg-muted/40 min-h-0">
+            <div
+              ref={canvasRef}
+              className="bg-card text-foreground h-full w-full flex flex-col overflow-hidden"
+              style={{ minWidth: 900 }}
+            >
 
-              {/* Q1 */}
-              <div className="border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
-                <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0">
-                  <span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">First Quadrant - OLE Trend</span>
-                </div>
-                <div className="flex-1 min-h-0">
-                  <Q1Chart trendData={trendData} fillHeight />
-                </div>
+              {/* Report title bar */}
+              <div className="flex items-center justify-between flex-shrink-0 px-4 py-1.5">
+                <h1 className="text-sm font-bold uppercase tracking-wide">{title}</h1>
+                <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">JABIL 4Q REPORT</span>
               </div>
 
-              {/* Q2 */}
-              <div className="border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
-                <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0">
-                  <span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">Second Quadrant - Pareto Four Weeks</span>
+              {/* 2×2 grid — each cell gets exactly 1/2 of remaining height */}
+              <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 min-h-0 overflow-hidden">
+
+                {/* Q1 */}
+                <div className="border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0">
+                    <span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">First Quadrant - OLE Trend</span>
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <Q1Chart trendData={trendData} fillHeight />
+                  </div>
                 </div>
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <Q2Section
-                    aggregateRows={aggregateRows}
-                    scopeWorkcells={scopeWorkcells}
-                    scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''}
-                    compact
-                    onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }}
-                  />
+
+                {/* Q2 */}
+                <div className="border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0">
+                    <span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">Second Quadrant - Pareto Four Weeks</span>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <Q2Section
+                      aggregateRows={aggregateRows}
+                      scopeWorkcells={scopeWorkcells}
+                      scopePlants={mode === 'plant' ? selectedPlants : []}
+                      compact
+                      onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }}
+                    />
+                  </div>
                 </div>
+
+                {/* Q4 — Paynter Chart */}
+                <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col items-start">
+                  <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlants={mode === 'plant' ? selectedPlants : []} isPrint />
+                </div>
+
+                {/* Q3 — Improvement Plan */}
+                <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
+                  <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} isPrint />
+                </div>
+
+
+
               </div>
-
-              {/* Q4 — Paynter Chart */}
-              <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
-                <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''} isPrint />
-              </div>
-
-              {/* Q3 — Improvement Plan */}
-              <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
-                <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} isPrint />
-              </div>
-
-
-
             </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+        </DialogContent>
+      </Dialog>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden relative">
@@ -975,7 +1006,7 @@ export default function FourQGenerator() {
                   <Q2Section
                     aggregateRows={aggregateRows}
                     scopeWorkcells={scopeWorkcells}
-                    scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''}
+                    scopePlants={mode === 'plant' ? selectedPlants : []}
                     onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }}
                   />
                 </section>
@@ -1001,7 +1032,7 @@ export default function FourQGenerator() {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlant={mode === 'plant' ? selectedPlants.join('+') : ''} />
+                    <PaynterTable aggregateRows={aggregateRows} scopeWorkcells={scopeWorkcells} scopePlants={mode === 'plant' ? selectedPlants : []} />
                   </div>
                 </section>
 

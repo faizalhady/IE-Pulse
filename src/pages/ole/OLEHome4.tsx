@@ -234,17 +234,23 @@ export default function OLEHome4() {
   function handleDateFrom(val: string) { setDateFrom(val); setSelectedWeek(null); }
   function handleDateTo(val: string) { setDateTo(val); setSelectedWeek(null); }
 
-  // ── Filter by date + plant ──────────────────────────────────────────────────
-  const filteredWeekly = useMemo(() => {
+  // ── Filter by date/week ONLY (no plant filter) ──────────────────────────────
+  const weekFilteredWeekly = useMemo(() => {
     return rawWeekly.filter(r => {
       const inDate = (!dateFrom && !dateTo) ||
         ((!dateFrom || r.week_start_date <= dateTo) && (!dateTo || r.week_end_date >= dateFrom));
-      const wcPlant = workcellConfigs.find(w => w.workcell === r.workcell)?.plant;
-      const inPlant = plant === 'all' || wcPlant === plant;
-      if (selectedWeek !== null) return r.iso_week === selectedWeek && inPlant;
-      return inDate && inPlant;
+      if (selectedWeek !== null) return r.iso_week === selectedWeek;
+      return inDate;
     });
-  }, [rawWeekly, dateFrom, dateTo, plant, selectedWeek, workcellConfigs]);
+  }, [rawWeekly, dateFrom, dateTo, selectedWeek]);
+
+  // ── Filter by plant (site level filter) ─────────────────────────────────────
+  const filteredWeekly = useMemo(() => {
+    return weekFilteredWeekly.filter(r => {
+      const wcPlant = workcellConfigs.find(w => w.workcell === r.workcell)?.plant;
+      return plant === 'all' || wcPlant === plant;
+    });
+  }, [weekFilteredWeekly, plant, workcellConfigs]);
 
   // ── Per-workcell aggregates ──────────────────────────────────────────────────
   const workcellsSorted = useMemo(() => {
@@ -270,17 +276,17 @@ export default function OLEHome4() {
     };
   }, [workcellsSorted]);
 
-  // ── Plant aggregates ─────────────────────────────────────────────────────────
+  // ── Plant aggregates (ALWAYS show both plants, ignore plant filter) ─────────
   const plantAgg = useMemo(() => {
-    const p1rows = workcellsSorted.filter(r => workcellConfigs.find(w => w.workcell === r.workcell)?.plant === 'Plant 1');
-    const p2rows = workcellsSorted.filter(r => workcellConfigs.find(w => w.workcell === r.workcell)?.plant === 'Plant 2');
-    const agg = (rows: typeof workcellsSorted) => {
+    const p1rows = weekFilteredWeekly.filter(r => workcellConfigs.find(w => w.workcell === r.workcell)?.plant === 'Plant 1');
+    const p2rows = weekFilteredWeekly.filter(r => workcellConfigs.find(w => w.workcell === r.workcell)?.plant === 'Plant 2');
+    const agg = (rows: OleWeeklyResult[]) => {
       const out = rows.reduce((s, r) => s + r.total_output_smh, 0);
       const inp = rows.reduce((s, r) => s + r.total_input_hours, 0);
       return { ole_pct: inp > 0 ? (out / inp) * 100 : 0 };
     };
     return { p1: agg(p1rows), p2: agg(p2rows) };
-  }, [workcellsSorted, workcellConfigs]);
+  }, [weekFilteredWeekly, workcellConfigs]);
 
   const [trendModalOpen, setTrendModalOpen] = useState(false);
 
@@ -455,14 +461,14 @@ export default function OLEHome4() {
                 <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">
                   {(site.total_output_smh / 1000).toFixed(1)}k
                 </p>
-                <p className="text-[9px] text-muted-foreground">Σ(Qty × SMH/unit) · <span className="text-primary/60">view trend ↗</span></p>
+                <p className="text-[9px] text-muted-foreground"> <span className="text-primary/60">view trend ↗</span></p>
               </div>
               <div className="p-3">
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
                 <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">
                   {(site.total_input_hours / 1000).toFixed(1)}k
                 </p>
-                <p className="text-[9px] text-muted-foreground">Σ(Paid Direct Hrs) · <span className="text-violet-400/60">view trend ↗</span></p>
+                <p className="text-[9px] text-muted-foreground"> <span className="text-violet-400/60">view trend ↗</span></p>
               </div>
             </div>
           </button>
