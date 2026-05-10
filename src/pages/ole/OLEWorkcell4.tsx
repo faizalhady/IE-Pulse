@@ -16,7 +16,6 @@ import {
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import {
-  AlertTriangle,
   Info,
   Loader2,
   Users,
@@ -171,7 +170,7 @@ interface ShiftDrawerData {
 function ShiftDrawer({
   data, onClose, paidHoursByKey, paidHoursLoading,
 }: {
-  data: ShiftDrawerData;
+  data: ShiftDrawerData; s
   onClose: () => void;
   paidHoursByKey: Map<string, any[]>;
   paidHoursLoading: boolean;
@@ -179,6 +178,20 @@ function ShiftDrawer({
   const clr = oleColor(data.ole_pct ?? 0);
   const key = `${data.workcell}|${data.date}|${data.shift}`;
   const employees = paidHoursByKey.get(key) ?? [];
+  // console.log(employees)
+
+  const vaCount = employees.filter(emp => emp.value_type === "VA").length;
+
+  // Count the number of NVA and " " employees
+  const nvaCount = employees.filter(emp => emp.value_type === "NVA" || emp.value_type === "").length;
+
+  const sortedEmployees = [...employees].sort((a, b) => {
+    // Use empty strings as fallbacks in case position is null/undefined
+    const posA = a.position || "";
+    const posB = b.position || "";
+
+    return posA.localeCompare(posB);
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -203,10 +216,18 @@ function ShiftDrawer({
         {/* KPI strip */}
         <div className="grid grid-cols-4 divide-x divide-border border-b border-border flex-shrink-0">
           {[
-            { label: 'OLE', value: data.ole_pct !== null ? `${data.ole_pct.toFixed(1)}%` : '—', color: clr },
+            {
+              label: 'VA Total',
+              value: vaCount > 0 ? vaCount.toString() : '—',
+              color: undefined
+            },
+            {
+              label: 'NVA Total',
+              value: nvaCount > 0 ? nvaCount.toString() : '—',
+              color: undefined
+            },
             { label: 'Output SMH', value: data.effective_output_smh.toFixed(1), color: undefined },
             { label: 'Input Hrs', value: data.total_input_hours.toFixed(1), color: undefined },
-            { label: 'SMH Cov.', value: data.smh_coverage_pct !== null ? `${data.smh_coverage_pct}%` : '—', color: undefined },
           ].map(k => (
             <div key={k.label} className="px-4 py-3">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{k.label}</p>
@@ -231,16 +252,16 @@ function ShiftDrawer({
             <>
               <div className="grid bg-muted/100 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border sticky top-0"
                 style={{ gridTemplateColumns: '2.5rem 1fr 5rem 6rem 7rem' }}>
-                {['#', 'Operator', 'Type', 'Direct Hrs', 'Total Input'].map(h => (
+                {['#', 'Position', 'Type', 'Direct Hrs', 'Total Input'].map(h => (
                   <div key={h} className="px-4 py-2.5">{h}</div>
                 ))}
               </div>
-              {employees.map((emp: any, i: number) => (
+              {sortedEmployees.map((emp: any, i: number) => (
                 <div key={i}
                   className="grid items-center border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                   style={{ gridTemplateColumns: '2.5rem 1fr 5rem 6rem 7rem', height: 52 }}>
                   <div className="px-4 text-xs text-muted-foreground font-mono">{i + 1}</div>
-                  <div className="px-4 text-sm font-medium text-foreground truncate">{emp.name || '—'}</div>
+                  <div className="px-4 text-sm font-medium text-foreground truncate">{emp.position || '—'}</div>
                   <div className="px-4">
                     <span className={cn(
                       'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
@@ -403,8 +424,6 @@ export default function OLEWorkcell4() {
       return true;
     }), [rawResults, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
 
-  // paidHoursByKey — rebuilt reactively whenever rawPaidHours or workcell changes
-  // The drawer reads from this map directly so it always reflects current load state
   const paidHoursByKey = useMemo(() => {
     const map = new Map<string, typeof rawPaidHours>();
     rawPaidHours.filter(h => h.workcell === workcell).forEach(h => {
@@ -454,7 +473,7 @@ export default function OLEWorkcell4() {
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
         <div className="px-6 py-3 flex items-center gap-3">
           <button onClick={() => navigate('/ole/home4')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            ← Plant Level
+            &larr; Plant Level
           </button>
           <span className="text-sm font-bold text-foreground">OLE Report - {workcell}</span>
         </div>
@@ -497,10 +516,11 @@ export default function OLEWorkcell4() {
         )}
       </div>
 
-      <div className="p-5 flex gap-5" style={{ height: 'calc(100vh - 137px)' }}>
+      {/* ── MAIN LAYOUT — page scrolls naturally like OLEHome4 ── */}
+      <div className="p-5 flex gap-5">
 
         {/* LEFT COLUMN */}
-        <div className="w-[300px] flex-shrink-0 flex flex-col gap-4 overflow-y-auto">
+        <div className="w-[300px] flex-shrink-0 flex flex-col gap-4">
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-start gap-3">
               {logo && (
@@ -538,41 +558,10 @@ export default function OLEWorkcell4() {
               </div>
             </div>
           </button>
-
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider mb-3">Hours Distribution</p>
-            <div className="space-y-2">
-              {mh.slices.map(s => (
-                <div key={s.name} className="w-full flex items-center gap-2 px-1 py-0.5">
-                  <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: s.color }} />
-                  <span className="text-[9px] text-muted-foreground flex-1 text-left truncate">{s.name}</span>
-                  <span className="text-[9px] font-mono font-bold text-foreground">
-                    {mh.total_input_hours > 0 ? ((s.value / mh.total_input_hours) * 100).toFixed(1) : '0.0'}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {flaggedCount > 0 && (
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Attention</p>
-              </div>
-              <div className="px-4 py-2.5 flex items-center gap-3">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-semibold text-foreground">Flagged shifts</p>
-                  <p className="text-[9px] text-muted-foreground">Data quality issues detected</p>
-                </div>
-                <span className="text-[10px] font-mono font-bold text-amber-400">{flaggedCount}</span>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
+        <div className="flex-1 flex flex-col gap-4 min-w-0">
 
           {/* Weekly chart */}
           <div className="rounded-xl border border-border bg-card p-4">
@@ -584,8 +573,8 @@ export default function OLEWorkcell4() {
                 </p>
               </div>
               <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" /> ≥{OLE_TARGET}%</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" /> 45–{OLE_TARGET - 1}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" /> &ge;{OLE_TARGET}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" /> 45&ndash;{OLE_TARGET - 1}%</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" /> &lt;45%</span>
               </div>
             </div>
@@ -635,8 +624,8 @@ export default function OLEWorkcell4() {
             </div>
           </div>
 
-          {/* Data table */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden flex-1 min-h-0 flex flex-col">
+          {/* Data table — natural height, page scrolls */}
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
               <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">
                 {tableTab === 'labor' ? 'Labor Input' : 'Production Output'} · {workcell} · {weekLabel}
@@ -654,7 +643,7 @@ export default function OLEWorkcell4() {
               </div>
             </div>
 
-            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+            <div className="overflow-x-auto">
               {tableTab === 'labor' && (
                 <>
                   <div className={`grid bg-muted/40 ${TH} text-muted-foreground uppercase tracking-wider font-semibold border-b border-border`}

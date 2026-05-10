@@ -24,6 +24,9 @@ import {
   SmhLookup,
   SmhStatus,
 } from '@/lib/oleApi';
+import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/oleConstants';
+
+const isExcluded = (workcell: string) => TEMP_EXCLUDED_WORKCELLS.includes(workcell);
 
 // ─── Module-level in-memory cache ────────────────────────────────────────────
 // Survives component unmount/remount — cleared only on full page refresh.
@@ -116,17 +119,20 @@ export function useOleHealth() {
 
 /** Workcell config list */
 export function useOleWorkcells() {
-  return useCachedFetch<OleWorkcellConfig[]>('workcells', () => oleApi.workcells.list(), 0);
+  const r = useCachedFetch<OleWorkcellConfig[]>('workcells', () => oleApi.workcells.list(), 0);
+  return { ...r, data: r.data?.filter(w => !isExcluded(w.workcell)) ?? null };
 }
 
 /** OLE summary per workcell — poll every 5 min */
 export function useOleSummary() {
-  return useCachedFetch<OleSummary[]>('ole_summary', () => oleApi.ole.summary(), 5 * 60 * 1000);
+  const r = useCachedFetch<OleSummary[]>('ole_summary', () => oleApi.ole.summary(), 5 * 60 * 1000);
+  return { ...r, data: r.data?.filter(w => !isExcluded(w.workcell)) ?? null };
 }
 
 /** Full OLE shift rows — poll every 5 min */
 export function useOleResults() {
-  return useCachedFetch<OleResult[]>('ole_results', () => oleApi.ole.list(), 5 * 60 * 1000);
+  const r = useCachedFetch<OleResult[]>('ole_results', () => oleApi.ole.list(), 5 * 60 * 1000);
+  return { ...r, data: r.data?.filter(w => !isExcluded(w.workcell)) ?? null };
 }
 
 /** Raw MES production rows */
@@ -152,7 +158,8 @@ export function useSmhStatus() {
 
 /** Weekly OLE aggregates */
 export function useOleWeekly() {
-  return useCachedFetch<OleWeeklyResult[]>('ole_weekly', () => oleApi.ole.weekly(), 0);
+  const r = useCachedFetch<OleWeeklyResult[]>('ole_weekly', () => oleApi.ole.weekly(), 0);
+  return { ...r, data: r.data?.filter(w => !isExcluded(w.workcell)) ?? null };
 }
 
 /** ARIMA/HW predictions — cached per workcell */

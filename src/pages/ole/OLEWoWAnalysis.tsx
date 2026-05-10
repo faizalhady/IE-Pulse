@@ -6,6 +6,7 @@ import {
   useAnalysisData,
   useAnalysisDerived,
 } from '@/hooks/useAnalysisData';
+import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/oleConstants';
 import { Eye, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -23,9 +24,9 @@ import {
   XAxis, YAxis,
 } from 'recharts';
 
-const MOCK_TREND_WEEKS = ['WW05', 'WW06', 'WW07', 'WW08', 'WW09', 'WW10', 'WW11', 'WW12', 'WW13', 'WW14', 'WW15', 'WW16', 'WW17'];
-const MOCK_BUILD_UNIT = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, units: [246205, 250980, 279903, 230100, 306014, 306940, 374289, 195906, 329074, 363706, 390703, 394433, 351715][i] }));
-const MOCK_INPUT_HRS = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, hrs: [144710, 133057, 155484, 114545, 142020, 150222, 151427, 93413, 141783, 170450, 176851, 171134, 194193][i] }));
+const MOCK_TREND_WEEKS = ['WW05', 'WW06', 'WW07', 'WW08', 'WW09', 'WW10', 'WW11', 'WW12', 'WW13', 'WW14', 'WW15', 'WW16', 'WW17', 'WW18'];
+const MOCK_BUILD_UNIT = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, units: [246205, 250980, 279903, 230100, 306014, 306940, 374289, 195906, 329074, 363706, 390703, 394433, 351715, 403557][i] }));
+const MOCK_INPUT_HRS = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, hrs: [144710, 133057, 155484, 114545, 142020, 150222, 151427, 93413, 141783, 170450, 176851, 171134, 194193, 204081][i] }));
 const MOCK_DL = DL_WEEKLY_DATA;
 
 const CARD = 'bg-card border border-border rounded-lg p-4 flex flex-col';
@@ -106,22 +107,29 @@ const GapBarLabel = (props: any) => {
   const barW = Math.abs(width);
   const text = value === 0 ? '0' : `${pos ? '+' : '-'}${Math.abs(value).toLocaleString()}`;
   const fits = barW > text.length * 6.5 + 10;
-  const farEnd = pos ? x + barW : x;
-  return <text x={fits ? (pos ? farEnd - 6 : farEnd + 6) : (pos ? farEnd + 4 : farEnd - 4)} y={y + height / 2}
-    dominantBaseline="central" textAnchor={fits ? (pos ? 'end' : 'start') : (pos ? 'start' : 'end')}
+  // For negative bars: x = zero-line (right end), bar extends LEFT, so left edge = x - barW
+  const leftEnd = pos ? x : x - barW;
+  const labelX = pos
+    ? fits ? x + barW - 6 : x + barW + 4          // positive: inside-right or outside-right
+    : fits ? leftEnd + 6  : x - 6;                 // negative: inside-left or inside near zero
+  const anchor = pos
+    ? fits ? 'end'   : 'start'
+    : fits ? 'start' : 'end';
+  return <text x={labelX} y={y + height / 2}
+    dominantBaseline="central" textAnchor={anchor}
     fontSize={12} fontWeight={700} fill="hsl(var(--foreground))">{text}</text>;
 };
 
 const IMPACT_COLORS = ['#1e3a8a', '#1e40af', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#a5b4fc', '#818cf8', '#6366f1', '#4f46e5'];
 
 function BuildUnitRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_BUILD_UNIT} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="buGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6b7280" stopOpacity={0.35} /><stop offset="95%" stopColor="#6b7280" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(0)}K`, 'Units']} /><Area type="monotone" dataKey="units" stroke="#9ca3af" strokeWidth={2} fill="url(#buGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_BUILD_UNIT} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="buGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6b7280" stopOpacity={0.35} /><stop offset="95%" stopColor="#6b7280" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(0)}K`, 'Units']} /><Area type="monotone" dataKey="units" stroke="#9ca3af" strokeWidth={2} fill="url(#buGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
 function DLWeeklyRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_DL} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [v?.toLocaleString() ?? '—', 'DL']} /><Area type="monotone" dataKey="dl" stroke="#3b82f6" strokeWidth={2} fill="url(#dlGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_DL} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [v?.toLocaleString() ?? '—', 'DL']} /><Area type="monotone" dataKey="dl" stroke="#3b82f6" strokeWidth={2} fill="url(#dlGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
 function InputHrsRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_INPUT_HRS} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={36} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(1)}K`, 'Hrs']} /><Area type="monotone" dataKey="hrs" stroke="#10b981" strokeWidth={2} fill="url(#hrGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_INPUT_HRS} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(1)}K`, 'Hrs']} /><Area type="monotone" dataKey="hrs" stroke="#10b981" strokeWidth={2} fill="url(#hrGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
 
 function OLECompareRecharts({ data, prevWeek, currWeek }: { data: { name: string; prev: number; curr: number }[]; prevWeek: string; currWeek: string }) {
@@ -170,14 +178,40 @@ function ImpactRecharts({ data }: { data: { name: string; value: number }[] }) {
   );
 }
 
-function BuildGapRecharts({ data }: { data: { name: string; gap: number }[] }) {
+function BuildGapRecharts({ data, prevWeek, currWeek }: { data: { name: string; gap: number; curr_qty: number; prev_qty: number }[]; prevWeek: string; currWeek: string }) {
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    const positive = d.gap >= 0;
+    return (
+      <div style={TT.contentStyle}>
+        <p className="font-semibold text-foreground mb-1.5" style={{ fontSize: 11 }}>{d.name}</p>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex justify-between gap-4">
+            <span style={{ color: 'hsl(var(--muted-foreground))' }}>{prevWeek}</span>
+            <span className="font-mono font-bold" style={{ color: 'hsl(var(--foreground))' }}>{d.prev_qty.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span style={{ color: 'hsl(var(--muted-foreground))' }}>{currWeek}</span>
+            <span className="font-mono font-bold" style={{ color: 'hsl(var(--foreground))' }}>{d.curr_qty.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between gap-4 border-t border-border pt-1 mt-0.5">
+            <span style={{ color: 'hsl(var(--muted-foreground))' }}>Gap</span>
+            <span className="font-mono font-bold" style={{ color: positive ? '#22c55e' : '#f87171' }}>
+              {positive ? '+' : ''}{d.gap.toLocaleString()}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 8, left: 4, bottom: 0 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 8, left: -30, bottom: -15 }}>
         <XAxis type="number" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
-        <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={90} />
+        <YAxis type="category" dataKey="name" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={130} interval={0} />
         <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1} />
-        <Tooltip {...TT} cursor={{ fill: 'hsl(var(--muted-foreground) / 0.08)' }} formatter={(v: number) => [v.toLocaleString(), 'Gap (units)']} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted-foreground) / 0.08)' }} />
         <Bar dataKey="gap" radius={[0, 3, 3, 0]} label={<GapBarLabel />}>
           {data.map((e, i) => <Cell key={i} fill={e.gap >= 0 ? '#22c55e' : '#f87171'} />)}
         </Bar>
@@ -196,10 +230,10 @@ function OLECompareSection({ data, prevWeek, currWeek }: { data: { name: string;
     </div>
   );
   return (
-    <ChartCard title={`OLE ${prevWeek} vs OLE ${currWeek}`}
+    <ChartCard title={`OLE ${prevWeek} vs OLE ${currWeek}`} className="flex-1 min-h-0"
       expandContent={<div className="flex flex-col h-full">{legend}<div className="flex-1 min-h-0"><OLECompareRecharts data={data} prevWeek={prevWeek} currWeek={currWeek} /></div></div>}>
       {legend}
-      <div style={{ height: 240 }}><OLECompareRecharts data={data} prevWeek={prevWeek} currWeek={currWeek} /></div>
+      <div className="flex-1 min-h-0"><OLECompareRecharts data={data} prevWeek={prevWeek} currWeek={currWeek} /></div>
     </ChartCard>
   );
 }
@@ -247,10 +281,10 @@ export default function OLEWoWAnalysis() {
             <ChartCard title="Pen Island Input Working Hrs" className="flex-1 min-h-0" expandContent={<InputHrsRecharts />}><div className="flex-1 min-h-0"><InputHrsRecharts /></div></ChartCard>
           </div>
           <div className="flex flex-col gap-3 flex-1 min-h-0 min-w-0">
-            <div className="shrink-0"><OLECompareSection data={derived.oleCompareSeries} prevWeek={pair.prev} currWeek={pair.curr} /></div>
+            <div className="flex-1 min-h-0 flex flex-col"><OLECompareSection data={derived.oleCompareSeries} prevWeek={pair.prev} currWeek={pair.curr} /></div>
             <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
-              <ChartCard title="Impact by Workcell" className="flex-1 min-h-0" expandContent={<ImpactRecharts data={derived.impactSeries} />}><div className="flex-1 min-h-0"><ImpactRecharts data={derived.impactSeries} /></div></ChartCard>
-              <ChartCard title="Build Unit Gap by Workcell" className="flex-1 min-h-0" expandContent={<BuildGapRecharts data={derived.buildGapSeries} />}><div className="flex-1 min-h-0"><BuildGapRecharts data={derived.buildGapSeries} /></div></ChartCard>
+              <ChartCard title="Impact by Workcell" className="flex-1 min-h-[200px]" expandContent={<ImpactRecharts data={derived.impactSeries} />}><div className="flex-1 min-h-0"><ImpactRecharts data={derived.impactSeries} /></div></ChartCard>
+              <ChartCard title="Build Unit Gap by Workcell" className="flex-1 min-h-[200px]" expandContent={<BuildGapRecharts data={derived.buildGapSeries} prevWeek={pair.prev} currWeek={pair.curr} />}><div className="flex-1 min-h-0"><BuildGapRecharts data={derived.buildGapSeries} prevWeek={pair.prev} currWeek={pair.curr} /></div></ChartCard>
             </div>
           </div>
         </div>

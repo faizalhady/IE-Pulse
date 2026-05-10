@@ -3,9 +3,14 @@
  * ────────────────
  * Single source of truth for shared dropdown values across all OLE pages.
  *
- * Shifts: 1 = Normal  |  2 = Night  |  3 = Day
- * This standard applies to ALL pages — downtime, transfers, filters, OLE results.
+ * TEMP_EXCLUDED_WORKCELLS: workcells hidden from all frontend views.
+ * BC excluded due to incorrect SMH file causing 182% OLE in WW18.
+ * Remove when BC_SMH.xls is corrected and re-ingested.
  */
+export const TEMP_EXCLUDED_WORKCELLS = ['BECKMAN COULTER'];
+
+// Shifts: 1 = Normal  |  2 = Night  |  3 = Day
+// This standard applies to ALL pages -- downtime, transfers, filters, OLE results.
 
 export const SHIFTS = [
   { value: '1', label: 'Normal' },

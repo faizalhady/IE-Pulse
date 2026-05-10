@@ -1,4 +1,3 @@
-import { format, parseISO } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOleWeekly, useOleWorkcells } from '@/hooks/useOleData';
 import type { OleWeeklyResult } from '@/lib/oleApi';
@@ -10,6 +9,7 @@ import {
   getOleStatus, oleColor
 } from '@/lib/oleConstants';
 import { cn } from '@/lib/utils';
+import { format, parseISO } from 'date-fns';
 import {
   AlertTriangle,
   Info,
@@ -106,7 +106,7 @@ function TrendModal({ open, onClose, data, selectedWeek }: {
                   <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={38} />
                   <Tooltip {...TT_AREA} formatter={(v: number) => [`${(v / 1000).toFixed(1)}k hrs`, 'Output SMH']} />
-                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke="#ffffff" strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
+                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
                   <Area type="monotone" dataKey="smh" stroke="#22c55e" strokeWidth={2} fill="url(#smhGrad)" dot={false} activeDot={{ r: 4, fill: '#22c55e' }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -128,7 +128,7 @@ function TrendModal({ open, onClose, data, selectedWeek }: {
                   <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={38} />
                   <Tooltip {...TT_AREA} formatter={(v: number) => [`${(v / 1000).toFixed(1)}k hrs`, 'Input Hours']} />
-                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke="#ffffff" strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
+                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
                   <Area type="monotone" dataKey="hrs" stroke="#a78bfa" strokeWidth={2} fill="url(#hrsGrad)" dot={false} activeDot={{ r: 4, fill: '#a78bfa' }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -216,13 +216,16 @@ export default function OLEHome4() {
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
 
-  // Once weeks load, seed dateFrom/dateTo from the URL week param
+  const seedDoneRef = useRef(false);
+
+  // Once weeks load, seed dateFrom/dateTo from the URL week param -- only once
   useEffect(() => {
-    if (!initWeek || !weeks.length) return;
+    if (seedDoneRef.current || !initWeek || !weeks.length) return;
     const found = weeks.find(w => w.isoWeek === initWeek);
-    if (found && !dateFrom && !dateTo) {
+    if (found) {
       setDateFrom(found.start);
       setDateTo(found.end);
+      seedDoneRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weeks]);
@@ -508,7 +511,7 @@ export default function OLEHome4() {
           </div>
 
           {/* Hours distribution */}
-          <div className="rounded-xl border border-border bg-card p-4">
+          {/* <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider mb-3">Hours Distribution</p>
             <div className="space-y-2">
               {[
@@ -524,7 +527,7 @@ export default function OLEHome4() {
                 </div>
               ))}
             </div>
-          </div>
+          </div> */}
 
           {/* Attention items */}
           {/* {attention.length > 0 && (
@@ -658,7 +661,7 @@ export default function OLEHome4() {
             <div className="overflow-x-auto">
               <div className="grid bg-muted/40 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
                 style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem' }}>
-                {['#', 'Workcell', 'Plant', 'OLE %', 'Output SMH', 'Input Hrs', 'Shifts', 'Status'].map(h => (
+                {['#', 'Workcell', 'Plant', 'OLE %', 'Output SMH', 'Input Hrs', 'Status'].map(h => (
                   <div key={h} className="px-2 py-2">{h}</div>
                 ))}
               </div>
@@ -719,7 +722,7 @@ export default function OLEHome4() {
                     <div className="px-2 text-[10px] font-mono text-foreground text-right">
                       {Math.round(wc.total_input_hours).toLocaleString()}
                     </div>
-                    <div className="px-2 text-[10px] font-mono text-foreground text-right">{wc.total_shifts}</div>
+                    {/* <div className="px-2 text-[10px] font-mono text-foreground text-right">{wc.total_shifts}</div> */}
                     <div className="px-2">
                       <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border whitespace-nowrap', STATUS_BADGE[st])}>
                         {STATUS_LABEL[st]}

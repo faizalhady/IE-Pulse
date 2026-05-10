@@ -17,7 +17,8 @@
  *   - impactShare %    → workcell impact / Σ all impacts × 100
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/oleConstants';
 
 export const PLANT_OLE_GOAL = 0.61; // 61%
 const API_BASE = '/ole-api';
@@ -40,6 +41,7 @@ export const DL_WEEKLY_DATA: DLRow[] = [
   { week: 'WW15', dl: 4341 },
   { week: 'WW16', dl: 4338 },
   { week: 'WW17', dl: 4369 },
+  { week: 'WW18', dl: 4369 },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -144,7 +146,7 @@ export function buildWeekPairs(wwLabels: string[]): AnalysisWeekPair[] {
 export function useAnalysisData() {
   const [rawRows, setRawRows] = useState<WeeklyApiRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch all weekly data once
   useEffect(() => {
@@ -193,7 +195,7 @@ export function useAnalysisDerived(
     });
 
     // All unique WW labels sorted
-    const allWWs = [...byWW.keys()].sort((a, b) => parseInt(a.replace('WW','')) - parseInt(b.replace('WW','')));
+    const allWWs = [...byWW.keys()].sort((a, b) => parseInt(a.replace('WW', '')) - parseInt(b.replace('WW', '')));
 
     // ── Site-level series (aggregate across all workcells per week) ──
     const buildUnitSeries = allWWs.map(ww => ({
@@ -214,24 +216,44 @@ export function useAnalysisDerived(
     const currRows = byWW.get(currWW) ?? [];
     const prevRows = byWW.get(prevWW) ?? [];
 
-    const prevByWC = new Map(prevRows.map(r => [r.workcell, r]));
-    const currByWC = new Map(currRows.map(r => [r.workcell, r]));
+    // Aggregate across stages (SMT/Backend/BoxBuild all have separate rows)
+    // Map overwrite would only keep the last stage -- must SUM instead
+    function groupByWC(rows: WeeklyApiRow[]) {
+      const acc = new Map<string, { total_qty: number; total_input_hours: number; total_output_smh: number }>();
+      rows.forEach(r => {
+        const prev = acc.get(r.workcell) ?? { total_qty: 0, total_input_hours: 0, total_output_smh: 0 };
+        acc.set(r.workcell, {
+          total_qty: prev.total_qty + (r.total_qty ?? 0),
+          total_input_hours: prev.total_input_hours + (r.total_input_hours ?? 0),
+          total_output_smh: prev.total_output_smh + (r.total_output_smh ?? 0),
+        });
+      });
+      const result = new Map<string, { total_qty: number; total_input_hours: number; total_output_smh: number; ole_pct: number | null }>();
+      acc.forEach((v, wc) => {
+        result.set(wc, { ...v, ole_pct: v.total_input_hours > 0 ? (v.total_output_smh / v.total_input_hours) * 100 : null });
+      });
+      return result;
+    }
 
-    // All workcells that have data in either week
-    const allWCs = [...new Set([...prevByWC.keys(), ...currByWC.keys()])];
+    const prevByWC = groupByWC(prevRows);
+    const currByWC = groupByWC(currRows);
+
+    // All workcells that have data in either week — excluding temp-disabled workcells
+    const allWCs = [...new Set([...prevByWC.keys(), ...currByWC.keys()])]
+      .filter(wc => !TEMP_EXCLUDED_WORKCELLS.includes(wc));
 
     // ── OLE comparison bar chart ──
     const oleCompareSeries = allWCs.map(wc => ({
       name: wc,
-      prev: prevByWC.get(wc)?.ole_pct ?? 0,
-      curr: currByWC.get(wc)?.ole_pct ?? 0,
+      prev: parseFloat((prevByWC.get(wc)?.ole_pct ?? 0).toFixed(1)),
+      curr: parseFloat((currByWC.get(wc)?.ole_pct ?? 0).toFixed(1)),
     })).sort((a, b) => b.curr - a.curr);
 
-    // ── Build unit gap per workcell ──
+    // ── Build unit gap per workcell (curr - prev, positive = improvement) ──
     const buildGapSeries = allWCs.map(wc => {
       const c = currByWC.get(wc)?.total_qty ?? 0;
       const p = prevByWC.get(wc)?.total_qty ?? 0;
-      return { name: wc, gap: calcBuildUnitGap(c, p) };
+      return { name: wc, gap: calcBuildUnitGap(c, p), curr_qty: c, prev_qty: p };
     }).sort((a, b) => b.gap - a.gap);
 
     // Site-level gap
@@ -239,14 +261,11 @@ export function useAnalysisDerived(
     const siteQtyPrev = prevRows.reduce((s, r) => s + (r.total_qty ?? 0), 0);
     const siteGap = calcBuildUnitGap(siteQtyCurr, siteQtyPrev);
 
-    // ── Impact shares (donut) — use curr week per-workcell data ──
+    // ── Impact shares (donut) — use curr week aggregated per-workcell data ──
     const rawImpacts = allWCs.map(wc => {
       const row = currByWC.get(wc);
       if (!row || !row.ole_pct) return { name: wc, raw: 0 };
-      return {
-        name: wc,
-        raw: calcWorkcellImpact(row.total_input_hours, row.total_qty, row.ole_pct),
-      };
+      return { name: wc, raw: calcWorkcellImpact(row.total_input_hours, row.total_qty, row.ole_pct) };
     });
     const impactSeries = calcImpactShares(rawImpacts);
 

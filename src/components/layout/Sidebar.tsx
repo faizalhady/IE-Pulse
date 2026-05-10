@@ -1,12 +1,10 @@
 import AppSwitcher from '@/components/layout/AppSwitcher';
 import { StatusDot } from '@/components/StatusIndicator';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useApp } from '@/context/AppContext';
 import { useProductionSummary, useWorkcells } from '@/hooks/useMesData';
 import { cn } from '@/lib/utils';
-import { currentUser } from '@/mocks/data';
 import {
   ChevronDown,
   Factory, Moon, PanelLeftClose, PanelLeftOpen,
@@ -167,7 +165,7 @@ export default function Sidebar() {
           </button>
         )}
         {/* <SidebarLink to="/settings" icon={Settings} label="Settings" collapsed={collapsed} /> */}
-        {!collapsed && (
+        {/* {!collapsed && (
           <div className="flex items-center gap-2 px-2 py-1.5">
             <Avatar className="h-7 w-7">
               <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
@@ -179,7 +177,7 @@ export default function Sidebar() {
               <span className="text-[10px] text-sidebar-foreground/60 capitalize">{currentUser.role}</span>
             </div>
           </div>
-        )}
+        )} */}
       </div>
     </aside>
   );

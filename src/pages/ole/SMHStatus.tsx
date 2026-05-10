@@ -1,56 +1,55 @@
-import { cn } from '@/lib/utils';
-import { useSmhStatus } from '@/hooks/useOleData';
-import { fmtDate } from '@/lib/oleConstants';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Search, RefreshCw, WifiOff, Pencil, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSmhStatus } from '@/hooks/useOleData';
 import type { SmhStatus } from '@/lib/oleApi';
+import { fmtDate } from '@/lib/oleConstants';
+import { cn } from '@/lib/utils';
+import { AlertTriangle, CheckCircle2, Pencil, RefreshCw, Search, WifiOff, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 type StatusFilter = 'all' | 'MISSING_SMH' | 'NOT_IN_SMH_DB' | 'OK';
 
 const STATUS_BADGE: Record<SmhStatus['smh_status'], string> = {
-  OK:             'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  MISSING_SMH:    'bg-amber-500/15  text-amber-400  border-amber-500/30',
-  NOT_IN_SMH_DB:  'bg-red-500/15    text-red-400    border-red-500/30',
+  OK: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  MISSING_SMH: 'bg-amber-500/15  text-amber-400  border-amber-500/30',
+  NOT_IN_SMH_DB: 'bg-red-500/15    text-red-400    border-red-500/30',
 };
 
 const STATUS_LABEL: Record<SmhStatus['smh_status'], string> = {
-  OK:             'OK',
-  MISSING_SMH:    'Missing SMH',
-  NOT_IN_SMH_DB:  'Not in DB',
+  OK: 'OK',
+  MISSING_SMH: 'Missing SMH',
+  NOT_IN_SMH_DB: 'Not in DB',
 };
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
-  { key: 'all',            label: 'All' },
-  { key: 'MISSING_SMH',    label: 'Missing SMH' },
-  { key: 'NOT_IN_SMH_DB',  label: 'Not in DB' },
-  { key: 'OK',             label: 'OK' },
+  { key: 'all', label: 'All' },
+  { key: 'MISSING_SMH', label: 'Missing SMH' },
+  { key: 'NOT_IN_SMH_DB', label: 'Not in DB' },
+  { key: 'OK', label: 'OK' },
 ];
 
 const WORKCELL_LOGOS: Record<string, string> = {
-  arista:      '/workcell logo/Arista.png',
-  keysight:    '/workcell logo/keysight.png',
-  keyisght:    '/workcell logo/keysight.png',
-  aop:         '/workcell logo/aop.png',
-  micron:      '/workcell logo/micron.png',
-  dyson:       '/workcell logo/dyson.png',
-  wabtec:      '/workcell logo/wabtec.png',
-  msi:         '/workcell logo/msi.png',
-  photonics:   '/workcell logo/photonics.png',
-  tellabs:     '/workcell logo/tellabs.png',
-  imed:        '/workcell logo/imed.png',
-  collins:     '/workcell logo/collins.png',
-  danaher:     '/workcell logo/danaher.png',
-  infinera:    '/workcell logo/infinera.jpg',
-  masimo:      '/workcell logo/masimo.png',
-  resmed:      '/workcell logo/resmed.png',
-  fortive:     '/workcell logo/fortive.png',
+  arista: '/workcell logo/Arista.png',
+  keysight: '/workcell logo/keysight.png',
+  keyisght: '/workcell logo/keysight.png',
+  aop: '/workcell logo/aop.png',
+  micron: '/workcell logo/micron.png',
+  dyson: '/workcell logo/dyson.png',
+  wabtec: '/workcell logo/wabtec.png',
+  msi: '/workcell logo/msi.png',
+  photonics: '/workcell logo/photonics.png',
+  tellabs: '/workcell logo/tellabs.png',
+  imed: '/workcell logo/imed.png',
+  collins: '/workcell logo/collins.png',
+  danaher: '/workcell logo/danaher.png',
+  infinera: '/workcell logo/infinera.jpg',
+  masimo: '/workcell logo/masimo.png',
+  resmed: '/workcell logo/resmed.png',
+  fortive: '/workcell logo/fortive.png',
   lamresearch: '/workcell logo/lam_research.png',
-  asp:         '/workcell logo/asp.jpg',
+  asp: '/workcell logo/asp.jpg',
 };
 
 function WorkcellBadge({ name, status = 'idle' }: { name: string; status?: string }) {
@@ -109,14 +108,14 @@ function Pagination({ page, total, pageSize, onChange }: {
 }
 
 export default function SMHStatus() {
-  const navigate        = useNavigate();
-  const [searchParams]  = useSearchParams();
-  const workcellParam   = searchParams.get('workcell') ?? undefined;
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const workcellParam = searchParams.get('workcell') ?? undefined;
 
   const { data, loading, error, refetch } = useSmhStatus({ workcell: workcellParam });
 
-  const [search,        setSearch]        = useState('');
-  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('all');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [workcellFilter, setWorkcellFilter] = useState(workcellParam ?? 'all');
 
   const rows = data ?? [];
@@ -130,7 +129,7 @@ export default function SMHStatus() {
   const filtered = useMemo(() => {
     let list = [...rows];
     if (workcellFilter !== 'all') list = list.filter(r => r.workcell === workcellFilter);
-    if (statusFilter !== 'all')   list = list.filter(r => r.smh_status === statusFilter);
+    if (statusFilter !== 'all') list = list.filter(r => r.smh_status === statusFilter);
     if (search) list = list.filter(r =>
       r.assembly.toLowerCase().includes(search.toLowerCase()) ||
       r.workcell.toLowerCase().includes(search.toLowerCase())
@@ -140,7 +139,7 @@ export default function SMHStatus() {
 
   const [page, setPage] = useState(1);
   const rowsPerPage = 100;
-  
+
   const [editingRow, setEditingRow] = useState<SmhStatus | null>(null);
   const [newSmh, setNewSmh] = useState('');
 
@@ -151,10 +150,11 @@ export default function SMHStatus() {
   const totalPages = Math.ceil(filtered.length / rowsPerPage);
   const paginatedData = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
-  // Summary counts
-  const missingCount = rows.filter(r => r.smh_status !== 'OK').length;
-  const okCount      = rows.filter(r => r.smh_status === 'OK').length;
-  const totalQtyMissing = rows
+  // Summary counts -- scoped to workcell filter only (not status/search)
+  const workcellRows = workcellFilter === 'all' ? rows : rows.filter(r => r.workcell === workcellFilter);
+  const missingCount = workcellRows.filter(r => r.smh_status !== 'OK').length;
+  const okCount = workcellRows.filter(r => r.smh_status === 'OK').length;
+  const totalQtyMissing = workcellRows
     .filter(r => r.smh_status !== 'OK')
     .reduce((s, r) => s + r.total_qty_produced, 0);
 
@@ -208,7 +208,7 @@ export default function SMHStatus() {
         </div>
         <div className="rounded-lg border border-border bg-card px-4 py-3">
           <p className="text-xs text-muted-foreground">Total assemblies</p>
-          <p className="text-2xl font-mono font-bold text-foreground mt-1">{rows.length}</p>
+          <p className="text-2xl font-mono font-bold text-foreground mt-1">{workcellRows.length}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">unique models in MES this week</p>
         </div>
       </div>
@@ -275,13 +275,13 @@ export default function SMHStatus() {
           <div className="overflow-x-auto">
             <div className="min-w-[700px]">
               <div className="grid bg-muted/50 border-b border-border text-xs text-muted-foreground font-medium uppercase tracking-wider px-5 py-3 gap-4"
-                   style={{ gridTemplateColumns: '2.5rem 4rem 1fr 7rem 6rem 7rem 3rem' }}>
+                style={{ gridTemplateColumns: '2.5rem 4rem 1fr 7rem 6rem 7rem 3rem' }}>
                 <span className="text-right">#</span>
                 <span className="text-center">WC</span>
                 <span>Assembly</span>
                 <span>Status</span>
                 <span className="text-right">SMH / Unit</span>
-                <span className="text-right">Qty Produced</span>
+                {/* <span className="text-right">Qty Produced</span> */}
                 <span className="text-center">Edit</span>
               </div>
 
@@ -309,8 +309,8 @@ export default function SMHStatus() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className={cn(
                           'w-2 h-2 rounded-full flex-shrink-0',
-                          row.smh_status === 'OK'            ? 'bg-emerald-400' :
-                          row.smh_status === 'MISSING_SMH'   ? 'bg-amber-400' : 'bg-red-400'
+                          row.smh_status === 'OK' ? 'bg-emerald-400' :
+                            row.smh_status === 'MISSING_SMH' ? 'bg-amber-400' : 'bg-red-400'
                         )} />
                         <p className="font-semibold text-sm text-foreground font-mono truncate">{row.assembly}</p>
                       </div>
@@ -334,13 +334,13 @@ export default function SMHStatus() {
                     </div>
 
                     {/* Qty produced */}
-                    <div className="flex flex-col items-end gap-0.5 text-xs text-right">
+                    {/* <div className="flex flex-col items-end gap-0.5 text-xs text-right">
                       <span className="font-mono font-semibold text-foreground">{row.total_qty_produced.toLocaleString()}</span>
-                    </div>
+                    </div> */}
 
                     {/* Edit */}
                     <div className="flex justify-center">
-                      <button 
+                      <button
                         onClick={() => { setEditingRow(row); setNewSmh(String(row.smh_value || '')); }}
                         className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
                       >
