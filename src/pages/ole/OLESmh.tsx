@@ -1,3 +1,4 @@
+import WorkcellBadge from '@/components/ole/WorkcellBadge';
 import { Pagination } from '@/components/shared/Pagination';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,58 +31,6 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'NOT_IN_SMH_DB', label: 'Not in DB' },
   { key: 'OK', label: 'OK' },
 ];
-
-const WORKCELL_LOGOS: Record<string, string> = {
-  arista: '/workcell logo/Arista.png',
-  keysight: '/workcell logo/keysight.png',
-  keyisght: '/workcell logo/keysight.png',
-  aop: '/workcell logo/aop.png',
-  micron: '/workcell logo/micron.png',
-  dyson: '/workcell logo/dyson.png',
-  wabtec: '/workcell logo/wabtec.png',
-  msi: '/workcell logo/msi.png',
-  photonics: '/workcell logo/photonics.png',
-  tellabs: '/workcell logo/tellabs.png',
-  imed: '/workcell logo/imed.png',
-  collins: '/workcell logo/collins.png',
-  danaher: '/workcell logo/danaher.png',
-  infinera: '/workcell logo/infinera.jpg',
-  masimo: '/workcell logo/masimo.png',
-  resmed: '/workcell logo/resmed.png',
-  fortive: '/workcell logo/fortive.png',
-  lamresearch: '/workcell logo/lam_research.png',
-  asp: '/workcell logo/asp.jpg',
-};
-
-function WorkcellBadge({ name, status = 'idle' }: { name: string; status?: string }) {
-  const [imgErr, setImgErr] = useState(false);
-  const key = name.toLowerCase().replace(/[^a-z]/g, '');
-  const logoKey = Object.keys(WORKCELL_LOGOS).find(k => key.startsWith(k)) ?? key;
-  const logoSrc = WORKCELL_LOGOS[logoKey];
-  const ring: Record<string, string> = {
-    optimal: 'ring-emerald-500/30',
-    warning: 'ring-amber-500/30',
-    critical: 'ring-red-500/30',
-    idle: 'ring-border',
-  };
-  const bg: Record<string, string> = {
-    optimal: 'bg-emerald-500/15 text-emerald-400',
-    warning: 'bg-amber-500/15  text-amber-400',
-    critical: 'bg-red-500/15    text-red-400',
-    idle: 'bg-muted         text-muted-foreground',
-  };
-  if (logoSrc && !imgErr) return (
-    <div className={`w-14 h-8 rounded-lg overflow-hidden ring-1 flex-shrink-0 flex items-center justify-center ${ring[status] ?? 'ring-border'}`}
-      style={{ background: '#ffffff' }}>
-      <img src={logoSrc} alt={name} onError={() => setImgErr(true)} className="w-full h-full object-contain p-1" />
-    </div>
-  );
-  return (
-    <div className={`w-14 h-8 rounded-lg flex items-center justify-center text-[10px] font-black ring-1 flex-shrink-0 ${bg[status] ?? 'bg-muted text-muted-foreground'} ${ring[status] ?? 'ring-border'}`}>
-      {name.slice(0, 3).toUpperCase()}
-    </div>
-  );
-}
 
 export default function OLESmh() {
   const navigate = useNavigate();

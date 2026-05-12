@@ -4,24 +4,25 @@
  * Single source of truth for shared dropdown values across all OLE pages.
  *
  * TEMP_EXCLUDED_WORKCELLS: workcells hidden from all frontend views.
- * BC excluded due to incorrect SMH file causing 182% OLE in WW18.
- * Remove when BC_SMH.xls is corrected and re-ingested.
+ * Kept as an empty array so the frontend filter logic stays in place but
+ * is currently a no-op. Add a workcell name here if you ever need to hide
+ * one from the UI without removing it from the backend config.
  */
-export const TEMP_EXCLUDED_WORKCELLS = ['BECKMAN COULTER'];
+export const TEMP_EXCLUDED_WORKCELLS: string[] = [];
 
-// Shifts: 1 = Normal  |  2 = Night  |  3 = Day
+// Shifts: 1 = Normal  |  2 = Night  |  3 = Morning
 // This standard applies to ALL pages -- downtime, transfers, filters, OLE results.
 
 export const SHIFTS = [
   { value: '1', label: 'Normal' },
   { value: '2', label: 'Night' },
-  { value: '3', label: 'Day' },
+  { value: '3', label: 'Morning' },
 ] as const;
 
 export type ShiftValue = '1' | '2' | '3';
 
 export function shiftLabel(value: string | number | undefined | null): string {
-  const map: Record<string, string> = { '1': 'Normal', '2': 'Night', '3': 'Day' };
+  const map: Record<string, string> = { '1': 'Normal', '2': 'Night', '3': 'Morning' };
   return map[String(value)] ?? String(value ?? '—');
 }
 
