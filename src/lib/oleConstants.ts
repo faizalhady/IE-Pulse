@@ -39,28 +39,30 @@ export function fmtDate(value: string | null | undefined): string {
 }
 
 // ─── Workcell Logos ─────────────────────────────────────────────────────────
+const _base = import.meta.env.BASE_URL ?? '/';
+
 export const WORKCELL_LOGOS: Record<string, string> = {
-  aop: '/workcell logo/aop.png',
-  arista: '/workcell logo/Arista.png',
-  asp: '/workcell logo/asp.jpg',
-  beckmancoulter: '/workcell logo/bc.png',
-  collins: '/workcell logo/collins.png',
-  danaher: '/workcell logo/danaher.png',
-  dyson: '/workcell logo/dyson.png',
-  fortive: '/workcell logo/fortive.png',
-  imed: '/workcell logo/imed.png',
-  infinera: '/workcell logo/infinera.jpg',
-  keyisght: '/workcell logo/keysight.png',
-  keysight: '/workcell logo/keysight.png',
-  lamresearch: '/workcell logo/lam_research.png',
-  masimo: '/workcell logo/masimo.png',
-  micron: '/workcell logo/micron.png',
-  msi: '/workcell logo/msi.png',
-  photonics: '/workcell logo/photonics.png',
-  resmed: '/workcell logo/resmed.png',
-  tellabs: '/workcell logo/tellabs.png',
-  utas: '/workcell logo/collins.png',
-  wabtec: '/workcell logo/wabtec.png',
+  aop:            `${_base}workcell logo/aop.png`,
+  arista:         `${_base}workcell logo/Arista.png`,
+  asp:            `${_base}workcell logo/asp.jpg`,
+  beckmancoulter: `${_base}workcell logo/bc.png`,
+  collins:        `${_base}workcell logo/collins.png`,
+  danaher:        `${_base}workcell logo/danaher.png`,
+  dyson:          `${_base}workcell logo/dyson.png`,
+  fortive:        `${_base}workcell logo/fortive.png`,
+  imed:           `${_base}workcell logo/imed.png`,
+  infinera:       `${_base}workcell logo/infinera.jpg`,
+  keyisght:       `${_base}workcell logo/keysight.png`,
+  keysight:       `${_base}workcell logo/keysight.png`,
+  lamresearch:    `${_base}workcell logo/lam_research.png`,
+  masimo:         `${_base}workcell logo/masimo.png`,
+  micron:         `${_base}workcell logo/micron.png`,
+  msi:            `${_base}workcell logo/msi.png`,
+  photonics:      `${_base}workcell logo/photonics.png`,
+  resmed:         `${_base}workcell logo/resmed.png`,
+  tellabs:        `${_base}workcell logo/tellabs.png`,
+  utas:           `${_base}workcell logo/collins.png`,
+  wabtec:         `${_base}workcell logo/wabtec.png`,
 };
 
 // ─── OLE Target ────────────────────────────────────────────────────────────

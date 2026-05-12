@@ -22,7 +22,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/ietools/ole">
         <AppProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -45,11 +45,11 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<Navigate to="/map" replace />} />
             <Route path="/map" element={<MapPage />} />
-            <Route path="/ole/smh-status" element={<SMHStatus />} />
-            <Route path="/ole/4q" element={<FourQGenerator />} />
-            <Route path="/ole/analysis" element={<OLEWoWAnalysis />} />
-            <Route path="/ole/home4" element={<OLEHome4 />} />
-            <Route path="/ole/wc4/:workcell" element={<OLEWorkcell4 />} />
+            <Route path="/smh-status" element={<SMHStatus />} />
+            <Route path="/4q" element={<FourQGenerator />} />
+            <Route path="/analysis" element={<OLEWoWAnalysis />} />
+            <Route path="/report" element={<OLEHome4 />} />
+            <Route path="/report/wc/:workcell" element={<OLEWorkcell4 />} />
             {/* <Route path="/workcells" element={<WorkcellsTable />} /> */}
             {/* <Route path="/workcell/:id" element={<WorkcellView />} /> */}
             {/* <Route path="/bay/:id" element={<BayDetail />} /> */}

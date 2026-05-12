@@ -21,7 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/oleConstants';
 
 export const PLANT_OLE_GOAL = 0.61; // 61%
-const API_BASE = '/ole-api';
+const API_BASE = '/ietools/ole/api';
 
 // ─── DL Weekly — manual until eTMS DB linked ─────────────────────────────────
 
@@ -151,7 +151,7 @@ export function useAnalysisData() {
   // Fetch all weekly data once
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_BASE}/api/ole/weekly`)
+    fetch(`${API_BASE}/ole/weekly`)
       .then(r => {
         if (!r.ok) throw new Error(`API ${r.status}`);
         return r.json();

@@ -544,7 +544,7 @@ export default function OLEHome4() {
                     if (dateTo)   params.set('to',   dateTo);
                     if (plant !== 'all') params.set('plant', plant);
                     const qs = params.toString();
-                    navigate(`/ole/wc4/${encodeURIComponent(item.workcell)}${qs ? `?${qs}` : ''}`);
+                    navigate(`/wc4/${encodeURIComponent(item.workcell)}${qs ? `?${qs}` : ''}`);
                   }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/20 transition-colors border-b border-border last:border-b-0 group">
                   <AlertTriangle className={cn('h-3.5 w-3.5 flex-shrink-0',
@@ -683,7 +683,7 @@ export default function OLEHome4() {
                       if (dateTo) params.set('to', dateTo);
                       if (plant !== 'all') params.set('plant', plant);
                       const qs = params.toString();
-                      navigate(`/ole/wc4/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
+                      navigate(`/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
                     }}>
                     <div className="px-2 text-[9px] text-muted-foreground font-mono">{idx + 1}</div>
                     <div className="px-2 flex items-center gap-2">
@@ -700,7 +700,7 @@ export default function OLEHome4() {
                           if (dateTo) params.set('to', dateTo);
                           if (plant !== 'all') params.set('plant', plant);
                           const qs = params.toString();
-                          navigate(`/ole/wc4/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
+                          navigate(`/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
                         }}
                         className="text-[10px] font-semibold text-foreground hover:text-primary transition-colors truncate text-left">
                         {wc.workcell}

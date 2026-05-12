@@ -99,7 +99,7 @@ export default function MapPage() {
       {/* All Plants card -- top left */}
       <div className="absolute top-4 left-4 z-10">
         <div
-          onClick={() => navigate(latestIsoWeek ? `/ole/home4?week=${latestIsoWeek}` : '/ole/home4')}
+          onClick={() => navigate(latestIsoWeek ? `/report?week=${latestIsoWeek}` : '/report')}
           className="bg-card/95 backdrop-blur-sm border border-border rounded-xl px-5 py-3.5 shadow-lg min-w-[220px] cursor-pointer hover:bg-card transition-colors overflow-hidden relative"
         >
           <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
@@ -133,7 +133,7 @@ export default function MapPage() {
             key={plant.id}
             onClick={() => {
               if (plant.id !== 'bk') {
-                navigate(`/ole/home4?plant=${encodeURIComponent(plant.label)}${latestIsoWeek ? `&week=${latestIsoWeek}` : ''}`);
+                navigate(`/report?plant=${encodeURIComponent(plant.label)}${latestIsoWeek ? `&week=${latestIsoWeek}` : ''}`);
               }
             }}
             className="bg-card/90 backdrop-blur-sm border border-border rounded-xl px-5 py-3.5 shadow-lg min-w-[160px] cursor-pointer hover:bg-card transition-colors"
@@ -216,7 +216,7 @@ export default function MapPage() {
                 {plant.id !== 'bk' && (
                   <div className="flex gap-2 pt-1">
                     <button
-                      onClick={() => navigate(`/ole/home4?plant=${encodeURIComponent(plant.label)}${latestIsoWeek ? `&week=${latestIsoWeek}` : ''}`)}
+                      onClick={() => navigate(`/report?plant=${encodeURIComponent(plant.label)}${latestIsoWeek ? `&week=${latestIsoWeek}` : ''}`)}
                       className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-md text-xs font-semibold text-white transition-opacity hover:opacity-90"
                       style={{ background: plant.color }}
                     >

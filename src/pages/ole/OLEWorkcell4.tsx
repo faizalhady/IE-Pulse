@@ -472,7 +472,7 @@ export default function OLEWorkcell4() {
       {/* Sticky header */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
         <div className="px-6 py-3 flex items-center gap-3">
-          <button onClick={() => navigate('/ole/home4')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => navigate('/report')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             &larr; Plant Level
           </button>
           <span className="text-sm font-bold text-foreground">OLE Report - {workcell}</span>
