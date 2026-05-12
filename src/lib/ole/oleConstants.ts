@@ -26,17 +26,9 @@ export function shiftLabel(value: string | number | undefined | null): string {
 }
 
 // ─── Date Formatter ─────────────────────────────────────────────────────────
-// Single source of truth for display dates across all OLE tables.
-// Accepts ISO strings (2026-03-01, 2026-03-01T00:00:00, etc.) → dd-mm-yyyy
-export function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  // Take only the date part before any 'T'
-  const datePart = value.split('T')[0];
-  const parts = datePart.split('-');
-  if (parts.length !== 3) return value; // fallback: return as-is
-  const [yyyy, mm, dd] = parts;
-  return `${dd}-${mm}-${yyyy}`;
-}
+// fmtDate lives in src/lib/shared/dateUtils.ts. Re-exported here for
+// convenient access alongside the other OLE display helpers.
+export { fmtDate } from '../shared/dateUtils';
 
 // ─── Workcell Logos ─────────────────────────────────────────────────────────
 const _base = import.meta.env.BASE_URL ?? '/';
@@ -67,6 +59,33 @@ export const WORKCELL_LOGOS: Record<string, string> = {
 
 // ─── OLE Target ────────────────────────────────────────────────────────────
 export const OLE_TARGET = 61;
+export const OLE_WARNING = 45;
+
+// ─── Week Label Helper ──────────────────────────────────────────────────────
+/**
+ * Format an ISO week number as "WW##" (zero-padded).
+ * Also accepts API-style "YYYY-W##" labels — extracts the trailing digits.
+ */
+export function formatWeekLabel(input: number | string): string {
+  if (typeof input === 'number') {
+    return `WW${String(input).padStart(2, '0')}`;
+  }
+  const m = String(input).match(/\d+$/);
+  return m ? `WW${m[0].padStart(2, '0')}` : String(input);
+}
+
+// ─── Workcell Logo Lookup ───────────────────────────────────────────────────
+/**
+ * Resolve a workcell display name to its logo URL by normalizing the name
+ * (lowercase, strip non-letters) and matching the longest WORKCELL_LOGOS key
+ * that the normalized name starts with. Returns null when no match.
+ */
+export function getWorkcellLogo(workcell: string | null | undefined): string | null {
+  if (!workcell) return null;
+  const k = workcell.toLowerCase().replace(/[^a-z]/g, '');
+  const lk = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
+  return lk ? WORKCELL_LOGOS[lk] : null;
+}
 
 // ─── Status Utilities ───────────────────────────────────────────────────────
 export type OleStatus = 'optimal' | 'warning' | 'critical' | 'idle';
@@ -74,14 +93,14 @@ export type OleStatus = 'optimal' | 'warning' | 'critical' | 'idle';
 export function getOleStatus(pct: number | null): OleStatus {
   if (pct === null) return 'idle';
   if (pct >= OLE_TARGET) return 'optimal';
-  if (pct >= 45) return 'warning';
+  if (pct >= OLE_WARNING) return 'warning';
   return 'critical';
 }
 
 export function oleColor(pct: number | null): string {
   if (pct === null) return 'hsl(var(--muted-foreground))';
   if (pct >= OLE_TARGET) return '#22c55e'; // emerald
-  if (pct >= 45) return '#f59e0b';         // amber
+  if (pct >= OLE_WARNING) return '#f59e0b'; // amber
   return '#ef4444';                         // red
 }
 

@@ -63,7 +63,7 @@ export const APPS: AppConfig[] = [
       { label: '4Q Generator', to: '/4q', icon: FileSpreadsheet },
       { label: 'Analysis', to: '/analysis', icon: Microscope },
       // { label: 'Home 0', to: '/ole', icon: TrendingUp },
-      { label: 'Standard Man-Hour', to: '/smh-status', icon: FlaskConical },
+      { label: 'Standard Man-Hour', to: '/smh', icon: FlaskConical },
       // { label: 'Home 1', to: '/ole/home1', icon: TrendingUp },
       // { label: 'Home 2', to: '/ole/home2', icon: TrendingUp },
       // { label: 'Home 3', to: '/ole/home3', icon: TrendingUp },

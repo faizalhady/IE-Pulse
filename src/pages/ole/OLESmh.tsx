@@ -1,9 +1,10 @@
+import { Pagination } from '@/components/shared/Pagination';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useSmhStatus } from '@/hooks/useOleData';
-import type { SmhStatus } from '@/lib/oleApi';
-import { fmtDate } from '@/lib/oleConstants';
+import { useSmhStatus } from '@/hooks/ole/useOleData';
+import type { SmhStatus } from '@/lib/ole/oleApi';
+import { fmtDate } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, CheckCircle2, Pencil, RefreshCw, Search, WifiOff, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -82,32 +83,7 @@ function WorkcellBadge({ name, status = 'idle' }: { name: string; status?: strin
   );
 }
 
-function Pagination({ page, total, pageSize, onChange }: {
-  page: number; total: number; pageSize: number; onChange: (p: number) => void;
-}) {
-  const pages = Math.ceil(total / pageSize);
-  if (pages <= 1) return null;
-  return (
-    <div className="flex items-center justify-between mt-3 px-1">
-      <span className="text-xs text-muted-foreground">
-        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()}
-      </span>
-      <div className="flex items-center gap-1">
-        <button onClick={() => onChange(1)} disabled={page === 1}
-          className="px-2 py-1 text-xs rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">«</button>
-        <button onClick={() => onChange(page - 1)} disabled={page === 1}
-          className="px-2 py-1 text-xs rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">‹</button>
-        <span className="px-3 py-1 text-xs font-mono text-foreground">{page} / {pages}</span>
-        <button onClick={() => onChange(page + 1)} disabled={page === pages}
-          className="px-2 py-1 text-xs rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">›</button>
-        <button onClick={() => onChange(pages)} disabled={page === pages}
-          className="px-2 py-1 text-xs rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">»</button>
-      </div>
-    </div>
-  );
-}
-
-export default function SMHStatus() {
+export default function OLESmh() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const workcellParam = searchParams.get('workcell') ?? undefined;

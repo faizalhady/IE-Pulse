@@ -6,11 +6,11 @@ import { AppProvider } from "@/context/AppContext";
 import KioskMode from "@/pages/KioskMode";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
-import FourQGenerator from "@/pages/ole/FourQGenerator";
-import OLEHome4 from "@/pages/ole/OLEHome4";
-import OLEWorkcell4 from "@/pages/ole/OLEWorkcell4";
-import OLEWoWAnalysis from "@/pages/ole/OLEWoWAnalysis";
-import SMHStatus from "@/pages/ole/SMHStatus";
+import OLE4QReport from "@/pages/ole/OLE4QReport";
+import OLESmh from "@/pages/ole/OLESmh";
+import OlePlantReport from "@/pages/ole/OlePlantReport";
+import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
+import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import MapPage from "./pages/MapPage";
@@ -45,11 +45,11 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<Navigate to="/map" replace />} />
             <Route path="/map" element={<MapPage />} />
-            <Route path="/smh-status" element={<SMHStatus />} />
-            <Route path="/4q" element={<FourQGenerator />} />
-            <Route path="/analysis" element={<OLEWoWAnalysis />} />
-            <Route path="/report" element={<OLEHome4 />} />
-            <Route path="/report/wc/:workcell" element={<OLEWorkcell4 />} />
+            <Route path="/smh" element={<OLESmh />} />
+            <Route path="/4q" element={<OLE4QReport />} />
+            <Route path="/analysis" element={<OleWowAnalysis />} />
+            <Route path="/report" element={<OlePlantReport />} />
+            <Route path="/report/wc/:workcell" element={<OleWorkcellReport />} />
             {/* <Route path="/workcells" element={<WorkcellsTable />} /> */}
             {/* <Route path="/workcell/:id" element={<WorkcellView />} /> */}
             {/* <Route path="/bay/:id" element={<BayDetail />} /> */}

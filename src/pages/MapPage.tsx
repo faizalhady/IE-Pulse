@@ -6,7 +6,7 @@ import {
   MarkerLabel,
   MarkerPopup
 } from '@/components/ui/map';
-import { useOleWeekly, useOleWorkcells } from '@/hooks/useOleData';
+import { useOleWeekly, useOleWorkcells } from '@/hooks/ole/useOleData';
 import { ExternalLink, MapPin } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';

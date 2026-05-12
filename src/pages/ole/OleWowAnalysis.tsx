@@ -5,10 +5,12 @@ import {
   PLANT_OLE_GOAL,
   useAnalysisData,
   useAnalysisDerived,
-} from '@/hooks/useAnalysisData';
-import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/oleConstants';
-import { Eye, RefreshCw, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+} from '@/hooks/ole/useAnalysisData';
+import { ChartCard } from '@/components/ole/ChartCard';
+import { ExpandModal } from '@/components/ole/ExpandModal';
+import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/ole/oleConstants';
+import { RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -29,8 +31,6 @@ const MOCK_BUILD_UNIT = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, units: [24620
 const MOCK_INPUT_HRS = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, hrs: [144710, 133057, 155484, 114545, 142020, 150222, 151427, 93413, 141783, 170450, 176851, 171134, 194193, 204081][i] }));
 const MOCK_DL = DL_WEEKLY_DATA;
 
-const CARD = 'bg-card border border-border rounded-lg p-4 flex flex-col';
-const TITLE = 'text-xs font-semibold text-muted-foreground uppercase tracking-wider';
 const TT = {
   contentStyle: {
     background: 'hsl(var(--card))',
@@ -44,50 +44,6 @@ const TT = {
   itemStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
   cursor: { fill: 'hsl(var(--muted-foreground) / 0.1)' },
 };
-
-function ExpandModal({ title, open, onClose, children }: { title: string; open: boolean; onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    if (open) document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [open, onClose]);
-  return (
-    <>
-      <div onClick={onClose} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
-        style={{ transition: 'opacity 0.3s ease', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }} />
-      <div className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl flex flex-col"
-        style={{
-          width: '74vw', height: '72vh', top: '50%', left: '50%', transition: 'opacity 0.3s ease, transform 0.3s ease',
-          opacity: open ? 1 : 0, transform: open ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -52%) scale(0.96)', pointerEvents: open ? 'auto' : 'none'
-        }}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-          <span className="text-sm font-semibold text-foreground uppercase tracking-wide">{title}</span>
-          <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"><X className="h-4 w-4" /></button>
-        </div>
-        <div className="flex-1 min-h-0 p-5 flex flex-col">{children}</div>
-      </div>
-    </>
-  );
-}
-
-function ChartCard({ title, className = '', expandContent, children }: { title: string; className?: string; expandContent: React.ReactNode; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-  return (
-    <>
-      <div className={`${CARD} ${className}`}>
-        <div className="flex items-center justify-between mb-2 shrink-0">
-          <p className={TITLE}>{title}</p>
-          <button onClick={() => setOpen(true)} className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Expand chart">
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        {children}
-      </div>
-      <ExpandModal title={title} open={open} onClose={close}>{expandContent}</ExpandModal>
-    </>
-  );
-}
 
 const OLEPrevLabel = (props: any) => {
   const { x, y, width, value } = props;
@@ -238,7 +194,7 @@ function OLECompareSection({ data, prevWeek, currWeek }: { data: { name: string;
   );
 }
 
-export default function OLEWoWAnalysis() {
+export default function OleWowAnalysis() {
   const { rawRows, weekPairs, loading, error } = useAnalysisData();
   const [selectedPairIdx, setSelectedPairIdx] = useState(0);
   const pair = weekPairs[selectedPairIdx] ?? { curr: '', prev: '' };

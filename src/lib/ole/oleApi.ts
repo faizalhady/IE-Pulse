@@ -4,7 +4,7 @@
  * All calls go to /ole-api/* which Vite proxies → http://localhost:8000 in dev.
  *
  * Usage:
- *   import { oleApi } from '@/lib/oleApi';
+ *   import { oleApi } from '@/lib/ole/oleApi';
  *   const summary = await oleApi.ole.summary();
  */
 

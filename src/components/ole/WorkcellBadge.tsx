@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { WORKCELL_LOGOS, OleStatus } from '@/lib/oleConstants';
+import { WORKCELL_LOGOS, OleStatus } from '@/lib/ole/oleConstants';
 
 interface WorkcellBadgeProps {
   name: string;

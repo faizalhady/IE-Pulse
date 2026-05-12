@@ -19,7 +19,7 @@ import {
   getOleStatus, oleColor,
   OLE_COLOR, OLE_BAR, STATUS_BADGE, STATUS_LABEL,
   WORKCELL_LOGOS, fmtDate, shiftLabel,
-} from '@/lib/oleConstants';
+} from '@/lib/ole/oleConstants';
 import {
   MOCK_SUMMARY, MOCK_WEEKLY, MOCK_MH_BREAKDOWN, MOCK_MH_BY_WC,
   MOCK_SHIFTS, MOCK_PRODUCTION, MOCK_PAID_HOURS, MOCK_SMH_LOOKUP,

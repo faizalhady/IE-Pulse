@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils';
-import { useOleResults } from '@/hooks/useOleData';
-import { fmtDate } from '@/lib/oleConstants';
+import { useOleResults } from '@/hooks/ole/useOleData';
+import { fmtDate } from '@/lib/ole/oleConstants';
 import { ArrowLeft, AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { OleResult } from '@/lib/oleApi';
+import type { OleResult } from '@/lib/ole/oleApi';
 
 function getOleStatus(pct: number | null): 'optimal' | 'warning' | 'critical' | 'idle' {
   if (pct === null) return 'idle';

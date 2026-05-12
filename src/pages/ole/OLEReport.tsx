@@ -1,6 +1,6 @@
-import { useOleSummary, useOleWeekly, useOleWorkcells } from '@/hooks/useOleData';
-import { oleApi } from '@/lib/oleApi';
-import { getOleStatus, oleColor, WORKCELL_LOGOS } from '@/lib/oleConstants';
+import { useOleSummary, useOleWeekly, useOleWorkcells } from '@/hooks/ole/useOleData';
+import { oleApi } from '@/lib/ole/oleApi';
+import { getOleStatus, oleColor, WORKCELL_LOGOS } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import {
     Activity,

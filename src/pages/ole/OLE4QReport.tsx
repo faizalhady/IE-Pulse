@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { OleWeeklyResult, OleWorkcellConfig } from '@/lib/oleApi';
-import { oleApi } from '@/lib/oleApi';
+import type { OleWeeklyResult, OleWorkcellConfig } from '@/lib/ole/oleApi';
+import { oleApi } from '@/lib/ole/oleApi';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { CalendarIcon, ChevronLeft, ChevronRight, Download, Eye, EyeOff, GripVertical, Info, Plus, Settings, Trash2 } from 'lucide-react';
@@ -544,7 +544,7 @@ function ImprovementTable({ actions, isPrint = false, top1Cat = '', top2Cat = ''
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function FourQGenerator() {
+export default function OLE4QReport() {
   const [title, setTitle] = useState('Weekly OLE Performance Review');
   const [tab, setTab] = useState<'setup' | 'editor'>('setup');
   const [rightOpen, setRightOpen] = useState(true);

@@ -23,8 +23,8 @@ import {
   useOleWeekly,
   useOleWorkcells,
   useSmhLookup,
-} from '@/hooks/useOleData';
-import type { OlePaidHours, OleProduction, OleResult, OleSummary } from '@/lib/oleApi';
+} from '@/hooks/ole/useOleData';
+import type { OlePaidHours, OleProduction, OleResult, OleSummary } from '@/lib/ole/oleApi';
 import {
   fmtDate,
   getOleStatus,
@@ -34,7 +34,7 @@ import {
   shiftLabel,
   STATUS_BADGE, STATUS_LABEL,
   WORKCELL_LOGOS
-} from '@/lib/oleConstants';
+} from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import OLEFilters from '@/pages/ole/OLEFilters';
 import {

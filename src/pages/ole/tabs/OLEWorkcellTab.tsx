@@ -1,6 +1,6 @@
-import { useOlePredictions, useOleWeekly } from '@/hooks/useOleData';
-import { oleApi } from '@/lib/oleApi';
-import type { OleWeeklyResult } from '@/lib/oleApi';
+import { useOlePredictions, useOleWeekly } from '@/hooks/ole/useOleData';
+import { oleApi } from '@/lib/ole/oleApi';
+import type { OleWeeklyResult } from '@/lib/ole/oleApi';
 import { cn } from '@/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
 import {

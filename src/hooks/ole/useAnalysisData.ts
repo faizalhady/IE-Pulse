@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/oleConstants';
+import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/ole/oleConstants';
 
 export const PLANT_OLE_GOAL = 0.61; // 61%
 const API_BASE = '/ietools/ole/api';

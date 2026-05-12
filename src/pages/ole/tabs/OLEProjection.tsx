@@ -1,7 +1,7 @@
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOleWeekly } from '@/hooks/useOleData';
-import type { OleWeeklyResult } from '@/lib/oleApi';
+import { useOleWeekly } from '@/hooks/ole/useOleData';
+import type { OleWeeklyResult } from '@/lib/ole/oleApi';
 import { cn } from '@/lib/utils';
 import { useMemo, useState } from 'react';
 import {

@@ -23,8 +23,8 @@ import {
   OleWorkcellConfig,
   SmhLookup,
   SmhStatus,
-} from '@/lib/oleApi';
-import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/oleConstants';
+} from '@/lib/ole/oleApi';
+import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/ole/oleConstants';
 
 const isExcluded = (workcell: string) => TEMP_EXCLUDED_WORKCELLS.includes(workcell);
 

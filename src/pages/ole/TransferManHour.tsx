@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
-import { SHIFTS, shiftLabel, fmtDate } from '@/lib/oleConstants';
-import { useOleWorkcells } from '@/hooks/useOleData';
+import { SHIFTS, shiftLabel, fmtDate } from '@/lib/ole/oleConstants';
+import { useOleWorkcells } from '@/hooks/ole/useOleData';
 import {
   ArrowRightLeft, CalendarIcon,
   Clock, Plus, Trash2, X, Activity,

@@ -1,18 +1,26 @@
 /**
- * OLEWorkcell4.tsx — Workcell drill-down, same compact layout as OLEHome4
- * Route: /ole/wc4/:workcell
+ * OleWorkcellReport.tsx — Workcell drill-down for the OLE report.
+ * Route: /report/wc/:workcell
  */
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOlePaidHours, useOleProduction, useOleResults, useOleWeekly, useOleWorkcells, useSmhLookup } from '@/hooks/useOleData';
-import type { OleWeeklyResult } from '@/lib/oleApi';
+import { OleFilterBar } from '@/components/ole/OleFilterBar';
+import { TrendModal } from '@/components/ole/TrendModal';
+import { useOleDateFilter } from '@/hooks/ole/useOleDateFilter';
+import { useOlePaidHours, useOleProduction, useOleResults, useOleWeekly, useOleWorkcells, useSmhLookup } from '@/hooks/ole/useOleData';
+import { aggregateTotals } from '@/lib/ole/oleCalculations';
+import { TT } from '@/lib/ole/oleChartStyles';
+import { LABOR_GT, PROD_GT, ROW_H, TD, TH } from '@/lib/ole/oleTableLayouts';
+import type { WeekRow } from '@/lib/ole/oleTypes';
 import {
   OLE_COLOR,
   OLE_TARGET,
+  OLE_WARNING,
   WORKCELL_LOGOS, fmtDate,
+  formatWeekLabel,
   getOleStatus, oleColor,
   shiftLabel,
-} from '@/lib/oleConstants';
+} from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import {
@@ -21,11 +29,9 @@ import {
   Users,
   X
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  Area,
-  AreaChart,
   Bar,
   CartesianGrid,
   Cell,
@@ -35,124 +41,6 @@ import {
   Tooltip,
   XAxis, YAxis,
 } from 'recharts';
-import { DatePickerField } from './OLEFilters';
-
-type WeekRow = { isoWeek: number; label: string; start: string; end: string };
-
-const TT = {
-  contentStyle: {
-    background: 'hsl(var(--card))',
-    border: '1px solid hsl(var(--border))',
-    borderRadius: 8,
-    fontSize: 13,
-    color: 'hsl(var(--foreground))',
-    padding: '8px 12px',
-  },
-  labelStyle: { color: 'hsl(var(--muted-foreground))', fontWeight: 600, fontSize: 12, marginBottom: 2 },
-  itemStyle: { color: 'hsl(var(--foreground))', fontWeight: 700, fontSize: 14 },
-};
-
-const TT_AREA = {
-  contentStyle: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6, fontSize: 11 },
-  labelStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
-  itemStyle: { color: 'hsl(var(--muted-foreground))' },
-  cursor: { fill: 'hsl(var(--muted-foreground) / 0.08)' },
-};
-
-// ─── Trend Modal ─────────────────────────────────────────────────────────────
-function TrendModal({ open, onClose, data, workcell, selectedWeek }: {
-  open: boolean;
-  onClose: () => void;
-  data: { w: string; isoWeek: number; ole: number; smh: number; hrs: number }[];
-  workcell: string;
-  selectedWeek: number | null;
-}) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    if (open) document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [open, onClose]);
-
-  return (
-    <>
-      <div
-        onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
-        style={{ transition: 'opacity 0.25s ease', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
-      />
-      <div
-        className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl flex flex-col"
-        style={{
-          width: '72vw', height: '68vh', top: '50%', left: '50%',
-          transition: 'opacity 0.25s ease, transform 0.25s ease',
-          opacity: open ? 1 : 0,
-          transform: open ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -52%) scale(0.96)',
-          pointerEvents: open ? 'auto' : 'none',
-        }}
-      >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-          <span className="text-sm font-semibold text-foreground uppercase tracking-wide">{workcell} — Output SMH &amp; Input Hours Trend</span>
-          <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex-1 min-h-0 p-5 grid grid-cols-2 gap-4">
-          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Output SMH <span className="text-primary">(Σ Qty × SMH/unit)</span></p>
-            <div className="flex-1 min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="wcSmhGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={v => `${v.toFixed(0)}`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={42} />
-                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${v.toFixed(1)} hrs`, 'Output SMH']} />
-                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.80} />}
-                  <Area type="monotone" dataKey="smh" stroke="#22c55e" strokeWidth={2} fill="url(#wcSmhGrad)" dot={false} activeDot={{ r: 4, fill: '#22c55e' }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Input Hours <span className="text-violet-400">(Σ Paid Direct Hrs)</span></p>
-            <div className="flex-1 min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="wcHrsGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={v => `${v.toFixed(0)}`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={42} />
-                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${v.toFixed(1)} hrs`, 'Input Hours']} />
-                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.8} />}
-                  <Area type="monotone" dataKey="hrs" stroke="#a78bfa" strokeWidth={2} fill="url(#wcHrsGrad)" dot={false} activeDot={{ r: 4, fill: '#a78bfa' }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ─── Table font sizes ───────────────────────────────────────────────────────
-const TH = 'text-[10px]';
-const TD = 'text-xs';
-const ROW_H = 52;
-
-// ─── Column layouts ───────────────────────────────────────────────────────
-const LABOR_GT = '2.5rem 6rem 4rem 7rem 6rem 6.5rem 6.5rem 5.5rem 7rem';
-const PROD_GT = '2.5rem 6rem 4rem 5rem 12rem 5rem 6rem 7rem';
 
 // ─── Shift drawer ─────────────────────────────────────────────────────────────
 interface ShiftDrawerData {
@@ -286,25 +174,11 @@ function ShiftDrawer({
   );
 }
 
-// ─── Aggregate live weekly rows for a single workcell ─────────────────────────
-function aggregateWcWeekly(rows: OleWeeklyResult[]) {
-  const out = rows.reduce((s, r) => s + r.total_output_smh, 0);
-  const inp = rows.reduce((s, r) => s + r.total_input_hours, 0);
-  return {
-    ole_pct: inp > 0 ? (out / inp) * 100 : 0,
-    total_output_smh: out,
-    total_input_hours: inp,
-    total_qty: rows.reduce((s, r) => s + r.total_qty, 0),
-    total_shifts: rows.reduce((s, r) => s + r.shift_count, 0),
-    flagged_shifts: rows.reduce((s, r) => s + r.shifts_flagged, 0),
-  };
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function OLEWorkcell4() {
+export default function OleWorkcellReport() {
   const navigate = useNavigate();
   const { workcell: paramWc } = useParams<{ workcell: string }>();
   const [searchParams] = useSearchParams();
@@ -337,7 +211,7 @@ export default function OLEWorkcell4() {
     rawWeekly.forEach(r => {
       if (!seen.has(r.week_label)) {
         seen.add(r.week_label);
-        list.push({ isoWeek: r.iso_week, label: `WW${String(r.iso_week).padStart(2, '0')}`, start: r.week_start_date, end: r.week_end_date });
+        list.push({ isoWeek: r.iso_week, label: formatWeekLabel(r.iso_week), start: r.week_start_date, end: r.week_end_date });
       }
     });
     return list.sort((a, b) => a.isoWeek - b.isoWeek);
@@ -348,23 +222,20 @@ export default function OLEWorkcell4() {
   const initTo = searchParams.get('to') ?? '';
 
   const [workcell, setWorkcell] = useState<string>(decodeURIComponent(paramWc ?? ''));
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(initWeek);
-  const [dateFrom, setDateFrom] = useState<string>(initFrom);
-  const [dateTo, setDateTo] = useState<string>(initTo);
+  const {
+    selectedWeek,
+    dateFrom,
+    dateTo,
+    selectWeek,
+    handleDateFrom, handleDateTo,
+    reset: resetDateFilter,
+  } = useOleDateFilter({ initialWeek: initWeek, initialFrom: initFrom, initialTo: initTo });
   const [tableTab, setTableTab] = useState<'labor' | 'production'>('labor');
   const [drawerShift, setDrawerShift] = useState<ShiftDrawerData | null>(null);
   const [trendModalOpen, setTrendModalOpen] = useState(false);
 
-  function selectWeek(w: WeekRow) {
-    setSelectedWeek(w.isoWeek);
-    setDateFrom(w.start);
-    setDateTo(w.end);
-  }
-  function handleDateFrom(val: string) { setDateFrom(val); setSelectedWeek(null); }
-  function handleDateTo(val: string) { setDateTo(val); setSelectedWeek(null); }
-
   const weekLabel = useMemo(() => {
-    if (selectedWeek !== null) return `WW${String(selectedWeek).padStart(2, '0')}`;
+    if (selectedWeek !== null) return formatWeekLabel(selectedWeek);
     if (dateFrom && dateTo) {
       return `${format(parseISO(dateFrom), 'd MMMM yyyy')} - ${format(parseISO(dateTo), 'd MMMM yyyy')}`;
     }
@@ -382,26 +253,23 @@ export default function OLEWorkcell4() {
       return inDate;
     }), [rawWeekly, workcell, dateFrom, dateTo, selectedWeek]);
 
-  const agg = useMemo(() => aggregateWcWeekly(filteredWeekly), [filteredWeekly]);
+  const agg = useMemo(() => aggregateTotals(filteredWeekly), [filteredWeekly]);
 
   const wcWeeklyFull = useMemo(() =>
     rawWeekly
       .filter(r => r.workcell === workcell)
       .sort((a, b) => a.iso_week - b.iso_week)
       .map(r => ({
-        w: `WW${String(r.iso_week).padStart(2, '0')}`,
+        w: formatWeekLabel(r.iso_week),
         isoWeek: r.iso_week,
         ole: r.ole_pct ?? 0,
         smh: r.total_output_smh,
         hrs: r.total_input_hours,
       })), [rawWeekly, workcell]);
 
-  const wcWeekly = useMemo(() =>
-    rawWeekly
-      .filter(r => r.workcell === workcell)
-      .sort((a, b) => a.iso_week - b.iso_week)
-      .map(r => ({ w: `WW${String(r.iso_week).padStart(2, '0')}`, isoWeek: r.iso_week, ole: r.ole_pct ?? 0 })),
-    [rawWeekly, workcell]);
+  const wcWeekly = useMemo(
+    () => wcWeeklyFull.map(({ w, isoWeek, ole }) => ({ w, isoWeek, ole })),
+    [wcWeeklyFull]);
 
   const mh = {
     total_input_hours: agg.total_input_hours,
@@ -467,7 +335,15 @@ export default function OLEWorkcell4() {
           paidHoursLoading={paidHoursHook.loading}
         />
       )}
-      <TrendModal open={trendModalOpen} onClose={() => setTrendModalOpen(false)} data={wcWeeklyFull} workcell={workcell} selectedWeek={selectedWeek} />
+      <TrendModal
+        open={trendModalOpen}
+        onClose={() => setTrendModalOpen(false)}
+        title={`${workcell} — Output SMH & Input Hours Trend`}
+        data={wcWeeklyFull}
+        selectedWeek={selectedWeek}
+        yScale="raw"
+        referenceLineOpacity={0.8}
+      />
 
       {/* Sticky header */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
@@ -480,43 +356,27 @@ export default function OLEWorkcell4() {
       </div>
 
       {/* Filter bar */}
-      <div className="px-5 pt-4 pb-3 flex items-center gap-3 flex-wrap border-b border-border">
-        <Select value={workcell} onValueChange={setWorkcell}>
-          <SelectTrigger className="h-8 w-[200px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {workcellNames.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <OleFilterBar
+        weeks={weeks}
+        selectedWeek={selectedWeek}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        selectWeek={selectWeek}
+        handleDateFrom={handleDateFrom}
+        handleDateTo={handleDateTo}
+        reset={resetDateFilter}
+        idPrefix="wc4"
+        before={
+          <Select value={workcell} onValueChange={setWorkcell}>
+            <SelectTrigger className="h-8 w-[200px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {workcellNames.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        }
+      />
 
-        <Select
-          value={selectedWeek !== null ? String(selectedWeek) : 'custom'}
-          onValueChange={(v) => {
-            if (v === 'custom') return;
-            const found = weeks.find(w => w.isoWeek === Number(v));
-            if (found) selectWeek(found);
-          }}
-        >
-          <SelectTrigger className="h-8 w-[110px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {selectedWeek === null && <SelectItem value="custom">All Weeks</SelectItem>}
-            {weeks.map(w => <SelectItem key={w.isoWeek} value={String(w.isoWeek)}>{w.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-
-        <DatePickerField id="wc4-from" label="" value={dateFrom} onChange={handleDateFrom} />
-        <DatePickerField id="wc4-to" label="" value={dateTo} onChange={handleDateTo} />
-
-        {(selectedWeek !== null || dateFrom || dateTo) && (
-          <button
-            onClick={() => { setSelectedWeek(null); setDateFrom(''); setDateTo(''); }}
-            className="h-8 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 transition-colors"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-
-      {/* ── MAIN LAYOUT — page scrolls naturally like OLEHome4 ── */}
+      {/* ── MAIN LAYOUT — page scrolls naturally ── */}
       <div className="p-5 flex gap-5">
 
         {/* LEFT COLUMN */}
@@ -594,7 +454,7 @@ export default function OLEWorkcell4() {
                   <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
                   {selectedWeek !== null && (
                     <ReferenceLine
-                      x={`WW${String(selectedWeek).padStart(2, '0')}`}
+                      x={formatWeekLabel(selectedWeek)}
                       stroke="hsl(var(--foreground))"
                       strokeWidth={1.5}
                       strokeDasharray="4 2"
@@ -605,7 +465,7 @@ export default function OLEWorkcell4() {
                     label={(props: any) => {
                       const { x, y, width, value } = props;
                       const d = wcWeekly[props.index];
-                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
                       return (
                         <text x={x + width / 2} y={y - 4} textAnchor="middle" fontSize={15} fontFamily="monospace" fontWeight="bold" fill={baseColor} opacity={1} fillOpacity={1}>
                           {Number(value).toFixed(1)}%
@@ -615,7 +475,7 @@ export default function OLEWorkcell4() {
                   >
                     {wcWeekly.map((d, i) => {
                       const isSelected = d.isoWeek === selectedWeek;
-                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
                       return <Cell key={i} fill={baseColor} opacity={isSelected ? 1 : 0.4} />;
                     })}
                   </Bar>

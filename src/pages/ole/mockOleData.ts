@@ -16,7 +16,7 @@ import type {
   OleResult,
   OlePaidHours,
   OleProduction,
-} from '@/lib/oleApi';
+} from '@/lib/ole/oleApi';
 
 // ─── Workcell master list ─────────────────────────────────────────────────────
 

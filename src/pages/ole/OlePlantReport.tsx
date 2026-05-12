@@ -1,13 +1,25 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOleWeekly, useOleWorkcells } from '@/hooks/useOleData';
-import type { OleWeeklyResult } from '@/lib/oleApi';
+import { OleFilterBar } from '@/components/ole/OleFilterBar';
+import { TrendModal } from '@/components/ole/TrendModal';
+import { useOleDateFilter } from '@/hooks/ole/useOleDateFilter';
+import { useOleWeekly, useOleWorkcells } from '@/hooks/ole/useOleData';
+import type { OleWeeklyResult } from '@/lib/ole/oleApi';
+import {
+  aggregateByWeek,
+  aggregateByWorkcell,
+  calculateOLE,
+} from '@/lib/ole/oleCalculations';
+import { TT } from '@/lib/ole/oleChartStyles';
+import type { WeekRow } from '@/lib/ole/oleTypes';
 import {
   OLE_COLOR,
   OLE_TARGET,
+  OLE_WARNING,
   STATUS_BADGE, STATUS_LABEL,
   WORKCELL_LOGOS,
-  getOleStatus, oleColor
-} from '@/lib/oleConstants';
+  formatWeekLabel,
+  getOleStatus, oleColor,
+} from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import {
@@ -15,13 +27,10 @@ import {
   Info,
   TrendingDown,
   TrendingUp,
-  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Area,
-  AreaChart,
   Bar,
   CartesianGrid,
   Cell,
@@ -31,153 +40,12 @@ import {
   Tooltip,
   XAxis, YAxis,
 } from 'recharts';
-import { DatePickerField } from './OLEFilters';
-
-const TT = {
-  contentStyle: {
-    background: 'hsl(var(--card))',
-    border: '1px solid hsl(var(--border))',
-    borderRadius: 8,
-    fontSize: 13,
-    color: 'hsl(var(--foreground))',
-    padding: '8px 12px',
-  },
-  labelStyle: { color: 'hsl(var(--muted-foreground))', fontWeight: 600, fontSize: 12, marginBottom: 2 },
-  itemStyle: { color: 'hsl(var(--foreground))', fontWeight: 700, fontSize: 14 },
-};
-
-const TT_AREA = {
-  contentStyle: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6, fontSize: 11 },
-  labelStyle: { color: 'hsl(var(--foreground))', fontWeight: 600 },
-  itemStyle: { color: 'hsl(var(--muted-foreground))' },
-  cursor: { fill: 'hsl(var(--muted-foreground) / 0.08)' },
-};
-
-// ─── Trend Modal ─────────────────────────────────────────────────────────────
-function TrendModal({ open, onClose, data, selectedWeek }: {
-  open: boolean;
-  onClose: () => void;
-  data: { w: string; isoWeek: number; ole: number; smh: number; hrs: number }[];
-  selectedWeek: number | null;
-}) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    if (open) document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [open, onClose]);
-
-  return (
-    <>
-      <div
-        onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
-        style={{ transition: 'opacity 0.25s ease', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
-      />
-      <div
-        className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl flex flex-col"
-        style={{
-          width: '72vw', height: '68vh', top: '50%', left: '50%',
-          transition: 'opacity 0.25s ease, transform 0.25s ease',
-          opacity: open ? 1 : 0,
-          transform: open ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -52%) scale(0.96)',
-          pointerEvents: open ? 'auto' : 'none',
-        }}
-      >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-          <span className="text-sm font-semibold text-foreground uppercase tracking-wide">Output SMH &amp; Input Hours — Weekly Trend</span>
-          <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex-1 min-h-0 p-5 grid grid-cols-2 gap-4">
-          {/* Output SMH */}
-          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Output SMH <span className="text-primary">(Σ Qty × SMH/unit)</span></p>
-            <div className="flex-1 min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="smhGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={38} />
-                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${(v / 1000).toFixed(1)}k hrs`, 'Output SMH']} />
-                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
-                  <Area type="monotone" dataKey="smh" stroke="#22c55e" strokeWidth={2} fill="url(#smhGrad)" dot={false} activeDot={{ r: 4, fill: '#22c55e' }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          {/* Input Hours */}
-          <div className="flex flex-col bg-muted/20 rounded-xl border border-border p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Input Hours <span className="text-violet-400">(Σ Paid Direct Hrs)</span></p>
-            <div className="flex-1 min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="hrsGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="w" type="category" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={38} />
-                  <Tooltip {...TT_AREA} formatter={(v: number) => [`${(v / 1000).toFixed(1)}k hrs`, 'Input Hours']} />
-                  {selectedWeek !== null && <ReferenceLine x={`WW${String(selectedWeek).padStart(2, '0')}`} stroke='hsl(var(--muted-foreground))' strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.35} />}
-                  <Area type="monotone" dataKey="hrs" stroke="#a78bfa" strokeWidth={2} fill="url(#hrsGrad)" dot={false} activeDot={{ r: 4, fill: '#a78bfa' }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-type WeekRow = { isoWeek: number; label: string; start: string; end: string };
-
-// ─── Aggregate weekly rows into per-workcell summary ─────────────────────────
-function aggregateFromWeekly(rows: OleWeeklyResult[]) {
-  const map: Record<string, {
-    workcell: string;
-    total_output_smh: number;
-    total_input_hours: number;
-    total_qty: number;
-    total_shifts: number;
-    flagged_shifts: number;
-  }> = {};
-  rows.forEach(r => {
-    if (!map[r.workcell]) {
-      map[r.workcell] = {
-        workcell: r.workcell,
-        total_output_smh: 0,
-        total_input_hours: 0,
-        total_qty: 0,
-        total_shifts: 0,
-        flagged_shifts: 0,
-      };
-    }
-    const m = map[r.workcell];
-    m.total_output_smh += r.total_output_smh;
-    m.total_input_hours += r.total_input_hours;
-    m.total_qty += r.total_qty;
-    m.total_shifts += r.shift_count;
-    m.flagged_shifts += r.shifts_flagged;
-  });
-  return Object.values(map);
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function OLEHome4() {
+export default function OlePlantReport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const weekBarRef = useRef<HTMLDivElement>(null);
@@ -201,7 +69,7 @@ export default function OLEHome4() {
         seen.add(r.week_label);
         list.push({
           isoWeek: r.iso_week,
-          label: `WW${String(r.iso_week).padStart(2, '0')}`,
+          label: formatWeekLabel(r.iso_week),
           start: r.week_start_date,
           end: r.week_end_date,
         });
@@ -212,9 +80,14 @@ export default function OLEHome4() {
 
   // ── Filter state ────────────────────────────────────────────────────────────
   const initWeek = searchParams.get('week') ? Number(searchParams.get('week')) : null;
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(initWeek);
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
+  const {
+    selectedWeek, setSelectedWeek,
+    dateFrom, setDateFrom,
+    dateTo, setDateTo,
+    selectWeek,
+    handleDateFrom, handleDateTo,
+    reset: resetDateFilter,
+  } = useOleDateFilter({ initialWeek: initWeek });
 
   const seedDoneRef = useRef(false);
 
@@ -229,14 +102,6 @@ export default function OLEHome4() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weeks]);
-
-  function selectWeek(w: WeekRow) {
-    setSelectedWeek(w.isoWeek);
-    setDateFrom(w.start);
-    setDateTo(w.end);
-  }
-  function handleDateFrom(val: string) { setDateFrom(val); setSelectedWeek(null); }
-  function handleDateTo(val: string) { setDateTo(val); setSelectedWeek(null); }
 
   // ── Filter by date/week ONLY (no plant filter) ──────────────────────────────
   const weekFilteredWeekly = useMemo(() => {
@@ -258,10 +123,10 @@ export default function OLEHome4() {
 
   // ── Per-workcell aggregates ──────────────────────────────────────────────────
   const workcellsSorted = useMemo(() => {
-    return aggregateFromWeekly(filteredWeekly)
+    return aggregateByWorkcell(filteredWeekly)
       .map(r => ({
         ...r,
-        ole_pct: r.total_input_hours > 0 ? (r.total_output_smh / r.total_input_hours) * 100 : 0,
+        ole_pct: calculateOLE(r.total_output_smh, r.total_input_hours),
       }))
       .sort((a, b) => a.ole_pct - b.ole_pct);
   }, [filteredWeekly]);
@@ -271,7 +136,7 @@ export default function OLEHome4() {
     const totalOut = workcellsSorted.reduce((s, r) => s + r.total_output_smh, 0);
     const totalIn = workcellsSorted.reduce((s, r) => s + r.total_input_hours, 0);
     return {
-      ole_pct: totalIn > 0 ? (totalOut / totalIn) * 100 : 0,
+      ole_pct: calculateOLE(totalOut, totalIn),
       total_output_smh: totalOut,
       total_input_hours: totalIn,
       total_qty: workcellsSorted.reduce((s, r) => s + r.total_qty, 0),
@@ -287,60 +152,39 @@ export default function OLEHome4() {
     const agg = (rows: OleWeeklyResult[]) => {
       const out = rows.reduce((s, r) => s + r.total_output_smh, 0);
       const inp = rows.reduce((s, r) => s + r.total_input_hours, 0);
-      return { ole_pct: inp > 0 ? (out / inp) * 100 : 0 };
+      return { ole_pct: calculateOLE(out, inp) };
     };
     return { p1: agg(p1rows), p2: agg(p2rows) };
   }, [weekFilteredWeekly, workcellConfigs]);
 
   const [trendModalOpen, setTrendModalOpen] = useState(false);
 
-  // ── Weekly trend data with smh + hrs for modal ──────────────────────────────
-  const siteWeeklyFull = useMemo(() => {
-    const byWeek: Record<string, { smh: number; hrs: number; week: number }> = {};
-    rawWeekly
-      .filter(r => plant === 'all' || workcellConfigs.find(w => w.workcell === r.workcell)?.plant === plant)
-      .forEach(r => {
-        if (!byWeek[r.week_label]) byWeek[r.week_label] = { smh: 0, hrs: 0, week: r.iso_week };
-        byWeek[r.week_label].smh += r.total_output_smh;
-        byWeek[r.week_label].hrs += r.total_input_hours;
-      });
-    return Object.values(byWeek)
-      .sort((a, b) => a.week - b.week)
-      .map(w => ({
-        w: `WW${String(w.week).padStart(2, '0')}`,
-        isoWeek: w.week,
-        ole: w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : 0,
-        smh: w.smh,
-        hrs: w.hrs,
-      }));
-  }, [rawWeekly, plant, workcellConfigs]);
+  // ── Weekly trend (plant-filtered raw weekly rows) ────────────────────────────
+  const plantFilteredWeekly = useMemo(() =>
+    rawWeekly.filter(r =>
+      plant === 'all' || workcellConfigs.find(w => w.workcell === r.workcell)?.plant === plant
+    ),
+    [rawWeekly, plant, workcellConfigs]);
 
-  // ── Weekly trend chart (all weeks, plant-filtered) ───────────────────────────
-  const siteWeekly = useMemo(() => {
-    const byWeek: Record<string, { smh: number; hrs: number; week: number }> = {};
-    rawWeekly
-      .filter(r => plant === 'all' || workcellConfigs.find(w => w.workcell === r.workcell)?.plant === plant)
-      .forEach(r => {
-        if (!byWeek[r.week_label]) byWeek[r.week_label] = { smh: 0, hrs: 0, week: r.iso_week };
-        byWeek[r.week_label].smh += r.total_output_smh;
-        byWeek[r.week_label].hrs += r.total_input_hours;
-      });
-    return Object.values(byWeek)
-      .sort((a, b) => a.week - b.week)
-      .map(w => ({
-        w: `WW${String(w.week).padStart(2, '0')}`,
-        isoWeek: w.week,
-        ole: w.hrs > 0 ? Math.round((w.smh / w.hrs) * 10000) / 100 : 0,
-      }));
-  }, [rawWeekly, plant, workcellConfigs]);
+  // ── Weekly trend data with smh + hrs for modal ──────────────────────────────
+  const siteWeeklyFull = useMemo(
+    () => aggregateByWeek(plantFilteredWeekly),
+    [plantFilteredWeekly]
+  );
+
+  // ── Weekly trend chart (drops smh/hrs from points; keeps shape stable) ──────
+  const siteWeekly = useMemo(
+    () => siteWeeklyFull.map(({ w, isoWeek, ole }) => ({ w, isoWeek, ole })),
+    [siteWeeklyFull]
+  );
 
   // ── Attention: bottom workcells below target ──────────────────────────────────
   const attention = useMemo(() =>
     workcellsSorted.slice(0, 3).filter(r => r.ole_pct < OLE_TARGET).map(r => ({
       workcell: r.workcell,
       ole_pct: r.ole_pct,
-      severity: r.ole_pct < 45 ? 'high' as const : 'medium' as const,
-      message: r.ole_pct < 45 ? 'OLE critically below target' : 'OLE below target',
+      severity: r.ole_pct < OLE_WARNING ? 'high' as const : 'medium' as const,
+      message: r.ole_pct < OLE_WARNING ? 'OLE critically below target' : 'OLE below target',
       value: `${r.ole_pct.toFixed(1)}%`,
       flagged: r.flagged_shifts,
     }))
@@ -358,7 +202,7 @@ export default function OLEHome4() {
   const yMin = 0;
   const yMax = oles.length ? Math.max(OLE_TARGET + 5, Math.ceil(Math.max(...oles) / 10) * 10 + 10) : 100;
   const weekLabel = useMemo(() => {
-    if (selectedWeek !== null) return `WW${String(selectedWeek).padStart(2, '0')}`;
+    if (selectedWeek !== null) return formatWeekLabel(selectedWeek);
     if (dateFrom && dateTo) {
       return `${format(parseISO(dateFrom), 'd MMMM yyyy')} - ${format(parseISO(dateTo), 'd MMMM yyyy')}`;
     }
@@ -383,50 +227,42 @@ export default function OLEHome4() {
         </div>
       )}
 
-      <div className="px-5 pt-4 pb-3 flex items-center gap-3 flex-wrap border-b border-border">
-        <Select value={plant} onValueChange={(v) => setPlant(v as 'all' | 'Plant 1' | 'Plant 2')}>
-          <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Plant" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Plants</SelectItem>
-            <SelectItem value="Plant 1">Plant 1</SelectItem>
-            <SelectItem value="Plant 2">Plant 2</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={selectedWeek !== null ? String(selectedWeek) : 'all'}
-          onValueChange={(v) => {
-            if (v === 'all') { setSelectedWeek(null); setDateFrom(''); setDateTo(''); return; }
-            const found = weeks.find(w => w.isoWeek === Number(v));
-            if (found) selectWeek(found);
-          }}
-        >
-          <SelectTrigger className="h-8 w-[110px]"><SelectValue placeholder="Week" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Weeks</SelectItem>
-            {weeks.map(w => (
-              <SelectItem key={w.isoWeek} value={String(w.isoWeek)}>{w.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <DatePickerField id="home4-from" label="" value={dateFrom} onChange={handleDateFrom} />
-        <DatePickerField id="home4-to" label="" value={dateTo} onChange={handleDateTo} />
-
-        {hasFilters && (
-          <button
-            onClick={() => { setPlant('all'); setSelectedWeek(null); setDateFrom(''); setDateTo(''); }}
-            className="h-8 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-colors whitespace-nowrap"
-          >
-            Clear all
-          </button>
-        )}
-      </div>
+      <OleFilterBar
+        weeks={weeks}
+        selectedWeek={selectedWeek}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        selectWeek={selectWeek}
+        handleDateFrom={handleDateFrom}
+        handleDateTo={handleDateTo}
+        reset={resetDateFilter}
+        idPrefix="home4"
+        before={
+          <Select value={plant} onValueChange={(v) => setPlant(v as 'all' | 'Plant 1' | 'Plant 2')}>
+            <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Plant" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plants</SelectItem>
+              <SelectItem value="Plant 1">Plant 1</SelectItem>
+              <SelectItem value="Plant 2">Plant 2</SelectItem>
+            </SelectContent>
+          </Select>
+        }
+        showClear={hasFilters}
+        onClear={() => setPlant('all')}
+      />
 
       <div className="p-5 flex gap-5">
 
         {/* ── Trend Modal ── */}
-        <TrendModal open={trendModalOpen} onClose={() => setTrendModalOpen(false)} data={siteWeeklyFull} selectedWeek={selectedWeek} />
+        <TrendModal
+          open={trendModalOpen}
+          onClose={() => setTrendModalOpen(false)}
+          title="Output SMH & Input Hours — Weekly Trend"
+          data={siteWeeklyFull}
+          selectedWeek={selectedWeek}
+          yScale="thousands"
+          referenceLineOpacity={0.35}
+        />
 
         {/* ── LEFT COLUMN ── */}
         <div className="w-[340px] flex-shrink-0 flex flex-col gap-4">
@@ -602,7 +438,7 @@ export default function OLEHome4() {
                   <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
                   {selectedWeek !== null && (
                     <ReferenceLine
-                      x={`WW${String(selectedWeek).padStart(2, '0')}`}
+                      x={formatWeekLabel(selectedWeek)}
                       stroke="hsl(var(--foreground))"
                       strokeWidth={1.5}
                       strokeDasharray="4 2"
@@ -613,7 +449,7 @@ export default function OLEHome4() {
                     label={(props: any) => {
                       const { x, y, width, value } = props;
                       const d = siteWeekly[props.index];
-                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
                       return (
                         <text
                           x={x + width / 2}
@@ -633,7 +469,7 @@ export default function OLEHome4() {
                   >
                     {siteWeekly.map((d, i) => {
                       const isSelected = d.isoWeek === selectedWeek;
-                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= 45 ? '#f59e0b' : '#ef4444';
+                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
                       return (
                         <Cell
                           key={i}
