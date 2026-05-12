@@ -105,33 +105,52 @@ Codebase audit performed after the 6-phase OLE refactor (see `refactor-completed
 
 ## 🟦 Backend pipeline (separate repo: `ole-backend`)
 
-### 14. 🟡 Date-stitching ingest for rolling-snapshot CSVs
+### 14. ✅ DONE — Date-stitching ingest for rolling-snapshot CSVs
+- **Status:** Shipped (backend commit `17a91b2`). Both `ingest_paid_hours()` and `ingest_production()` now process files newest→oldest with per-date stitching, plus incremental mode pre-loads dates from the existing mart to skip them entirely.
+- **Outcome:** Most workcells now match Excel exactly; a small residual 1–10% mismatch remains on some cells (see task #15).
+- **Not done yet:** Unit tests for the date-set arithmetic. Worth adding before any further changes to ingest.
+
+### 15. 🟡 Investigate residual 1–10% input-hour mismatches vs Excel
 - **Repo:** `C:/Users/4033375/Projects/OLE ANALYZER/ole-backend/`
-- **Files:** `pipeline/ingest.py` — `ingest_paid_hours()` and `ingest_production()`
-- **Current approach:** Read EVERY row from EVERY CSV file → concat → `df.drop_duplicates()` (all columns). Works for byte-identical replicas but lets through cases where a row differs in a "noise" column (e.g. `cv`, `category` updated between files) → silent over-counting of input hours.
-- **Symptom:** ASP +12 hrs, IMED -1 hr, occasional 1–10% input-hour mismatch vs Excel.
-- **Proposed approach (date-stitching):**
-  ```
-  Files sorted NEWEST → OLDEST:
-  newest file       → take ALL rows (it's the freshest snapshot)
-  next older file   → take only rows for dates NOT in any newer file
-  next older file   → ...same...
-  oldest file       → contributes only its oldest dates
-  ```
-  Per-file logic:
-  1. Sort source files newest → oldest by filename date suffix
-  2. Maintain a `seen_dates` set
-  3. For each file: identify its unique `Startdate` values, subtract `seen_dates`, keep only rows for the leftover dates, then add those dates to `seen_dates`
-  4. Skip files that contribute zero new dates
-- **Benefits over current:**
-  - **Faster** — skip rows we'll never use (today's ingest loads 1.3M rows; this would load maybe 100K)
-  - **Memory-efficient** — per-date stored only once
-  - **Handles revisions gracefully** — newer file silently wins for overlapping dates
-  - **Likely fixes the residual 1–10% input-hour inaccuracies** (no leak path through "noise columns")
-- **Effort:** Medium — touches two ingest functions, deserves unit tests for date-set arithmetic
-- **Apply to:** both `ingest_paid_hours()` AND `ingest_production()` for consistency
-- **Risk:** Date-extraction bug could lose data → add tests with synthetic overlapping-window CSVs before rolling out
-- **When to do:** AFTER current immediate accuracy fixes are confirmed stable. Likely a Session 4 task.
+- **Symptom:** After date-stitching, most (workcell, week) cells match Excel exactly. A handful still drift by 1–10% on input hours. Output is generally fine.
+- **Hypotheses to investigate (in priority order):**
+  1. **Excel filter vs ingest filter mismatch** — Excel user may be filtering by raw `WorkCell` name (e.g. "Arista PCA") while dashboard rolls multiple raw names into the canonical (`ARISTA NETWORKS PCA`). Verify with `diagnose_shift.py` on a mismatched cell — Layer 1 (raw CSV) should match Excel if filters align.
+  2. **Shift number anomalies** — rows with `Shift = 0` or NaN. Currently filtered to `int` and zero-shifts presumably drop. Check via `diagnose_shift.py` Layer 1 vs Layer 2 — if Layer 1 has more rows than Layer 2 for the same (workcell, date), shift conversion may be losing rows.
+  3. **Encoding fallback dropping rows** — `pd.read_csv` tries UTF-8 then Windows-1252. If neither fits a row, pandas may skip silently. Check ingest log for any encoding errors per file.
+  4. **`value_type` whitespace variants** — `.fillna("").str.strip().str.upper()` — what about non-breaking spaces, tabs? Unlikely but possible.
+  5. **Sub-workcell aliasing in paid hours** — paid hours rows have `sub_workcell`, but unlike production we don't filter by `scan_stage`. Could be including SubWorkcell rows that the user's Excel filter excludes.
+  6. **Date timezone drift** — `_parse_date` uses `pd.Timestamp(value)`. If a CSV has time-zoned timestamps, a shift could land on a different calendar day. Check via diagnostic.
+- **Diagnostic playbook:**
+  1. Get a specific mismatch from the user: `workcell, date, shift, excel_value, dashboard_value`
+  2. Run `python diagnose_shift.py "WORKCELL" YYYY-MM-DD SHIFT`
+  3. Compare Layer 1 sum vs Excel (should match if Excel filter aligns)
+  4. Compare Layer 1 vs Layer 2 (ingest discrepancy)
+  5. Compare Layer 2 vs Layer 3 (compute discrepancy)
+- **Effort:** Small to Medium depending on root cause
+- **When to do:** When the user has a fresh mismatch case to investigate. No urgency for now — 90%+ accuracy is already useful.
+
+### 16. 🟢 Add unit tests for ingest pipeline
+- **Repo:** `C:/Users/4033375/Projects/OLE ANALYZER/ole-backend/`
+- **Why:** The ingest pipeline has now been heavily modified (date-stitching, exclude_dates, incremental mode, workcell normalization). One date-arithmetic bug could silently lose entire days of data, with no test to catch it.
+- **Suggested coverage:**
+  - Synthetic CSVs with known overlapping rolling windows → assert exact row counts per date after stitching
+  - Workcell normalization with typo variants → assert canonical names
+  - Active-workcell filter → assert unconfigured workcells are dropped
+  - Incremental mode with `exclude_dates` populated → assert no re-reads of mart dates
+  - Full mode → asserts state file gets written / overwritten
+- **Effort:** Medium — needs pytest setup if not already present, plus synthetic fixture CSVs
+- **Value:** Confidence to make future ingest changes without fear
+
+### 17. 🟢 Date-handling standardization (backend ↔ frontend)
+- **Files:** `src/lib/shared/dateUtils.ts`, backend `pipeline/ingest.py::_parse_date`
+- **Issue:** The user mentioned earlier wanting consistent date handling across both sides. Currently:
+  - Backend uses `pd.Timestamp(value)` (timezone-dependent)
+  - Frontend uses string splitting on `'T'` (timezone-agnostic)
+  - API responses normalize via `normalizeDates()` in `oleApi.ts` (strips time portion)
+- **Risk:** A timestamp like `"2026-05-08T23:00:00+00:00"` parsed on a UTC+8 machine becomes `2026-05-09 07:00:00`, shifting the date by a day.
+- **Fix:** Pin both sides to "date is a calendar day in plant-local time, never converted to UTC." Backend should explicitly drop tz with `.dt.tz_localize(None)` or use string parsing like the frontend.
+- **Effort:** Small — backend change; verify no regressions in shift assignment
+- **Value:** Eliminates potential off-by-one-day silent bugs (which would explain some of the input-hour mismatches in task #15)
 
 ---
 
