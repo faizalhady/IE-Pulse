@@ -23,6 +23,9 @@ import {
   OleWorkcellConfig,
   SmhLookup,
   SmhStatus,
+  IndirectLaborRow,
+  IndirectLaborEntity,
+  MhDistributionRow,
 } from '@/lib/ole/oleApi';
 import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/ole/oleConstants';
 
@@ -42,6 +45,25 @@ function getCached<T>(key: string): T | null {
 function setCached<T>(key: string, data: T): void {
   CACHE.set(key, { data, ts: Date.now() });
 }
+/**
+ * Fire-and-forget prefetch of the heavy OLE datasets so they're warm in the
+ * module cache by the time the user navigates to a page that needs them.
+ * Safe to call multiple times — already-cached datasets are skipped.
+ */
+export function prefetchOleData(): void {
+  const warm = <T>(key: string, fetcher: () => Promise<T>) => {
+    if (getCached<T>(key) !== null) return;
+    fetcher().then(d => setCached(key, d)).catch(() => { /* swallow — hook will retry */ });
+  };
+  warm('ole_paid_hours', () => oleApi.paidHours.list());
+  warm('ole_results',    () => oleApi.ole.list());
+  warm('ole_summary',    () => oleApi.ole.summary());
+  warm('ole_weekly',     () => oleApi.ole.weekly());
+  warm('workcells',      () => oleApi.workcells.list());
+  warm('indirect_labor', () => oleApi.indirectLabor.list());
+  warm('mh_distribution', () => oleApi.mhDistribution.list());
+}
+
 export function invalidateCache(keyPrefix?: string) {
   if (!keyPrefix) { CACHE.clear(); return; }
   for (const k of Array.from(CACHE.keys())) {
@@ -160,6 +182,21 @@ export function useSmhStatus() {
 export function useOleWeekly() {
   const r = useCachedFetch<OleWeeklyResult[]>('ole_weekly', () => oleApi.ole.weekly(), 0);
   return { ...r, data: r.data?.filter(w => !isExcluded(w.workcell)) ?? null };
+}
+
+/** Man-hours distribution — per-shift loss buckets (NVA / Lunch / MFG DT / DT / Lost) */
+export function useMhDistribution() {
+  return useCachedFetch<MhDistributionRow[]>('mh_distribution', () => oleApi.mhDistribution.list(), 5 * 60 * 1000);
+}
+
+/** Indirect labor (warehouses, support pools) — daily/shift rows */
+export function useIndirectLabor() {
+  return useCachedFetch<IndirectLaborRow[]>('indirect_labor', () => oleApi.indirectLabor.list(), 5 * 60 * 1000);
+}
+
+/** Indirect labor entity config */
+export function useIndirectLaborEntities() {
+  return useCachedFetch<IndirectLaborEntity[]>('indirect_labor_entities', () => oleApi.indirectLabor.entities(), 0);
 }
 
 /** ARIMA/HW predictions — cached per workcell */

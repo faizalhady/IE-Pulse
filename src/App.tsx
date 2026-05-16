@@ -11,9 +11,12 @@ import OLESmh from "@/pages/ole/OLESmh";
 import OlePlantReport from "@/pages/ole/OlePlantReport";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
+import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import MapPage from "./pages/MapPage";
+import DowntimeManagement from "./pages/ole/DowntimeManagement";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +39,12 @@ const App = () => (
 );
 
 function AppShell() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (pathname === '/' || pathname === '/map' || pathname.startsWith('/report')) {
+      prefetchOleData();
+    }
+  }, [pathname]);
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -50,6 +59,7 @@ function AppShell() {
             <Route path="/analysis" element={<OleWowAnalysis />} />
             <Route path="/report" element={<OlePlantReport />} />
             <Route path="/report/wc/:workcell" element={<OleWorkcellReport />} />
+            <Route path="/downtime" element={<DowntimeManagement />} />
             {/* <Route path="/workcells" element={<WorkcellsTable />} /> */}
             {/* <Route path="/workcell/:id" element={<WorkcellView />} /> */}
             {/* <Route path="/bay/:id" element={<BayDetail />} /> */}
@@ -58,7 +68,6 @@ function AppShell() {
             {/* <Route path="/plants" element={<Plants />} /> */}
             {/* <Route path="/floor-map" element={<FloorMap />} /> */}
             {/* <Route path="/ole" element={<OLEOverview />} /> */}
-            {/* <Route path="/ole/downtime" element={<DowntimeManagement />} /> */}
             {/* <Route path="/ole/transfer" element={<TransferManHour />} /> */}
             {/* <Route path="/ole/home1" element={<OLEHome1 />} /> */}
             {/* <Route path="/ole/home2" element={<OLEHome2 />} /> */}

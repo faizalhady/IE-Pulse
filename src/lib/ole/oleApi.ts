@@ -62,6 +62,8 @@ export interface OleResult {
   total_input_hours: number;
   va_hours: number;
   nva_hours: number;
+  va_count: number;
+  nva_count: number;
   ole_pct: number | null;
   data_quality: 'OK' | 'PARTIAL_SMH' | 'NO_INPUT_HOURS' | 'NO_OUTPUT_SMH';
   smh_coverage_pct: number | null;
@@ -145,6 +147,8 @@ export interface OleWeeklyResult {
   avg_hc_direct: number;
   total_va_hours: number;
   total_nva_hours: number;
+  total_va_count: number;
+  total_nva_count: number;
   ole_pct: number | null;
   ole_pct_avg_shifts: number | null;
   shifts_ok: number;
@@ -157,6 +161,39 @@ export interface OleHealth {
   mart_ready: boolean;
   timestamp: string;
   mart_files: Record<string, boolean>;
+}
+
+export interface MhDistributionRow {
+  workcell: string;
+  date: string;
+  shift: number;
+  nva_hours: number;
+  lunch_hours: number;
+  mfg_dt_hours: number;
+  downtime_hours: number;
+  mfg_lost_hours: number;
+  mfg_lost_raw_hours: number;
+  total_paid_hours: number;
+  effective_output_smh: number;
+}
+
+export interface IndirectLaborRow {
+  entity: string;
+  date: string;
+  shift: number;
+  headcount: number;
+  total_hc_direct: number;
+  total_input_hours: number;
+  va_hours: number;
+  nva_hours: number;
+  plant: string;
+  label: string;
+}
+
+export interface IndirectLaborEntity {
+  entity: string;
+  label: string;
+  plant: string;
 }
 
 export interface OlePredictionResult {
@@ -264,6 +301,31 @@ export const oleApi = {
       if (params?.status) p.set('status', params.status);
       return get<SmhStatus[]>(`/smh-status${p.toString() ? `?${p}` : ''}`);
     },
+  },
+
+  mhDistribution: {
+    list: (params?: { workcell?: string; plant?: string; date_from?: string; date_to?: string; shift?: number }) => {
+      const p = new URLSearchParams();
+      if (params?.workcell)  p.set('workcell',  params.workcell);
+      if (params?.plant)     p.set('plant',     params.plant);
+      if (params?.date_from) p.set('date_from', params.date_from);
+      if (params?.date_to)   p.set('date_to',   params.date_to);
+      if (params?.shift)     p.set('shift',     String(params.shift));
+      return get<MhDistributionRow[]>(`/mh-distribution${p.toString() ? `?${p}` : ''}`);
+    },
+  },
+
+  indirectLabor: {
+    list: (params?: { entity?: string; plant?: string; date_from?: string; date_to?: string; shift?: number }) => {
+      const p = new URLSearchParams();
+      if (params?.entity) p.set('entity', params.entity);
+      if (params?.plant) p.set('plant', params.plant);
+      if (params?.date_from) p.set('date_from', params.date_from);
+      if (params?.date_to) p.set('date_to', params.date_to);
+      if (params?.shift) p.set('shift', String(params.shift));
+      return get<IndirectLaborRow[]>(`/indirect-labor${p.toString() ? `?${p}` : ''}`);
+    },
+    entities: () => get<IndirectLaborEntity[]>('/indirect-labor/entities'),
   },
 
   refresh: {

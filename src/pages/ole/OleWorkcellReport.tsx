@@ -3,24 +3,28 @@
  * Route: /report/wc/:workcell
  */
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { OleFilterBar } from '@/components/ole/OleFilterBar';
+import { MhPieModal } from '@/components/ole/MhPieModal';
 import { TrendModal } from '@/components/ole/TrendModal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useMhDistribution, useOlePaidHours, useOleProduction, useOleResults, useOleWeekly, useOleWorkcells, useSmhLookup } from '@/hooks/ole/useOleData';
 import { useOleDateFilter } from '@/hooks/ole/useOleDateFilter';
-import { useOlePaidHours, useOleProduction, useOleResults, useOleWeekly, useOleWorkcells, useSmhLookup } from '@/hooks/ole/useOleData';
 import { aggregateTotals } from '@/lib/ole/oleCalculations';
 import { TT } from '@/lib/ole/oleChartStyles';
-import { LABOR_GT, PROD_GT, ROW_H, TD, TH } from '@/lib/ole/oleTableLayouts';
-import type { WeekRow } from '@/lib/ole/oleTypes';
 import {
   OLE_COLOR,
   OLE_TARGET,
   OLE_WARNING,
-  WORKCELL_LOGOS, fmtDate,
+  STATUS_BADGE, STATUS_LABEL,
+  WORKCELL_LOGOS,
+  dayName,
+  fmtDate,
   formatWeekLabel,
   getOleStatus, oleColor,
   shiftLabel,
 } from '@/lib/ole/oleConstants';
+import { LABOR_GT, PROD_GT, ROW_H, TD, TH } from '@/lib/ole/oleTableLayouts';
+import type { WeekRow } from '@/lib/ole/oleTypes';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import {
@@ -102,8 +106,13 @@ function ShiftDrawer({
         </div>
 
         {/* KPI strip */}
-        <div className="grid grid-cols-4 divide-x divide-border border-b border-border flex-shrink-0">
+        <div className="grid grid-cols-5 divide-x divide-border border-b border-border flex-shrink-0">
           {[
+            {
+              label: 'Headcount',
+              value: employees.length > 0 ? employees.length.toString() : '—',
+              color: undefined
+            },
             {
               label: 'VA Total',
               value: vaCount > 0 ? vaCount.toString() : '—',
@@ -140,7 +149,7 @@ function ShiftDrawer({
             <>
               <div className="grid bg-muted/100 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border sticky top-0"
                 style={{ gridTemplateColumns: '2.5rem 1fr 5rem 6rem 7rem' }}>
-                {['#', 'Position', 'Type', 'Direct Hrs', 'Total Input'].map(h => (
+                {['#', 'Position', 'Type', 'Total Input'].map(h => (
                   <div key={h} className="px-4 py-2.5">{h}</div>
                 ))}
               </div>
@@ -157,9 +166,6 @@ function ShiftDrawer({
                         ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                         : 'bg-red-500/15 text-red-400 border-red-500/30'
                     )}>{emp.value_type || 'NVA'}</span>
-                  </div>
-                  <div className="px-4 text-sm font-mono text-foreground text-center">
-                    {typeof emp.tph_direct === 'number' ? emp.tph_direct.toFixed(2) : '—'}
                   </div>
                   <div className="px-4 text-sm font-mono font-semibold text-foreground text-center">
                     {typeof emp.total_input_hours === 'number' ? emp.total_input_hours.toFixed(2) : '—'}
@@ -189,6 +195,7 @@ export default function OleWorkcellReport() {
   const productionHook = useOleProduction();
   const paidHoursHook = useOlePaidHours();
   const smhLookupHook = useSmhLookup();
+  const mhHook = useMhDistribution();
 
   const rawWeekly = weeklyHook.data ?? [];
   const workcellConfigs = workcellsHook.data ?? [];
@@ -233,6 +240,7 @@ export default function OleWorkcellReport() {
   const [tableTab, setTableTab] = useState<'labor' | 'production'>('labor');
   const [drawerShift, setDrawerShift] = useState<ShiftDrawerData | null>(null);
   const [trendModalOpen, setTrendModalOpen] = useState(false);
+  const [mhModalOpen, setMhModalOpen] = useState(false);
 
   const weekLabel = useMemo(() => {
     if (selectedWeek !== null) return formatWeekLabel(selectedWeek);
@@ -313,6 +321,39 @@ export default function OleWorkcellReport() {
 
   const kpiSmh = useMemo(() => laborRows.reduce((s, r) => s + r.effective_output_smh, 0), [laborRows]);
   const kpiHrs = useMemo(() => laborRows.reduce((s, r) => s + r.total_input_hours, 0), [laborRows]);
+
+  // ── Man-hours distribution — pre-computed per shift, summed under current filter
+  const mhTotals = useMemo(() => {
+    const rows = mhHook.data ?? [];
+    const acc = { nva: 0, lunch: 0, mfg_dt: 0, downtime: 0, mfg_lost: 0, paid: 0 };
+    for (const r of rows) {
+      if (r.workcell !== workcell) continue;
+      if (selectedWeek !== null) {
+        if (!filteredWeekly.some(w => r.date >= w.week_start_date && r.date <= w.week_end_date)) continue;
+      } else {
+        if (dateFrom && r.date < dateFrom) continue;
+        if (dateTo && r.date > dateTo) continue;
+      }
+      acc.nva      += r.nva_hours       || 0;
+      acc.lunch    += r.lunch_hours     || 0;
+      acc.mfg_dt   += r.mfg_dt_hours    || 0;
+      acc.downtime += r.downtime_hours  || 0;
+      acc.mfg_lost += r.mfg_lost_hours  || 0;
+      acc.paid     += r.total_paid_hours || 0;
+    }
+    return acc;
+  }, [mhHook.data, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
+
+  // Overall VA / NVA counts — pre-aggregated in ole_computed (no paid_hours walk).
+  const { vaTotal, nvaTotal } = useMemo(() => {
+    let va = 0;
+    let nva = 0;
+    for (const r of laborRows) {
+      va += r.va_count || 0;
+      nva += r.nva_count || 0;
+    }
+    return { vaTotal: va, nvaTotal: nva };
+  }, [laborRows]);
   const kpiOle = kpiHrs > 0 ? (kpiSmh / kpiHrs) * 100 : 0;
 
   const siteOle = kpiOle;
@@ -343,6 +384,21 @@ export default function OleWorkcellReport() {
         selectedWeek={selectedWeek}
         yScale="raw"
         referenceLineOpacity={0.8}
+      />
+
+      <MhPieModal
+        open={mhModalOpen}
+        onClose={() => setMhModalOpen(false)}
+        title={`${workcell} — Man-Hours Distribution`}
+        total={mhTotals.paid}
+        slices={[
+          { name: 'Output (Productive)', value: kpiSmh,         color: '#22c55e' },
+          { name: 'NVA Input',     value: mhTotals.nva,          color: '#ef4444' },
+          { name: 'Lunch',         value: mhTotals.lunch,        color: '#94a3b8' },
+          { name: 'MFG DT',        value: mhTotals.mfg_dt,       color: '#6366f1' },
+          { name: 'Downtime',      value: mhTotals.downtime,     color: '#a855f7' },
+          { name: 'MFG Hour Lost', value: mhTotals.mfg_lost,     color: '#f59e0b' },
+        ]}
       />
 
       {/* Sticky header */}
@@ -381,42 +437,114 @@ export default function OleWorkcellReport() {
 
         {/* LEFT COLUMN */}
         <div className="w-[300px] flex-shrink-0 flex flex-col gap-4">
-          <div className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-start gap-3">
-              {logo && (
-                <div className="w-20 h-10 rounded-lg border border-border bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
-                  <img src={logo} alt={workcell} className="w-full h-full object-contain p-1" />
+          {/* Workcell OLE hero + Output/Input strip (merged) */}
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="p-5">
+              <div className="flex items-start gap-3">
+                {logo && (
+                  <div className="w-20 h-10 rounded-lg border border-border bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+                    <img src={logo} alt={workcell} className="w-full h-full object-contain p-1" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold">Workcell OLE · {weekLabel}</p>
+                  <p className="text-[10px] font-semibold text-foreground truncate mt-0.5">{workcell}</p>
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold">Workcell OLE · {weekLabel}</p>
-                <p className="text-[10px] font-semibold text-foreground truncate mt-0.5">{workcell}</p>
+                <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0', STATUS_BADGE[getOleStatus(siteOle)])}>
+                  {STATUS_LABEL[getOleStatus(siteOle)]}
+                </span>
+              </div>
+              <p className="text-5xl font-mono font-black mt-3 leading-none" style={{ color: siteColor }}>
+                {siteOle.toFixed(1)}%
+              </p>
+              <div className="mt-3 h-1 rounded-full bg-muted/40 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.min(siteOle, 100)}%`, background: siteColor }} />
               </div>
             </div>
-            <p className="text-5xl font-mono font-black mt-3 leading-none" style={{ color: siteColor }}>
-              {siteOle.toFixed(1)}%
-            </p>
-            <div className="mt-3 h-1 rounded-full bg-muted/40 overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${Math.min(siteOle, 100)}%`, background: siteColor }} />
-            </div>
+
+            <button
+              onClick={() => setTrendModalOpen(true)}
+              className="block w-full text-left border-t border-border hover:bg-muted/20 transition-colors group"
+            >
+              <div className="grid grid-cols-2 divide-x divide-border">
+                <div className="p-3">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Output SMH</p>
+                  <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">{kpiSmh.toFixed(1)}</p>
+                  <p className="text-[9px] text-muted-foreground"><span className="text-primary/60">view trend ↗</span></p>
+                </div>
+                <div className="p-3">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
+                  <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">{kpiHrs.toFixed(1)}</p>
+                  <p className="text-[9px] text-muted-foreground"><span className="text-violet-400/60">view trend ↗</span></p>
+                </div>
+              </div>
+            </button>
           </div>
 
-          <button
-            onClick={() => setTrendModalOpen(true)}
-            className="rounded-xl border border-border bg-card overflow-hidden w-full text-left hover:border-primary/40 hover:bg-muted/20 transition-colors group"
-          >
-            <div className="grid grid-cols-2 divide-x divide-border">
-              <div className="p-3">
-                <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Output SMH</p>
-                <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">{kpiSmh.toFixed(1)}</p>
-                <p className="text-[9px] text-muted-foreground"><span className="text-primary/60">view trend ↗</span></p>
-              </div>
-              <div className="p-3">
-                <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
-                <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">{kpiHrs.toFixed(1)}</p>
-                <p className="text-[9px] text-muted-foreground"><span className="text-violet-400/60">view trend ↗</span></p>
-              </div>
+          {/* Headcount breakdown */}
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Headcount</p>
+              <span className="text-base font-mono font-bold text-foreground">
+                {(vaTotal + nvaTotal).toLocaleString()}
+              </span>
             </div>
+            {[
+              { label: 'VA',  count: vaTotal,  color: 'text-emerald-400', bar: '#22c55e' },
+              { label: 'NVA', count: nvaTotal, color: 'text-amber-400',   bar: '#f59e0b' },
+            ].map((r, i, arr) => {
+              const total = vaTotal + nvaTotal;
+              const pct = total > 0 ? (r.count / total) * 100 : 0;
+              return (
+                <div key={r.label}
+                  className={cn('flex items-center gap-3 px-4 py-3', i < arr.length - 1 && 'border-b border-border')}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground">{r.label}</p>
+                    <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: r.bar }} />
+                    </div>
+                  </div>
+                  <span className={cn('text-xl font-mono font-bold flex-shrink-0', r.color)}>
+                    {r.count > 0 ? r.count.toLocaleString() : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Man-hours distribution — click to open pie modal */}
+          <button
+            type="button"
+            onClick={() => setMhModalOpen(true)}
+            className="rounded-xl border border-border bg-card overflow-hidden w-full text-left hover:border-primary/40 hover:bg-muted/20 transition-colors"
+          >
+            <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Man-Hrs Distribution</p>
+              <span className="text-[9px] text-muted-foreground">view pie ↗</span>
+            </div>
+            {[
+              { label: 'NVA Input',     value: mhTotals.nva,      bar: '#ef4444', color: 'text-red-400' },
+              { label: 'Lunch',         value: mhTotals.lunch,    bar: '#94a3b8', color: 'text-slate-400' },
+              { label: 'MFG DT',        value: mhTotals.mfg_dt,   bar: '#6366f1', color: 'text-indigo-400' },
+              { label: 'Downtime',      value: mhTotals.downtime, bar: '#a855f7', color: 'text-purple-400' },
+              { label: 'MFG Hour Lost', value: mhTotals.mfg_lost, bar: '#f59e0b', color: 'text-amber-400' },
+            ].map((r, i, arr) => {
+              const pct = mhTotals.paid > 0 ? (r.value / mhTotals.paid) * 100 : 0;
+              return (
+                <div key={r.label}
+                  className={cn('flex items-center gap-3 px-4 py-3', i < arr.length - 1 && 'border-b border-border')}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground">{r.label}</p>
+                    <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: r.bar }} />
+                    </div>
+                  </div>
+                  <span className={cn('text-base font-mono font-bold flex-shrink-0', r.color)}>
+                    {r.value > 0 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                  </span>
+                </div>
+              );
+            })}
           </button>
         </div>
 
@@ -508,7 +636,7 @@ export default function OleWorkcellReport() {
                 <>
                   <div className={`grid bg-muted/40 ${TH} text-muted-foreground uppercase tracking-wider font-semibold border-b border-border`}
                     style={{ gridTemplateColumns: LABOR_GT }}>
-                    {['', 'Date', 'Shift', 'OLE %', 'SMH Cov.', 'Output SMH', 'Input Hrs', 'Qty', 'Assemblies'].map(h => (
+                    {['', 'Day', 'Date', 'Shift', 'OLE %', 'SMH Cov.', 'Output SMH', 'Input Hrs', 'Headcount', 'Qty', 'Assemblies'].map(h => (
                       <div key={h} className="px-3 py-2">{h}</div>
                     ))}
                   </div>
@@ -537,6 +665,7 @@ export default function OleWorkcellReport() {
                           <div className="px-3 flex items-center justify-center">
                             <Users className="w-3.5 h-3.5 text-muted-foreground/50" />
                           </div>
+                          <div className={`px-3 ${TD} font-mono text-muted-foreground`}>{dayName(row.date)}</div>
                           <div className={`px-3 font-mono ${TD} text-foreground`}>{fmtDate(row.date)}</div>
                           <div className={`px-3 ${TD} font-mono font-semibold text-foreground`}>{shiftLabel(row.shift)}</div>
                           <div className="px-3">
@@ -552,6 +681,7 @@ export default function OleWorkcellReport() {
                           </div>
                           <div className={`px-3 font-mono ${TD} text-foreground`}>{row.effective_output_smh.toFixed(2)}</div>
                           <div className={`px-3 font-mono ${TD} text-foreground`}>{row.total_input_hours.toFixed(2)}</div>
+                          <div className={`px-3 font-mono ${TD} text-foreground`}>{((row.va_count || 0) + (row.nva_count || 0)).toLocaleString()}</div>
                           <div className={`px-3 font-mono ${TD} text-foreground`}>{row.total_qty.toLocaleString()}</div>
                           <div className={`px-3 font-mono ${TD} text-foreground`}>{row.assembly_count}</div>
                         </div>
@@ -565,7 +695,7 @@ export default function OleWorkcellReport() {
                 <>
                   <div className={`grid bg-muted/40 ${TH} text-muted-foreground uppercase tracking-wider font-semibold border-b border-border`}
                     style={{ gridTemplateColumns: PROD_GT }}>
-                    {['#', 'Date', 'Shift', 'Stage', 'Assembly', 'Qty', 'SMH/unit', 'Output SMH'].map(h => (
+                    {['#', 'Day', 'Date', 'Shift', 'Stage', 'Assembly', 'Qty', 'SMH/unit', 'Output SMH'].map(h => (
                       <div key={h} className="px-3 py-2">{h}</div>
                     ))}
                   </div>
@@ -578,6 +708,7 @@ export default function OleWorkcellReport() {
                         <div key={idx} className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                           style={{ gridTemplateColumns: PROD_GT, height: ROW_H }}>
                           <div className={`px-3 ${TD} text-muted-foreground font-mono`}>{idx + 1}</div>
+                          <div className={`px-3 ${TD} font-mono text-muted-foreground`}>{dayName(row.date)}</div>
                           <div className={`px-3 font-mono ${TD} text-foreground`}>{fmtDate(row.date)}</div>
                           <div className={`px-3 font-mono ${TD} font-semibold text-foreground`}>{shiftLabel(row.shift)}</div>
                           <div className={`px-3 ${TD} text-muted-foreground`}>{row.sub_workcell}</div>
