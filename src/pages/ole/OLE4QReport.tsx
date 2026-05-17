@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { OleWeeklyResult, OleWorkcellConfig } from '@/lib/ole/oleApi';
+import type { MhDistributionRow, OleWeeklyResult, OleWorkcellConfig } from '@/lib/ole/oleApi';
 import { oleApi } from '@/lib/ole/oleApi';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -286,14 +286,44 @@ function SmallPareto({ title, data, loading, height = 180, fillHeight = false }:
       <p className={cn('text-[10px] font-semibold text-foreground flex-shrink-0', fillHeight ? 'px-1.5 pt-1' : '')}>{title}</p>
       <div className={fillHeight ? 'flex-1 min-h-0' : ''} style={fillHeight ? undefined : { height }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 20, right: 18, left: -22, bottom: 0 }}>
+          <ComposedChart data={data} margin={{ top: 20, right: 30, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
             <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={24} tick={<WrappedTick />} />
-            <YAxis yAxisId="left" domain={[0, (max: number) => max * 1.2]} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
-            <Tooltip {...TT_PROPS} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
-            <Bar yAxisId="left" dataKey="value" name="Share %" radius={[3, 3, 0, 0]} maxBarSize={40}>
-              <LabelList dataKey="value" position="top" offset={8} formatter={(v: number) => `${v.toFixed(0)}%`} style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }} />
+            <YAxis
+              yAxisId="left"
+              domain={[0, (max: number) => max * 1.2]}
+              tick={{ fontSize: 9 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={v => `${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)}`}
+              label={{ value: 'Hours', angle: -90, position: 'insideLeft', offset: 16, style: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' } }}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              domain={[0, 100]}
+              tick={{ fontSize: 9 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={v => `${v}%`}
+              label={{ value: 'Cumulative %', angle: 90, position: 'insideRight', offset: 8, style: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' } }}
+            />
+            <Tooltip
+              {...TT_PROPS}
+              formatter={(v: number, n: string) =>
+                n === 'Cumulative %'
+                  ? [`${Number(v).toFixed(1)}%`, n]
+                  : [`${Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`, n]
+              }
+            />
+            <Bar yAxisId="left" dataKey="value" name="Hours" radius={[3, 3, 0, 0]} maxBarSize={40}>
+              <LabelList
+                dataKey="value"
+                position="top"
+                offset={8}
+                formatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v.toFixed(0)}`}
+                style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
+              />
               {data.map((_, i) => <Cell key={i} fill="hsl(var(--primary))" />)}
             </Bar>
             <Line yAxisId="right" type="monotone" dataKey="cum" name="Cumulative %" stroke="#ef4444" strokeWidth={1.5} dot={{ r: 3, fill: '#ef4444' }} connectNulls />
@@ -314,9 +344,20 @@ function wcNameSeed(name: string): number {
   return Math.abs(name.split('').reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 7)) % 52 + 1;
 }
 
-function Q2Section({ aggregateRows, weeklyRows, compact = false, onCatsChange }: {
+// Real Paynter buckets — match mh_distribution.parquet columns.
+// Order is display-only; pareto re-orders by value.
+const MH_CATS: { key: keyof MhDistributionRow; label: string; color: string }[] = [
+  { key: 'nva_hours',      label: 'NVA Input',     color: '#ef4444' },
+  { key: 'lunch_hours',    label: 'Lunch',         color: '#94a3b8' },
+  { key: 'mfg_dt_hours',   label: 'MFG DT',        color: '#6366f1' },
+  { key: 'downtime_hours', label: 'Downtime',      color: '#a855f7' },
+  { key: 'mfg_lost_hours', label: 'MFG Hour Lost', color: '#f59e0b' },
+];
+
+function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsChange }: {
   aggregateRows: OleWeeklyResult[];
   weeklyRows: OleWeeklyResult[];
+  mhRows: MhDistributionRow[];
   compact?: boolean;
   onCatsChange?: (c1: string, c2: string) => void;
 }) {
@@ -328,44 +369,58 @@ function Q2Section({ aggregateRows, weeklyRows, compact = false, onCatsChange }:
 
     if (!last4.length) return { pareto1: [], pareto2: [], pareto3: [], top1Cat: '', top2Cat: '' };
 
-    // Chart 1: avg Paynter category values -- mirrors the Avg column in Q4
-    const catAvgs = PAYNTER_CATS.map(cat => {
-      const avg = last4.reduce((s, w) => s + (buildPaynterRow(w.iso_week, w.ole_pct)[cat.key] ?? 0), 0) / last4.length;
-      return { name: cat.label, value: parseFloat(avg.toFixed(2)), color: cat.color };
-    });
-    const p1 = buildPareto(catAvgs);
+    // Scope: only workcells that survived the page filter, only dates inside
+    // the last-4 ISO weeks. mhRows is already filtered by plant/workcell server-side.
+    const allowedWcs = new Set(weeklyRows.map(r => r.workcell));
+    const minStart = last4[0].week_start_date;
+    const maxEnd   = last4[last4.length - 1].week_end_date;
+    const scoped = mhRows.filter(r =>
+      allowedWcs.has(r.workcell) &&
+      r.date >= minStart && r.date <= maxEnd
+    );
+
+    // Total paid hours over the window — denominator for every %.
+    const totalPaid = scoped.reduce((s, r) => s + (r.total_paid_hours || 0), 0);
+    if (totalPaid <= 0) return { pareto1: [], pareto2: [], pareto3: [], top1Cat: '', top2Cat: '' };
+
+    // Chart 1: absolute hours per bucket across the 4-week window.
+    // (Bars are in hours, Pareto line shows cumulative % — chart unit consistency.)
+    const catTotals = MH_CATS.map(cat => ({
+      name: cat.label,
+      color: cat.color,
+      value: parseFloat(scoped.reduce((s, r) => s + ((r[cat.key] as number) || 0), 0).toFixed(1)),
+    }));
+    const p1 = buildPareto(catTotals);
     const top1 = p1[0]?.name ?? '';
     const top2 = p1[1]?.name ?? '';
 
-    // Per-workcell OLE for last 4 weeks
-    const last4Labels = new Set(last4.map(w => w.week_label));
-    const wcMap = new Map<string, { smh: number; hrs: number }>();
-    weeklyRows.filter(r => last4Labels.has(r.week_label)).forEach(r => {
-      const acc = wcMap.get(r.workcell) ?? { smh: 0, hrs: 0 };
-      wcMap.set(r.workcell, { smh: acc.smh + r.total_output_smh, hrs: acc.hrs + r.total_input_hours });
-    });
-
+    // Charts 2 & 3: top 3 workcells by absolute hours of the #1 / #2 bucket.
+    const findCat = (label: string) => MH_CATS.find(c => c.label === label);
     const shortName = (wc: string) => wc.length > 12 ? wc.slice(0, 12) + '...' : wc;
-    const top1Key = PAYNTER_CATS.find(c => c.label === top1)?.key ?? '';
-    const top2Key = PAYNTER_CATS.find(c => c.label === top2)?.key ?? '';
-    const top1Color = PAYNTER_CATS.find(c => c.label === top1)?.color ?? '#94a3b8';
-    const top2Color = PAYNTER_CATS.find(c => c.label === top2)?.color ?? '#94a3b8';
 
-    // Each workcell gets a stable seed from its name for consistent distribution
-    const wcEntries = [...wcMap.entries()].map(([wc, { smh, hrs }]) => ({
-      wc, vals: buildPaynterRow(wcNameSeed(wc), hrs > 0 ? (smh / hrs) * 100 : 0),
-    }));
+    const top3ForCat = (label: string) => {
+      const cat = findCat(label);
+      if (!cat) return [];
+      const wcHours = new Map<string, number>();
+      for (const r of scoped) {
+        const v = (r[cat.key] as number) || 0;
+        if (v <= 0) continue;
+        wcHours.set(r.workcell, (wcHours.get(r.workcell) ?? 0) + v);
+      }
+      return buildPareto(
+        [...wcHours.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([wc, hrs]) => ({
+            name: shortName(wc),
+            value: parseFloat(hrs.toFixed(1)),
+            color: cat.color,
+          }))
+      );
+    };
 
-    const top3 = (key: string, color: string) => buildPareto(
-      wcEntries
-        .map(({ wc, vals }) => ({ name: shortName(wc), value: parseFloat((vals[key] ?? 0).toFixed(2)), color }))
-        .filter(x => x.value > 0)
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 3)
-    );
-
-    return { pareto1: p1, pareto2: top3(top1Key, top1Color), pareto3: top3(top2Key, top2Color), top1Cat: top1, top2Cat: top2 };
-  }, [aggregateRows, weeklyRows]);
+    return { pareto1: p1, pareto2: top3ForCat(top1), pareto3: top3ForCat(top2), top1Cat: top1, top2Cat: top2 };
+  }, [aggregateRows, weeklyRows, mhRows]);
 
   useEffect(() => { onCatsChange?.(top1Cat, top2Cat); }, [top1Cat, top2Cat, onCatsChange]);
 
@@ -418,20 +473,73 @@ function buildPaynterRow(isoWeek: number, olePct: number | null): Record<string,
 
 interface MhWeekData { week_label: string; values: Record<string, number>; total: number; }
 
-function PaynterTable({ aggregateRows, isPrint = false }: { aggregateRows: OleWeeklyResult[]; isPrint?: boolean }) {
-  const weekData = useMemo((): MhWeekData[] =>
-    aggregateRows
+function PaynterTable({ aggregateRows, weeklyRows, mhRows, isPrint = false }: {
+  aggregateRows: OleWeeklyResult[];
+  weeklyRows: OleWeeklyResult[];
+  mhRows: MhDistributionRow[];
+  isPrint?: boolean;
+}) {
+  const weekData = useMemo((): MhWeekData[] => {
+    const allowedWcs = new Set(weeklyRows.map(r => r.workcell));
+    const weeks = aggregateRows
+      .filter(r => r.ole_pct !== null)
+      .sort((a, b) => a.iso_year !== b.iso_year ? a.iso_year - b.iso_year : a.iso_week - b.iso_week);
+
+    return weeks.map(w => {
+      // Per-bucket weighted % of paid hours, summed across the week's date range
+      // and across every workcell that passed the filter.
+      let paid = 0;
+      const sums: Record<string, number> = {};
+      MH_CATS.forEach(c => { sums[c.key] = 0; });
+
+      for (const r of mhRows) {
+        if (!allowedWcs.has(r.workcell)) continue;
+        if (r.date < w.week_start_date || r.date > w.week_end_date) continue;
+        paid += r.total_paid_hours || 0;
+        for (const c of MH_CATS) {
+          sums[c.key] += (r[c.key] as number) || 0;
+        }
+      }
+
+      const values: Record<string, number> = {};
+      MH_CATS.forEach(c => {
+        values[c.key] = paid > 0 ? parseFloat(((sums[c.key] / paid) * 100).toFixed(2)) : 0;
+      });
+      const total = parseFloat(Object.values(values).reduce((a, b) => a + b, 0).toFixed(2));
+      return { week_label: w.week_label, values, total };
+    });
+  }, [aggregateRows, weeklyRows, mhRows]);
+
+  // Weighted 4-week average: use the real underlying hours, not avg-of-percentages.
+  const last4Avg = useMemo(() => {
+    const allowedWcs = new Set(weeklyRows.map(r => r.workcell));
+    const last4Weeks = aggregateRows
       .filter(r => r.ole_pct !== null)
       .sort((a, b) => a.iso_year !== b.iso_year ? a.iso_year - b.iso_year : a.iso_week - b.iso_week)
-      .map(r => {
-        const vals = buildPaynterRow(r.iso_week, r.ole_pct);
-        return { week_label: r.week_label, values: vals, total: parseFloat(Object.values(vals).reduce((a, b) => a + b, 0).toFixed(2)) };
-      }),
-    [aggregateRows]);
+      .slice(-4);
+    if (!last4Weeks.length) return { values: {} as Record<string, number>, total: null as number | null };
 
-  const last4 = weekData.slice(-4);
-  const avg4 = (key: string) => last4.length ? parseFloat((last4.reduce((s, w) => s + (w.values[key] ?? 0), 0) / last4.length).toFixed(2)) : null;
-  const avgTotal = last4.length ? parseFloat((last4.reduce((s, w) => s + w.total, 0) / last4.length).toFixed(2)) : null;
+    const minStart = last4Weeks[0].week_start_date;
+    const maxEnd   = last4Weeks[last4Weeks.length - 1].week_end_date;
+    let paid = 0;
+    const sums: Record<string, number> = {};
+    MH_CATS.forEach(c => { sums[c.key] = 0; });
+    for (const r of mhRows) {
+      if (!allowedWcs.has(r.workcell)) continue;
+      if (r.date < minStart || r.date > maxEnd) continue;
+      paid += r.total_paid_hours || 0;
+      for (const c of MH_CATS) sums[c.key] += (r[c.key] as number) || 0;
+    }
+    const values: Record<string, number> = {};
+    MH_CATS.forEach(c => {
+      values[c.key] = paid > 0 ? parseFloat(((sums[c.key] / paid) * 100).toFixed(2)) : 0;
+    });
+    const total = paid > 0 ? parseFloat(Object.values(values).reduce((a, b) => a + b, 0).toFixed(2)) : null;
+    return { values, total };
+  }, [aggregateRows, weeklyRows, mhRows]);
+
+  const avg4 = (key: string) => last4Avg.values[key] ?? null;
+  const avgTotal = last4Avg.total;
   const fs = isPrint ? 'text-[10px]' : 'text-xs';
   const px = isPrint ? 'px-1.5 py-1' : 'px-3 py-1.5';
   const ph = isPrint ? 'px-1.5 py-1.5' : 'px-3 py-2';
@@ -446,11 +554,11 @@ function PaynterTable({ aggregateRows, isPrint = false }: { aggregateRows: OleWe
           <tr className="bg-primary text-primary-foreground uppercase tracking-wider">
             <th className={cn(ph, 'border border-primary/70 font-semibold', isPrint ? 'text-[9px] w-28' : 'sticky left-0 bg-primary z-10 w-36 max-w-[144px] text-[10px]')}>{isPrint ? 'Category' : 'Man Hrs Distribution'}</th>
             {weekData.map(w => <th key={w.week_label} className={cn(ph, 'border border-primary/70 text-right font-semibold')}>{fmtWeekLabel(w.week_label)}</th>)}
-            <th className={cn(ph, 'border border-primary/70 text-right font-bold bg-primary/80')}>Avg</th>
+            <th className={cn(ph, 'border border-primary/70 text-right font-bold bg-primary/80')}>Avg (4W)</th>
           </tr>
         </thead>
         <tbody>
-          {PAYNTER_CATS.map(cat => {
+          {MH_CATS.map(cat => {
             const a4 = avg4(cat.key);
             return (
               <tr key={cat.key} className="border-b border-border">
@@ -557,6 +665,7 @@ export default function OLE4QReport() {
   const [trendScope, setTrendScope] = useState('');
   const [actions, setActions] = useState<ActionItem[]>([]);
   const [weeklyRows, setWeeklyRows] = useState<OleWeeklyResult[]>([]);
+  const [mhRows, setMhRows] = useState<MhDistributionRow[]>([]);
   const [top1Cat, setTop1Cat] = useState('');
   const [top2Cat, setTop2Cat] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -596,9 +705,17 @@ export default function OLE4QReport() {
     setGenerating(true);
     try {
       let rows: OleWeeklyResult[] = []; let label = '';
-      if (mode === 'plant') { const res = await Promise.all(selectedPlants.map(p => oleApi.ole.weekly({ plant: p }))); rows = res.flat(); label = selectedPlants.join(' + '); }
-      else { const res = await Promise.all(selectedWorkcells.map(wc => oleApi.ole.weekly({ workcell: wc }))); rows = res.flat(); label = selectedWorkcells.join(', '); }
-      setWeeklyRows(rows); setTrendScope(label);
+      let mh: MhDistributionRow[] = [];
+      if (mode === 'plant') {
+        const res   = await Promise.all(selectedPlants.map(p => oleApi.ole.weekly({ plant: p })));
+        const mhRes = await Promise.all(selectedPlants.map(p => oleApi.mhDistribution.list({ plant: p })));
+        rows = res.flat(); mh = mhRes.flat(); label = selectedPlants.join(' + ');
+      } else {
+        const res   = await Promise.all(selectedWorkcells.map(wc => oleApi.ole.weekly({ workcell: wc })));
+        const mhRes = await Promise.all(selectedWorkcells.map(wc => oleApi.mhDistribution.list({ workcell: wc })));
+        rows = res.flat(); mh = mhRes.flat(); label = selectedWorkcells.join(', ');
+      }
+      setWeeklyRows(rows); setMhRows(mh); setTrendScope(label);
       const byWeek: Record<string, { smh: number; hrs: number; label: string; year: number; week: number; ws: string; we: string }> = {};
       rows.forEach(r => {
         if (!byWeek[r.week_label]) byWeek[r.week_label] = { smh: 0, hrs: 0, label: r.week_label, year: r.iso_year, week: r.iso_week, ws: r.week_start_date, we: r.week_end_date };
@@ -662,11 +779,11 @@ export default function OLE4QReport() {
                 <div className="border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
                   <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0"><span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">Second Quadrant - Pareto Four Weeks</span></div>
                   <div className="flex-1 min-h-0 overflow-hidden">
-                    <Q2Section aggregateRows={aggregateRows} weeklyRows={weeklyRows} compact onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }} />
+                    <Q2Section aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} compact onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }} />
                   </div>
                 </div>
                 <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col items-start">
-                  <PaynterTable aggregateRows={aggregateRows} isPrint />
+                  <PaynterTable aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} isPrint />
                 </div>
                 <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
                   <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} isPrint />
@@ -718,7 +835,7 @@ export default function OLE4QReport() {
                     <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground text-sm font-bold shadow-sm">2</span>
                     <div><h2 className="text-sm font-bold uppercase tracking-widest text-primary">Second Quadrant - Pareto Four Weeks</h2><p className="text-xs text-muted-foreground mt-0.5">Avg of last 4 actual weeks - derived from Paynter categories</p></div>
                   </div>
-                  <Q2Section aggregateRows={aggregateRows} weeklyRows={weeklyRows} onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }} />
+                  <Q2Section aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }} />
                 </section>
 
                 <section id="q3-section" className="space-y-3">
@@ -734,7 +851,7 @@ export default function OLE4QReport() {
                     <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground text-sm font-bold shadow-sm">4</span>
                     <div><h2 className="text-sm font-bold uppercase tracking-widest text-primary">Fourth Quadrant - Paynter Chart</h2><p className="text-xs text-muted-foreground mt-0.5">Man-hours loss distribution per week</p></div>
                   </div>
-                  <div className="overflow-x-auto"><PaynterTable aggregateRows={aggregateRows} /></div>
+                  <div className="overflow-x-auto"><PaynterTable aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} /></div>
                 </section>
 
               </div>
