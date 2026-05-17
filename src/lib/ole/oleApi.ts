@@ -163,6 +163,18 @@ export interface OleHealth {
   mart_files: Record<string, boolean>;
 }
 
+export interface ShiftOperator {
+  date: string;
+  shift: number;
+  position: string;
+  value_type: string;
+  total_input_hours: number;
+  thc_direct: number;
+  tph_direct: number;
+  sub_workcell: string;
+  category: string;
+}
+
 export interface MhDistributionRow {
   workcell: string;
   date: string;
@@ -300,6 +312,18 @@ export const oleApi = {
       if (params?.workcell) p.set('workcell', params.workcell);
       if (params?.status) p.set('status', params.status);
       return get<SmhStatus[]>(`/smh-status${p.toString() ? `?${p}` : ''}`);
+    },
+  },
+
+  shiftOperators: {
+    list: (params: { workcell: string; date?: string; shift?: number; date_from?: string; date_to?: string }) => {
+      const p = new URLSearchParams();
+      p.set('workcell', params.workcell);
+      if (params.date)      p.set('date',      params.date);
+      if (params.shift)     p.set('shift',     String(params.shift));
+      if (params.date_from) p.set('date_from', params.date_from);
+      if (params.date_to)   p.set('date_to',   params.date_to);
+      return get<ShiftOperator[]>(`/shift-operators?${p}`);
     },
   },
 

@@ -7,7 +7,8 @@ import { OleFilterBar } from '@/components/ole/OleFilterBar';
 import { MhPieModal } from '@/components/ole/MhPieModal';
 import { TrendModal } from '@/components/ole/TrendModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useMhDistribution, useOlePaidHours, useOleProduction, useOleResults, useOleWeekly, useOleWorkcells, useSmhLookup } from '@/hooks/ole/useOleData';
+import type { ShiftOperator } from '@/lib/ole/oleApi';
+import { useMhDistribution, useOleProduction, useOleResults, useOleWeekly, useOleWorkcells, useWorkcellOperators, useSmhLookup } from '@/hooks/ole/useOleData';
 import { useOleDateFilter } from '@/hooks/ole/useOleDateFilter';
 import { aggregateTotals } from '@/lib/ole/oleCalculations';
 import { TT } from '@/lib/ole/oleChartStyles';
@@ -60,22 +61,18 @@ interface ShiftDrawerData {
 }
 
 function ShiftDrawer({
-  data, onClose, paidHoursByKey, paidHoursLoading,
+  data, onClose, employees, loading,
 }: {
-  data: ShiftDrawerData; s
+  data: ShiftDrawerData;
   onClose: () => void;
-  paidHoursByKey: Map<string, any[]>;
-  paidHoursLoading: boolean;
+  employees: ShiftOperator[];
+  loading: boolean;
 }) {
   const clr = oleColor(data.ole_pct ?? 0);
-  const key = `${data.workcell}|${data.date}|${data.shift}`;
-  const employees = paidHoursByKey.get(key) ?? [];
-  // console.log(employees)
+  const paidHoursLoading = loading && employees.length === 0;
 
-  const vaCount = employees.filter(emp => emp.value_type === "VA").length;
-
-  // Count the number of NVA and " " employees
-  const nvaCount = employees.filter(emp => emp.value_type === "NVA" || emp.value_type === "").length;
+  const vaCount  = employees.filter(emp => emp.value_type === 'VA').length;
+  const nvaCount = employees.filter(emp => emp.value_type === 'NVA' || emp.value_type === '').length;
 
   const sortedEmployees = [...employees].sort((a, b) => {
     // Use empty strings as fallbacks in case position is null/undefined
@@ -193,7 +190,6 @@ export default function OleWorkcellReport() {
   const workcellsHook = useOleWorkcells();
   const resultsHook = useOleResults();
   const productionHook = useOleProduction();
-  const paidHoursHook = useOlePaidHours();
   const smhLookupHook = useSmhLookup();
   const mhHook = useMhDistribution();
 
@@ -201,7 +197,6 @@ export default function OleWorkcellReport() {
   const workcellConfigs = workcellsHook.data ?? [];
   const rawResults = resultsHook.data ?? [];
   const rawProduction = productionHook.data ?? [];
-  const rawPaidHours = paidHoursHook.data ?? [];
   const smhList = smhLookupHook.data ?? [];
 
   const smhMap = useMemo(() => {
@@ -229,6 +224,7 @@ export default function OleWorkcellReport() {
   const initTo = searchParams.get('to') ?? '';
 
   const [workcell, setWorkcell] = useState<string>(decodeURIComponent(paramWc ?? ''));
+  const opsHook = useWorkcellOperators(workcell || null);
   const {
     selectedWeek,
     dateFrom,
@@ -300,15 +296,16 @@ export default function OleWorkcellReport() {
       return true;
     }), [rawResults, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
 
-  const paidHoursByKey = useMemo(() => {
-    const map = new Map<string, typeof rawPaidHours>();
-    rawPaidHours.filter(h => h.workcell === workcell).forEach(h => {
-      const k = `${h.workcell}|${h.date}|${h.shift}`;
+  const operatorsByShift = useMemo(() => {
+    const rows = opsHook.data ?? [];
+    const map = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const k = `${r.date}|${r.shift}`;
       if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(h);
-    });
+      map.get(k)!.push(r);
+    }
     return map;
-  }, [rawPaidHours, workcell]);
+  }, [opsHook.data]);
 
   const prodRows = useMemo(() =>
     rawProduction.filter(r => {
@@ -372,8 +369,8 @@ export default function OleWorkcellReport() {
         <ShiftDrawer
           data={drawerShift}
           onClose={() => setDrawerShift(null)}
-          paidHoursByKey={paidHoursByKey}
-          paidHoursLoading={paidHoursHook.loading}
+          employees={operatorsByShift.get(`${drawerShift.date}|${drawerShift.shift}`) ?? []}
+          loading={opsHook.loading}
         />
       )}
       <TrendModal

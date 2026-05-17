@@ -26,6 +26,7 @@ import {
   IndirectLaborRow,
   IndirectLaborEntity,
   MhDistributionRow,
+  ShiftOperator,
 } from '@/lib/ole/oleApi';
 import { TEMP_EXCLUDED_WORKCELLS } from '@/lib/ole/oleConstants';
 
@@ -55,7 +56,6 @@ export function prefetchOleData(): void {
     if (getCached<T>(key) !== null) return;
     fetcher().then(d => setCached(key, d)).catch(() => { /* swallow — hook will retry */ });
   };
-  warm('ole_paid_hours', () => oleApi.paidHours.list());
   warm('ole_results',    () => oleApi.ole.list());
   warm('ole_summary',    () => oleApi.ole.summary());
   warm('ole_weekly',     () => oleApi.ole.weekly());
@@ -182,6 +182,34 @@ export function useSmhStatus() {
 export function useOleWeekly() {
   const r = useCachedFetch<OleWeeklyResult[]>('ole_weekly', () => oleApi.ole.weekly(), 0);
   return { ...r, data: r.data?.filter(w => !isExcluded(w.workcell)) ?? null };
+}
+
+/**
+ * All operators for a single workcell — one fetch on page mount.
+ * Powers the shift drawer without a per-click roundtrip.
+ */
+export function useWorkcellOperators(workcell: string | null) {
+  const key = workcell ? `wc_ops:${workcell}` : 'wc_ops:idle';
+  return useCachedFetch<ShiftOperator[]>(
+    key,
+    async () => workcell ? oleApi.shiftOperators.list({ workcell }) : [],
+    0,
+  );
+}
+
+/**
+ * Operators for ONE shift — lazy fetch, used as fallback when bulk isn't
+ * available yet. Cached per (workcell, date, shift) so re-opening is instant.
+ */
+export function useShiftOperators(
+  params: { workcell: string; date: string; shift: number } | null,
+) {
+  const key = params ? `shift_ops:${params.workcell}|${params.date}|${params.shift}` : 'shift_ops:idle';
+  return useCachedFetch<ShiftOperator[]>(
+    key,
+    async () => params ? oleApi.shiftOperators.list(params) : [],
+    0,
+  );
 }
 
 /** Man-hours distribution — per-shift loss buckets (NVA / Lunch / MFG DT / DT / Lost) */
