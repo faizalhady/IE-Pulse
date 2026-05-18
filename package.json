@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node setup-pdfjs-worker.js && vite build",
+    "build": "node setup-pdfjs-worker.js && vite build --mode ole",
+    "build:ole": "node setup-pdfjs-worker.js && vite build --mode ole",
+    "build:pulse": "node setup-pdfjs-worker.js && vite build --mode pulse",
+    "build:fsms": "node setup-pdfjs-worker.js && vite build --mode fsms",
+    "build:ebuild": "node setup-pdfjs-worker.js && vite build --mode ebuild",
+    "build:iebaseline": "node setup-pdfjs-worker.js && vite build --mode iebaseline",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

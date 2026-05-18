@@ -1,3 +1,4 @@
+import { setFeatureFlag, useFeatureFlag } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
 import { currentUser } from '@/mocks/data';
 import { Bell, Check, ChevronRight, Monitor, Shield, Sliders, User } from 'lucide-react';
@@ -72,6 +73,7 @@ export default function Settings() {
   const [currentRole, setCurrentRole] = useState(currentUser.role);
   const [notifs, setNotifs] = useState({ critical: true, warning: false, wip: true, shift: true, email: false });
   const [display, setDisplay] = useState({ darkMode: true, compactTable: false, autoRefresh: true, showIdle: true });
+  const appSwitcherEnabled = useFeatureFlag('appSwitcher');
 
   return (
     <div className="space-y-0">
@@ -210,25 +212,39 @@ export default function Settings() {
 
         {/* ── DISPLAY ── */}
         {tab === 'display' && (
-          <Section title="Display Preferences">
-            {([
-              { key: 'darkMode', label: 'Dark Mode', desc: 'Use dark theme across the entire app' },
-              { key: 'compactTable', label: 'Compact Tables', desc: 'Reduce row padding in machine and bay tables' },
-              { key: 'autoRefresh', label: 'Auto Refresh', desc: 'Automatically poll for new data every 10 seconds' },
-              { key: 'showIdle', label: 'Show Idle Machines', desc: 'Include idle machines in the bay detail overview table' },
-            ] as { key: keyof typeof display; label: string; desc: string }[]).map(({ key, label, desc }, i, arr) => (
-              <div
-                key={key}
-                className={cn('flex items-center gap-4 px-5 py-4', i < arr.length - 1 && 'border-b border-border')}
-              >
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+          <div className="space-y-4">
+            <Section title="Display Preferences">
+              {([
+                { key: 'darkMode', label: 'Dark Mode', desc: 'Use dark theme across the entire app' },
+                { key: 'compactTable', label: 'Compact Tables', desc: 'Reduce row padding in machine and bay tables' },
+                { key: 'autoRefresh', label: 'Auto Refresh', desc: 'Automatically poll for new data every 10 seconds' },
+                { key: 'showIdle', label: 'Show Idle Machines', desc: 'Include idle machines in the bay detail overview table' },
+              ] as { key: keyof typeof display; label: string; desc: string }[]).map(({ key, label, desc }, i, arr) => (
+                <div
+                  key={key}
+                  className={cn('flex items-center gap-4 px-5 py-4', i < arr.length - 1 && 'border-b border-border')}
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                  </div>
+                  <Toggle checked={display[key]} onChange={v => setDisplay(d => ({ ...d, [key]: v }))} />
                 </div>
-                <Toggle checked={display[key]} onChange={v => setDisplay(d => ({ ...d, [key]: v }))} />
+              ))}
+            </Section>
+
+            <Section title="Experimental Features">
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">App Switcher</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Reveal the multi-app dropdown in the sidebar header. Off by default until additional apps ship.
+                  </p>
+                </div>
+                <Toggle checked={appSwitcherEnabled} onChange={v => setFeatureFlag('appSwitcher', v)} />
               </div>
-            ))}
-          </Section>
+            </Section>
+          </div>
         )}
 
         {/* ── NOTIFICATIONS ── */}

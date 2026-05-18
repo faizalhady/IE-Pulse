@@ -1,10 +1,20 @@
 import {
+  Activity,
+  BookOpen,
+  Building2,
+  CalendarDays,
+  ClipboardList,
+  Factory,
   FileSpreadsheet,
+  FileText,
   FlaskConical,
+  Home,
   LineChart,
   LucideIcon,
   MapPin,
   Microscope,
+  Pencil,
+  TableProperties,
   TrendingUp
 } from 'lucide-react';
 
@@ -29,27 +39,30 @@ export interface AppConfig {
   color: string;
   /** bg color for the icon container in the switcher */
   iconBg: string;
+  /** URL prefix the app is deployed under, e.g. /ietools/ole */
+  basename: string;
   navItems: NavItem[];
 }
 
 // ─── App Definitions ──────────────────────────────────────────────────────────
 
 export const APPS: AppConfig[] = [
-  // {
-  //   id: 'pulse',
-  //   label: 'IE Pulse',
-  //   description: 'Production monitoring dashboard',
-  //   icon: Activity,
-  //   color: 'text-blue-500',
-  //   iconBg: 'bg-blue-500/15',
-  //   navItems: [
-  //     { label: 'Overview', to: '/', icon: Home },
-  //     { label: 'Plants / Layouts', to: '/plants', icon: MapPin },
-  //     { label: 'Workcells', to: '/workcells', icon: Factory },
-  //     { label: 'Reports', to: '/reports', icon: LineChart },
-  //     { label: 'Documents', to: '/documents', icon: FileText },
-  //   ],
-  // },
+  {
+    id: 'pulse',
+    label: 'IE Pulse',
+    description: 'Production monitoring dashboard',
+    icon: Activity,
+    color: 'text-blue-500',
+    iconBg: 'bg-blue-500/15',
+    basename: '/ietools/pulse',
+    navItems: [
+      { label: 'Overview', to: '/overview', icon: Home },
+      { label: 'Plants / Layouts', to: '/plants', icon: MapPin },
+      { label: 'Workcells', to: '/workcells', icon: Factory },
+      { label: 'Reports', to: '/reports', icon: LineChart },
+      { label: 'Documents', to: '/documents', icon: FileText },
+    ],
+  },
   {
     id: 'ole',
     label: 'OLE Analyzer',
@@ -57,6 +70,7 @@ export const APPS: AppConfig[] = [
     icon: TrendingUp,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
+    basename: '/ietools/ole',
     navItems: [
       { label: 'Map', to: '/map', icon: MapPin },
       { label: 'Report', to: '/report', icon: LineChart },
@@ -73,43 +87,46 @@ export const APPS: AppConfig[] = [
       // { label: 'API Test', to: '/ole-mart-api', icon: Database },
     ],
   },
-  // {
-  //   id: 'fsms',
-  //   label: 'FSMS',
-  //   description: 'Floor space management system',
-  //   icon: Building2,
-  //   color: 'text-violet-500',
-  //   iconBg: 'bg-violet-500/15',
-  //   navItems: [
-  //     { label: 'Plants', to: '/plants', icon: MapPin },
-  //     { label: 'Floor Map', to: '/floor-map', icon: ClipboardList },
-  //     { label: 'Layout Editor', to: '/fsms/editor', icon: Pencil },
-  //     { label: 'Bay Management', to: '/fsms/bays', icon: TableProperties },
-  //   ],
-  // },
-  // {
-  //   id: 'ebuild',
-  //   label: 'eBuild Plan',
-  //   description: 'Demand & output planning',
-  //   icon: CalendarDays,
-  //   color: 'text-orange-500',
-  //   iconBg: 'bg-orange-500/15',
-  //   navItems: [
-  //     { label: 'Build Plan', to: '/ebuild', icon: Home },
-  //   ],
-  // },
-  // {
-  //   id: 'iebaseline',
-  //   label: 'IE Baseline',
-  //   description: 'Learn everything about IE Baseline',
-  //   icon: BookOpen,
-  //   color: 'text-orange-500',
-  //   iconBg: 'bg-orange-500/15',
-  //   navItems: [
-  //     { label: 'Overview', to: '/iebaseline', icon: Home },
-  //     { label: 'Edit', to: '/iebaseline/edit', icon: Pencil },
-  //   ],
-  // },
+  {
+    id: 'fsms',
+    label: 'FSMS',
+    description: 'Floor space management system',
+    icon: Building2,
+    color: 'text-violet-500',
+    iconBg: 'bg-violet-500/15',
+    basename: '/ietools/fsms',
+    navItems: [
+      { label: 'Plants', to: '/plants', icon: MapPin },
+      { label: 'Floor Map', to: '/floor-map', icon: ClipboardList },
+      { label: 'Layout Editor', to: '/fsms/editor', icon: Pencil },
+      { label: 'Bay Management', to: '/fsms/bays', icon: TableProperties },
+    ],
+  },
+  {
+    id: 'ebuild',
+    label: 'eBuild Plan',
+    description: 'Demand & output planning',
+    icon: CalendarDays,
+    color: 'text-orange-500',
+    iconBg: 'bg-orange-500/15',
+    basename: '/ietools/ebuild',
+    navItems: [
+      { label: 'Build Plan', to: '/ebuild', icon: Home },
+    ],
+  },
+  {
+    id: 'iebaseline',
+    label: 'IE Baseline',
+    description: 'Learn everything about IE Baseline',
+    icon: BookOpen,
+    color: 'text-amber-500',
+    iconBg: 'bg-amber-500/15',
+    basename: '/ietools/iebaseline',
+    navItems: [
+      { label: 'Overview', to: '/iebaseline', icon: Home },
+      { label: 'Edit', to: '/iebaseline/edit', icon: Pencil },
+    ],
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

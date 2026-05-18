@@ -5,12 +5,29 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider } from "@/context/AppContext";
 import KioskMode from "@/pages/KioskMode";
 import Login from "@/pages/Login";
+import BayDetail from "@/pages/BayDetail";
+import Documents from "@/pages/Documents";
+import EBuildPlan from "@/pages/ebuild/eBuildPlan";
+import FloorMap from "@/pages/FloorMap";
+import BayManagement from "@/pages/fsms/BayManagement";
+import LayoutEditor from "@/pages/fsms/LayoutEditor";
+import GlobalOverview from "@/pages/GlobalOverview";
+import IEBaseline from "@/pages/iebaseline/IEBaseline";
+import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
+import ModuleAdmin from "@/pages/iebaseline/ModuleAdmin";
+import ModuleOverview from "@/pages/iebaseline/ModuleOverview";
 import NotFound from "@/pages/NotFound";
+import Plants from "@/pages/Plants";
+import Reports from "@/pages/Reports";
+import Settings from "@/pages/Settings";
+import WorkcellsTable from "@/pages/WorkcellsTable";
+import WorkcellView from "@/pages/WorkcellView";
 import OLE4QReport from "@/pages/ole/OLE4QReport";
 import OLESmh from "@/pages/ole/OLESmh";
 import OlePlantReport from "@/pages/ole/OlePlantReport";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
+import { BUILD_BASENAME } from "@/lib/buildContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -25,7 +42,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter basename="/ietools/ole">
+      <BrowserRouter basename={BUILD_BASENAME}>
         <AppProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -60,29 +77,31 @@ function AppShell() {
             <Route path="/report" element={<OlePlantReport />} />
             <Route path="/report/wc/:workcell" element={<OleWorkcellReport />} />
             <Route path="/downtime" element={<DowntimeManagement />} />
-            {/* <Route path="/workcells" element={<WorkcellsTable />} /> */}
-            {/* <Route path="/workcell/:id" element={<WorkcellView />} /> */}
-            {/* <Route path="/bay/:id" element={<BayDetail />} /> */}
-            {/* <Route path="/documents" element={<Documents />} /> */}
-            {/* <Route path="/reports" element={<Reports />} /> */}
-            {/* <Route path="/plants" element={<Plants />} /> */}
-            {/* <Route path="/floor-map" element={<FloorMap />} /> */}
-            {/* <Route path="/ole" element={<OLEOverview />} /> */}
-            {/* <Route path="/ole/transfer" element={<TransferManHour />} /> */}
-            {/* <Route path="/ole/home1" element={<OLEHome1 />} /> */}
-            {/* <Route path="/ole/home2" element={<OLEHome2 />} /> */}
-            {/* <Route path="/ole/home3" element={<OLEHome3 />} /> */}
-            {/* <Route path="/ole/home5" element={<OLEHome5 />} /> */}
-            {/* <Route path="/ole/:workcell" element={<OLEWorkcell />} /> */}
-            {/* <Route path="/settings" element={<Settings />} /> */}
-            {/* <Route path="/ole-mart-api" element={<OleMartApiTest />} /> */}
-            {/* <Route path="/ebuild" element={<EBuildPlan />} /> */}
-            {/* <Route path="/iebaseline" element={<IEBaseline />} /> */}
-            {/* <Route path="/iebaseline/edit" element={<IEBaselineEdit />} /> */}
-            {/* <Route path="/iebaseline/module/:moduleId" element={<ModuleOverview />} /> */}
-            {/* <Route path="/iebaseline/admin/:moduleId" element={<ModuleAdmin />} /> */}
-            {/* <Route path="/fsms/editor" element={<LayoutEditor />} /> */}
-            {/* <Route path="/fsms/bays" element={<BayManagement />} /> */}
+
+            {/* IE Pulse app */}
+            <Route path="/overview" element={<GlobalOverview />} />
+            <Route path="/plants" element={<Plants />} />
+            <Route path="/workcells" element={<WorkcellsTable />} />
+            <Route path="/workcell/:id" element={<WorkcellView />} />
+            <Route path="/bay/:id" element={<BayDetail />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/documents" element={<Documents />} />
+
+            {/* FSMS app */}
+            <Route path="/floor-map" element={<FloorMap />} />
+            <Route path="/fsms/editor" element={<LayoutEditor />} />
+            <Route path="/fsms/bays" element={<BayManagement />} />
+
+            {/* eBuild app */}
+            <Route path="/ebuild" element={<EBuildPlan />} />
+
+            {/* IE Baseline app */}
+            <Route path="/iebaseline" element={<IEBaseline />} />
+            <Route path="/iebaseline/edit" element={<IEBaselineEdit />} />
+            <Route path="/iebaseline/module/:moduleId" element={<ModuleOverview />} />
+            <Route path="/iebaseline/admin/:moduleId" element={<ModuleAdmin />} />
+
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

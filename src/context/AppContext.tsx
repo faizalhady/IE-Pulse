@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { APPS, AppConfig, AppId, getApp } from '@/config/apps';
+import { BUILD_APP, IS_SINGLE_APP } from '@/lib/buildContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,12 +46,14 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const [activeAppId, setActiveAppId] = useState<AppId>(() =>
-    detectAppFromPath(window.location.pathname, (localStorage.getItem('pulse-active-app') as AppId) || undefined)
-  );
+  const [activeAppId, setActiveAppId] = useState<AppId>(() => {
+    if (IS_SINGLE_APP && BUILD_APP) return BUILD_APP.id;
+    return detectAppFromPath(window.location.pathname, (localStorage.getItem('pulse-active-app') as AppId) || undefined);
+  });
 
-  // Sync active app whenever the route changes
+  // Sync active app whenever the route changes (dev / multi-app shell only).
   useEffect(() => {
+    if (IS_SINGLE_APP) return;
     const detected = detectAppFromPath(location.pathname, activeAppId);
     if (detected !== activeAppId) {
       setActiveAppId(detected);
@@ -59,6 +62,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [location.pathname, activeAppId]);
 
   const setActiveApp = (id: AppId) => {
+    if (IS_SINGLE_APP) return; // locked in single-app builds
     localStorage.setItem('pulse-active-app', id);
     setActiveAppId(id);
   };
