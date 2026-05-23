@@ -29,7 +29,7 @@ export function shiftLabel(value: string | number | undefined | null): string {
 // ─── Date Formatter ─────────────────────────────────────────────────────────
 // fmtDate lives in src/lib/shared/dateUtils.ts. Re-exported here for
 // convenient access alongside the other OLE display helpers.
-export { fmtDate } from '../shared/dateUtils';
+export { fmtDate, dayName } from '../shared/dateUtils';
 
 // ─── Workcell Logos ─────────────────────────────────────────────────────────
 const _base = import.meta.env.BASE_URL ?? '/';

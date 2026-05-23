@@ -32,3 +32,21 @@ export function fmtDate(value: string | null | undefined): string {
   const [yyyy, mm, dd] = parts;
   return `${dd}-${mm}-${yyyy}`;
 }
+
+/**
+ * Returns the 3-letter weekday name ("Mon", "Tue", …) for a calendar-date
+ * string. Uses UTC to avoid timezone drift — the input is a calendar date,
+ * not a timestamp. Otherwise a user in UTC+8 could see the wrong weekday
+ * for a date stored as midnight UTC.
+ */
+const _DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+export function dayName(value: string | null | undefined): string {
+  if (!value) return '—';
+  const datePart = value.split('T')[0];
+  const parts = datePart.split('-');
+  if (parts.length !== 3) return '—';
+  const [yyyy, mm, dd] = parts;
+  const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+  if (Number.isNaN(d.getTime())) return '—';
+  return _DAY_NAMES[d.getUTCDay()];
+}
