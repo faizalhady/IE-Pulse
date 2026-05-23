@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 
-// Same-origin path. Served by nginx in prod via `location /userinfo/`
-// (reverse-proxied to AD_GET on the box), and by the Vite dev proxy locally.
-const USER_INFO_URL = '/userinfo/RetrieveUserInfoNoParam';
+// In prod: nginx reverse-proxies /userinfo/ to AD_GET, so the browser sees a
+// same-origin HTTPS call (no mixed content, no CORS). In dev: hit AD_GET
+// directly so the browser handles NTLM in the intranet zone — Vite's proxy
+// can't forward Windows credentials and would 401.
+const USER_INFO_URL = import.meta.env.DEV
+  ? 'http://mypenm0iesvr02.corp.jabil.org:5110/User/RetrieveUserInfoNoParam'
+  : '/userinfo/RetrieveUserInfoNoParam';
 
 export interface CurrentUser {
   fullName: string | null;

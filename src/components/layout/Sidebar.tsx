@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   ChevronDown,
   Factory, Moon, PanelLeftClose, PanelLeftOpen,
-  Settings, Sun
+  Sun
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -88,7 +88,7 @@ export default function Sidebar() {
                         className={({ isActive }) =>
                           cn(
                             'flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent transition-colors',
-                            isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-2 border-sidebar-primary'
+                            isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                           )
                         }
                       >
@@ -168,7 +168,6 @@ export default function Sidebar() {
             <span>{dark ? 'Light mode' : 'Dark mode'}</span>
           </button>
         )}
-        <SidebarLink to="/settings" icon={Settings} label="Settings" collapsed={collapsed} />
         {showUser && !collapsed && user?.fullName && (() => {
           const display = shortName(user.fullName, 2);
           const initials = display.split(' ').map(w => w[0]?.toUpperCase() ?? '').join('');
@@ -208,7 +207,7 @@ function SidebarLink({
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors',
-          isActive && 'text-sidebar-accent-foreground font-medium border-l-2 border-sidebar-primary',
+          isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
           collapsed && 'justify-center px-5'
         )
       }

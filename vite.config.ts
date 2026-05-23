@@ -38,11 +38,9 @@ export default defineConfig(({ command, mode }) => {
         overlay: false,
       },
       proxy: {
-        '/userinfo': {
-          target: 'http://mypenm0iesvr02.corp.jabil.org:5110',
-          changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/userinfo/, '/User'),
-        },
+        // No /userinfo proxy: NTLM can't be forwarded by Vite's proxy
+        // (would 401). Dev calls AD_GET directly via its absolute URL;
+        // see USER_INFO_URL in src/hooks/useCurrentUser.ts.
         '/ietools/ole/api': {
           target: 'http://localhost:8000',
           changeOrigin: true,
