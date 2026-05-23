@@ -7,10 +7,10 @@ import { defineConfig, loadEnv } from "vite";
  * Kept in sync manually; if you rename a basename there, update here too.
  */
 const APP_BASENAMES: Record<string, string> = {
-  ole:        '/ietools/ole/',
-  pulse:      '/ietools/pulse/',
-  fsms:       '/ietools/fsms/',
-  ebuild:     '/ietools/ebuild/',
+  ole: '/ietools/ole/',
+  pulse: '/ietools/pulse/',
+  fsms: '/ietools/fsms/',
+  ebuild: '/ietools/ebuild/',
   iebaseline: '/ietools/iebaseline/',
 };
 
@@ -33,11 +33,16 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       host: "::",
-      port: 8081,
+      port: 3000,
       hmr: {
         overlay: false,
       },
       proxy: {
+        '/userinfo': {
+          target: 'http://mypenm0iesvr02.corp.jabil.org:5110',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/userinfo/, '/User'),
+        },
         '/ietools/ole/api': {
           target: 'http://localhost:8000',
           changeOrigin: true,

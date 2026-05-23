@@ -1,8 +1,10 @@
 import AppSwitcher from '@/components/layout/AppSwitcher';
 import { StatusDot } from '@/components/StatusIndicator';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useApp } from '@/context/AppContext';
+import { shortName, useCurrentUser } from '@/hooks/useCurrentUser';
 import { useProductionSummary, useWorkcells } from '@/hooks/useMesData';
 import { cn } from '@/lib/utils';
 import {
@@ -18,6 +20,8 @@ export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { activeApp, collapsed, setCollapsed } = useApp();
+  const { user } = useCurrentUser();
+  const showUser = activeApp.id === 'ole';
 
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem('pulse-theme');
@@ -165,19 +169,25 @@ export default function Sidebar() {
           </button>
         )}
         <SidebarLink to="/settings" icon={Settings} label="Settings" collapsed={collapsed} />
-        {/* {!collapsed && (
-          <div className="flex items-center gap-2 px-2 py-1.5">
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                {currentUser.name.split(' ').filter(n => /^[a-zA-Z]/.test(n)).slice(0, 2).map(n => n[0].toUpperCase()).join('')}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col leading-none">
-              <span className="text-xs font-medium text-sidebar-accent-foreground">{currentUser.name}</span>
-              <span className="text-[10px] text-sidebar-foreground/60 capitalize">{currentUser.role}</span>
+        {showUser && !collapsed && user?.fullName && (() => {
+          const display = shortName(user.fullName, 2);
+          const initials = display.split(' ').map(w => w[0]?.toUpperCase() ?? '').join('');
+          return (
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <Avatar className="h-7 w-7">
+                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col leading-none min-w-0">
+                <span className="text-xs font-medium text-sidebar-accent-foreground truncate">{display}</span>
+                {user.jobTitle && (
+                  <span className="text-[10px] text-sidebar-foreground/60 truncate">{user.jobTitle}</span>
+                )}
+              </div>
             </div>
-          </div>
-        )} */}
+          );
+        })()}
       </div>
     </aside>
   );
