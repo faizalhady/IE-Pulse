@@ -109,7 +109,7 @@ export default function Sidebar() {
             );
           }
 
-          return <SidebarLink key={item.to} to={item.to} icon={item.icon} label={item.label} collapsed={collapsed} />;
+          return <SidebarLink key={item.to} to={item.to} icon={item.icon} label={item.label} collapsed={collapsed} exact={item.exact !== false} />;
         })}
       </nav>
 
@@ -168,16 +168,34 @@ export default function Sidebar() {
             <span>{dark ? 'Light mode' : 'Dark mode'}</span>
           </button>
         )}
-        {showUser && !collapsed && user?.fullName && (() => {
+        {showUser && user?.fullName && (() => {
           const display = shortName(user.fullName, 2);
           const initials = display.split(' ').map(w => w[0]?.toUpperCase() ?? '').join('');
+          const avatar = (
+            <Avatar className="h-7 w-7">
+              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          );
+          if (collapsed) {
+            return (
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex justify-center px-2 py-1.5">{avatar}</div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="text-xs font-medium">
+                    {display}
+                    {user.jobTitle && <div className="text-[10px] opacity-70">{user.jobTitle}</div>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          }
           return (
             <div className="flex items-center gap-2 px-2 py-1.5">
-              <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              {avatar}
               <div className="flex flex-col leading-none min-w-0">
                 <span className="text-xs font-medium text-sidebar-accent-foreground truncate">{display}</span>
                 {user.jobTitle && (
@@ -193,17 +211,33 @@ export default function Sidebar() {
 }
 
 function SidebarLink({
-  to, icon: Icon, label, collapsed,
+  to, icon: Icon, label, collapsed, exact = true,
 }: {
   to: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   collapsed: boolean;
+  exact?: boolean;
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (location.pathname === to) {
+      // Same exact route: re-trigger via navigate + scroll-to-top so the click feels responsive.
+      e.preventDefault();
+      navigate(to, { replace: true });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    // If we're at a sub-route (e.g. /report/wc/X) the default NavLink behavior already
+    // navigates up to `to` — no special handling needed.
+  };
+
   const link = (
     <NavLink
       to={to}
-      end
+      end={exact}
+      onClick={handleClick}
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors',

@@ -519,6 +519,11 @@ export default function OleWorkcellReport() {
               <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Man-Hrs Distribution</p>
               <span className="text-[9px] text-muted-foreground">view pie ↗</span>
             </div>
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-4 py-2 border-b border-border bg-muted/20">
+              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Man Hrs</p>
+              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-12">Percentage</p>
+              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-16">Hrs</p>
+            </div>
             {[
               { label: 'NVA Input',     value: mhTotals.nva,      bar: '#ef4444', color: 'text-red-400' },
               { label: 'Lunch',         value: mhTotals.lunch,    bar: '#94a3b8', color: 'text-slate-400' },
@@ -528,15 +533,15 @@ export default function OleWorkcellReport() {
             ].map((r, i, arr) => {
               const pct = mhTotals.paid > 0 ? (r.value / mhTotals.paid) * 100 : 0;
               return (
-                <div key={r.label}
-                  className={cn('flex items-center gap-3 px-4 py-3', i < arr.length - 1 && 'border-b border-border')}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-foreground">{r.label}</p>
-                    <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: r.bar }} />
-                    </div>
-                  </div>
-                  <span className={cn('text-base font-mono font-bold flex-shrink-0', r.color)}>
+                <div
+                  key={r.label}
+                  className={cn('grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5', i < arr.length - 1 && 'border-b border-border')}
+                >
+                  <p className="text-xs font-semibold text-foreground truncate">{r.label}</p>
+                  <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-12', r.color)}>
+                    {pct > 0 ? `${pct.toFixed(0)}%` : '—'}
+                  </span>
+                  <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-16', r.color)}>
                     {r.value > 0 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
                   </span>
                 </div>

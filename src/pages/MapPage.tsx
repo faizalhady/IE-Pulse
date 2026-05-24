@@ -1,6 +1,5 @@
 import {
   Map,
-  MapControls,
   MapMarker,
   MarkerContent,
   MarkerLabel,
@@ -150,17 +149,20 @@ export default function MapPage() {
         ))}
       </div>
 
-      {/* Full-screen map */}
+      {/* Full-screen map — fully locked: no pan, no zoom, no rotate, no pitch */}
       <Map
         center={PENANG_CENTER}
         zoom={DEFAULT_ZOOM}
         className="w-full h-full"
-        dragRotate={false}
         dragPan={false}
-        touchPitch={false}
+        dragRotate={false}
+        scrollZoom={false}
+        doubleClickZoom={false}
         touchZoomRotate={false}
+        touchPitch={false}
+        keyboard={false}
+        boxZoom={false}
       >
-        <MapControls position="top-right" />
 
         {plantKPIs.map(plant => (
           <MapMarker

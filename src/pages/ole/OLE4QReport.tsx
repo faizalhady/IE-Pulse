@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { CalendarIcon, ChevronLeft, ChevronRight, Download, Eye, EyeOff, GripVertical, Info, Plus, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line,
   ResponsiveContainer, Tooltip, XAxis, YAxis
@@ -653,8 +654,16 @@ function ImprovementTable({ actions, isPrint = false, top1Cat = '', top2Cat = ''
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function OLE4QReport() {
+  const location = useLocation();
   const [title, setTitle] = useState('Weekly OLE Performance Review');
   const [tab, setTab] = useState<'setup' | 'editor'>('setup');
+
+  // Reset to setup whenever the user re-navigates here (e.g. clicks the sidebar
+  // 4Q nav while already in editor). location.key changes on every navigate(),
+  // including same-route replace from the sidebar's "click-when-active" handler.
+  useEffect(() => {
+    setTab('setup');
+  }, [location.key]);
   const [rightOpen, setRightOpen] = useState(true);
   const [workcellConfigs, setWorkcellConfigs] = useState<OleWorkcellConfig[]>([]);
   const [mode, setMode] = useState<SetupMode>('plant');

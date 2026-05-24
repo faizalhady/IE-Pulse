@@ -8,7 +8,8 @@
 import { useEscapeKey } from '@/hooks/shared/useEscapeKey';
 import { MODAL_DIM } from '@/lib/ole/oleChartStyles';
 import { cn } from '@/lib/utils';
-import { X } from 'lucide-react';
+import { Download, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 export type MhSlice = { name: string; value: number; color: string };
@@ -31,6 +32,30 @@ export function MhPieModal({ open, onClose, title, slices, total: totalProp, tot
   const overshoot = sliceSum - total;
   const data = slices.filter(s => s.value > 0);
 
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+  async function handleDownload() {
+    if (!captureRef.current) return;
+    setDownloading(true);
+    try {
+      const { toPng } = await import('html-to-image');
+      const dataUrl = await toPng(captureRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: 'hsl(var(--card))',
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.noExport === 'true'),
+      });
+      const link = document.createElement('a');
+      link.download = `${title.replace(/[^a-z0-9]+/gi, '-')}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      console.error('Download failed', e);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <>
       <div
@@ -39,7 +64,7 @@ export function MhPieModal({ open, onClose, title, slices, total: totalProp, tot
         style={{ transition: 'opacity 0.25s ease', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
       />
       <div
-        className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl flex flex-col"
+        className="fixed z-50"
         style={{
           width: MODAL_DIM.width, height: MODAL_DIM.height, top: '50%', left: '50%',
           transition: 'opacity 0.25s ease, transform 0.25s ease',
@@ -48,6 +73,7 @@ export function MhPieModal({ open, onClose, title, slices, total: totalProp, tot
           pointerEvents: open ? 'auto' : 'none',
         }}
       >
+      <div ref={captureRef} className="bg-card border border-border rounded-xl shadow-2xl flex flex-col h-full w-full overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
           <div>
             <p className="text-sm font-semibold text-foreground uppercase tracking-wide">{title}</p>
@@ -60,9 +86,19 @@ export function MhPieModal({ open, onClose, title, slices, total: totalProp, tot
               )}
             </p>
           </div>
-          <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1" data-no-export="true">
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              title="Download as PNG"
+              className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+            </button>
+            <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 p-5 grid grid-cols-[1fr_240px] gap-4">
@@ -121,6 +157,7 @@ export function MhPieModal({ open, onClose, title, slices, total: totalProp, tot
           </div>
 
         </div>
+      </div>
       </div>
     </>
   );

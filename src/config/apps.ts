@@ -28,6 +28,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** If true, only show when sidebar is expanded (e.g. sub-items) */
   sub?: boolean;
+  /** If true (default), only active on exact match. Set false to keep active on `to/*` sub-routes. */
+  exact?: boolean;
 }
 
 export interface AppConfig {
@@ -73,7 +75,7 @@ export const APPS: AppConfig[] = [
     basename: '/ietools/ole',
     navItems: [
       { label: 'Map', to: '/map', icon: MapPin },
-      { label: 'Report', to: '/report', icon: LineChart },
+      { label: 'Report', to: '/report', icon: LineChart, exact: false },
       { label: '4Q Generator', to: '/4q', icon: FileSpreadsheet },
       { label: 'Analysis', to: '/analysis', icon: Microscope },
       // { label: 'Home 0', to: '/ole', icon: TrendingUp },
