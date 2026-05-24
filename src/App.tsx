@@ -2,7 +2,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AppProvider } from "@/context/AppContext";
+import { AppProvider, useApp } from "@/context/AppContext";
 import KioskMode from "@/pages/KioskMode";
 import Login from "@/pages/Login";
 import BayDetail from "@/pages/BayDetail";
@@ -27,7 +27,7 @@ import OLESmh from "@/pages/ole/OLESmh";
 import OlePlantReport from "@/pages/ole/OlePlantReport";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
-import { BUILD_BASENAME } from "@/lib/buildContext";
+import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -58,6 +58,7 @@ const App = () => (
 function AppShell() {
   const { pathname } = useLocation();
   useEffect(() => {
+    if (!includesApp('ole')) return;
     if (pathname === '/' || pathname === '/map' || pathname.startsWith('/report')) {
       prefetchOleData();
     }
@@ -69,37 +70,44 @@ function AppShell() {
         {/* <Header /> */}
         <main className="flex-1 overflow-y-auto">
           <Routes>
-            <Route path="/" element={<Navigate to="/map" replace />} />
-            <Route path="/map" element={<MapPage />} />
-            <Route path="/smh" element={<OLESmh />} />
-            <Route path="/4q" element={<OLE4QReport />} />
-            <Route path="/analysis" element={<OleWowAnalysis />} />
-            <Route path="/report" element={<OlePlantReport />} />
-            <Route path="/report/wc/:workcell" element={<OleWorkcellReport />} />
-            <Route path="/downtime" element={<DowntimeManagement />} />
+            <Route path="/" element={<HomeRedirect />} />
 
-            {/* IE Pulse app */}
-            <Route path="/overview" element={<GlobalOverview />} />
-            <Route path="/plants" element={<Plants />} />
-            <Route path="/workcells" element={<WorkcellsTable />} />
-            <Route path="/workcell/:id" element={<WorkcellView />} />
-            <Route path="/bay/:id" element={<BayDetail />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/documents" element={<Documents />} />
+            {includesApp('ole') && <>
+              <Route path="/map" element={<MapPage />} />
+              <Route path="/smh" element={<OLESmh />} />
+              <Route path="/4q" element={<OLE4QReport />} />
+              <Route path="/analysis" element={<OleWowAnalysis />} />
+              <Route path="/report" element={<OlePlantReport />} />
+              <Route path="/report/wc/:workcell" element={<OleWorkcellReport />} />
+              <Route path="/downtime" element={<DowntimeManagement />} />
+            </>}
 
-            {/* FSMS app */}
-            <Route path="/floor-map" element={<FloorMap />} />
-            <Route path="/fsms/editor" element={<LayoutEditor />} />
-            <Route path="/fsms/bays" element={<BayManagement />} />
+            {includesApp('pulse') && <>
+              <Route path="/overview" element={<GlobalOverview />} />
+              <Route path="/plants" element={<Plants />} />
+              <Route path="/workcells" element={<WorkcellsTable />} />
+              <Route path="/workcell/:id" element={<WorkcellView />} />
+              <Route path="/bay/:id" element={<BayDetail />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/documents" element={<Documents />} />
+            </>}
 
-            {/* eBuild app */}
-            <Route path="/ebuild" element={<EBuildPlan />} />
+            {includesApp('fsms') && <>
+              <Route path="/floor-map" element={<FloorMap />} />
+              <Route path="/fsms/editor" element={<LayoutEditor />} />
+              <Route path="/fsms/bays" element={<BayManagement />} />
+            </>}
 
-            {/* IE Baseline app */}
-            <Route path="/iebaseline" element={<IEBaseline />} />
-            <Route path="/iebaseline/edit" element={<IEBaselineEdit />} />
-            <Route path="/iebaseline/module/:moduleId" element={<ModuleOverview />} />
-            <Route path="/iebaseline/admin/:moduleId" element={<ModuleAdmin />} />
+            {includesApp('ebuild') && <>
+              <Route path="/ebuild" element={<EBuildPlan />} />
+            </>}
+
+            {includesApp('iebaseline') && <>
+              <Route path="/iebaseline" element={<IEBaseline />} />
+              <Route path="/iebaseline/edit" element={<IEBaselineEdit />} />
+              <Route path="/iebaseline/module/:moduleId" element={<ModuleOverview />} />
+              <Route path="/iebaseline/admin/:moduleId" element={<ModuleAdmin />} />
+            </>}
 
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
@@ -108,6 +116,13 @@ function AppShell() {
       </div>
     </div>
   );
+}
+
+/** Sends `/` to the active app's first nav item (so each build lands on its own home). */
+function HomeRedirect() {
+  const { activeApp } = useApp();
+  const to = activeApp.navItems[0]?.to ?? '/map';
+  return <Navigate to={to} replace />;
 }
 
 export default App;

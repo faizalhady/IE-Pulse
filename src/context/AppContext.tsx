@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { APPS, AppConfig, AppId, getApp } from '@/config/apps';
-import { BUILD_APP, IS_SINGLE_APP } from '@/lib/buildContext';
+import { BUILD_APP, BUILD_APPS, IS_SINGLE_APP } from '@/lib/buildContext';
+
+const AVAILABLE_APPS = APPS.filter(a => BUILD_APPS.includes(a.id));
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,7 +74,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         activeApp: getApp(activeAppId),
         setActiveApp,
-        apps: APPS,
+        apps: AVAILABLE_APPS,
         collapsed,
         setCollapsed,
       }}
