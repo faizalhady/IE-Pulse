@@ -21,7 +21,6 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { activeApp, collapsed, setCollapsed } = useApp();
   const { user } = useCurrentUser();
-  const showUser = activeApp.id === 'ole';
 
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem('pulse-theme');
@@ -168,7 +167,7 @@ export default function Sidebar() {
             <span>{dark ? 'Light mode' : 'Dark mode'}</span>
           </button>
         )}
-        {showUser && user?.fullName && (() => {
+        {user?.fullName && (() => {
           const display = shortName(user.fullName, 2);
           const initials = display.split(' ').map(w => w[0]?.toUpperCase() ?? '').join('');
           const avatar = (

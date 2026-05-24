@@ -14,7 +14,7 @@ import { useSyncExternalStore } from 'react';
 export type FeatureFlag = 'appSwitcher';
 
 const DEFAULTS: Record<FeatureFlag, boolean> = {
-  appSwitcher: false,
+  appSwitcher: true,
 };
 
 const STORAGE_KEY = 'ie-pulse:feature-flags';
