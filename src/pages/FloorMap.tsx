@@ -68,11 +68,11 @@ export default function FloorMap() {
   }, [search, customer, bays])
 
   function goToWorkcell(_bay: BayDef) {
-    navigate('/workcell/KEYSIGHT')
+    navigate('/pulse/workcell/KEYSIGHT')
   }
 
   function goToBayDetail(_bay: BayDef) {
-    navigate('/bay/KEYSIGHT__BAY 116B')
+    navigate('/pulse/bay/KEYSIGHT__BAY 116B')
   }
 
   function clampPos(rawX: number, rawY: number, cardW: number, cardH: number): TooltipPos {
@@ -167,7 +167,7 @@ export default function FloorMap() {
           <div className="flex items-center gap-2 flex-shrink-0">
             {fromPlants && (
               <button
-                onClick={() => navigate('/plants')}
+                onClick={() => navigate('/fsms/plants')}
                 className="flex items-center justify-center w-8 h-8 rounded-lg border border-border bg-background hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
                 title="Back to Plants"
               >

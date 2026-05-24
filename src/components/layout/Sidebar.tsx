@@ -65,7 +65,7 @@ export default function Sidebar() {
               <Collapsible key={item.to} open={workcellsOpen} onOpenChange={setWorkcellsOpen}>
                 <div className="flex items-center rounded-md hover:bg-sidebar-accent transition-colors">
                   <button
-                    onClick={() => navigate('/workcells')}
+                    onClick={() => navigate('/pulse/workcells')}
                     className="flex flex-1 items-center gap-3 px-3 py-2 text-sm text-sidebar-foreground"
                   >
                     <Factory className="h-4 w-4 shrink-0" />
@@ -82,7 +82,7 @@ export default function Sidebar() {
                     {activeWorkcells.map((wc) => (
                       <NavLink
                         key={wc.customer_id}
-                        to={`/workcell/${encodeURIComponent(wc.workcell_name)}`}
+                        to={`/pulse/workcell/${encodeURIComponent(wc.workcell_name)}`}
                         end
                         className={({ isActive }) =>
                           cn(

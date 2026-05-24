@@ -88,7 +88,7 @@ export default function MachineDrawer({ bay, open, onClose }: MachineDrawerProps
           </div>
 
           <Button
-            onClick={() => { onClose(); navigate(`/bay/${bay.id}`); }}
+            onClick={() => { onClose(); navigate(`/pulse/bay/${bay.id}`); }}
             className="w-full"
           >
             View Full Bay →

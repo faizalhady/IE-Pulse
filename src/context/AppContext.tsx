@@ -18,24 +18,10 @@ interface AppContextValue {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function detectAppFromPath(pathname: string, currentAppId?: AppId): AppId {
-  // If we already have an active app, check if it owns the current route first
-  if (currentAppId) {
-    const currentApp = APPS.find(a => a.id === currentAppId);
-    if (currentApp) {
-      for (const item of currentApp.navItems) {
-        if (item.to !== '/' && pathname.startsWith(item.to)) return currentAppId;
-      }
-    }
-  }
-
-  // Otherwise, find the first app that owns the route
-  for (const app of APPS) {
-    for (const item of app.navItems) {
-      if (item.to !== '/' && pathname.startsWith(item.to)) return app.id;
-    }
-  }
-  // fallback: exact match for root
-  if (pathname === '/') return 'pulse';
+  // URL shape is /<module>/<rest> — module identifier is the first segment.
+  const seg = pathname.split('/').filter(Boolean)[0];
+  if (seg && APPS.some(a => a.id === seg)) return seg as AppId;
+  if (currentAppId) return currentAppId;
   return (localStorage.getItem('pulse-active-app') as AppId) ?? 'pulse';
 }
 

@@ -109,7 +109,7 @@ export default function WorkcellView() {
     return (
       <div className="flex flex-col items-center justify-center gap-3 h-64 text-muted-foreground">
         <p className="text-sm">Workcell <span className="font-mono text-foreground">"{id}"</span> not found.</p>
-        <button onClick={() => navigate('/workcells')} className="text-xs text-primary underline">← Back to Workcells</button>
+        <button onClick={() => navigate('/pulse/workcells')} className="text-xs text-primary underline">← Back to Workcells</button>
       </div>
     );
   }
@@ -127,7 +127,7 @@ export default function WorkcellView() {
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </button>
             <span className="text-border">|</span>
-            <Link to="/workcells" className="hover:text-foreground transition-colors">Workcells</Link>
+            <Link to="/pulse/workcells" className="hover:text-foreground transition-colors">Workcells</Link>
             <span>/</span>
             <span className="text-foreground font-medium">{id}</span>
           </div>
@@ -235,7 +235,7 @@ export default function WorkcellView() {
                   return (
                     <button
                       key={`${bay.bay}-${idx}`}
-                      onClick={() => navigate(`/bay/${encodeURIComponent(id!)}__${encodeURIComponent(bay.bay)}`)}
+                      onClick={() => navigate(`/pulse/bay/${encodeURIComponent(id!)}__${encodeURIComponent(bay.bay)}`)}
                       className="w-full grid items-center text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors text-left group"
                       style={{ gridTemplateColumns: '1fr 5rem 6rem 7rem 7rem 7rem' }}
                     >
@@ -279,7 +279,7 @@ export default function WorkcellView() {
                   return (
                     <button
                       key={`${bay.bay}-${idx}`}
-                      onClick={() => navigate(`/bay/${encodeURIComponent(id!)}__${encodeURIComponent(bay.bay)}`)}
+                      onClick={() => navigate(`/pulse/bay/${encodeURIComponent(id!)}__${encodeURIComponent(bay.bay)}`)}
                       className="rounded-xl border border-border bg-card p-4 space-y-3 text-left w-full hover:border-primary/50 transition-colors"
                     >
                       <div className="flex items-center justify-between">

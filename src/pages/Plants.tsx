@@ -331,7 +331,7 @@ export default function Plants() {
                     <button
                       onClick={() => {
                         setPopupPlant(null);
-                        navigate(`/floor-map?from=plants`);
+                        navigate(`/fsms/floor-map?from=plants`);
                       }}
                       className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-accent transition-colors text-left"
                     >
@@ -341,7 +341,7 @@ export default function Plants() {
                     <button
                       onClick={() => {
                         setPopupPlant(null);
-                        navigate(`/workcells?plant=${popupPlant.plant.plantCode}`);
+                        navigate(`/pulse/workcells?plant=${popupPlant.plant.plantCode}`);
                       }}
                       className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-accent transition-colors text-left"
                     >
@@ -603,7 +603,7 @@ export default function Plants() {
               onClick={(e) => {
                 e.stopPropagation();
                 setPopupPlant(null);
-                navigate(`/floor-map?from=plants`);
+                navigate(`/fsms/floor-map?from=plants`);
               }}
               onMouseEnter={() => setHoveredPlant(plant.id)}
               onMouseLeave={() => setHoveredPlant(null)}
@@ -643,7 +643,7 @@ export default function Plants() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setPopupPlant(null);
-                    navigate(`/floor-map?from=plants`);
+                    navigate(`/fsms/floor-map?from=plants`);
                   }}
                   className="flex-1 py-1 rounded-md text-[11px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                 >
@@ -653,7 +653,7 @@ export default function Plants() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setPopupPlant(null);
-                    navigate(`/workcells?plant=${plant.plantCode}`);
+                    navigate(`/pulse/workcells?plant=${plant.plantCode}`);
                   }}
                   className="flex-1 py-1 rounded-md text-[11px] font-medium bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                 >

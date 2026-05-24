@@ -19,9 +19,11 @@ export default defineConfig(({ command, mode }) => {
   const appId = env.VITE_APP_ID || 'ole';
   const buildBase = APP_BASENAMES[appId] ?? '/ietools/ole/';
 
-  // Dev always serves at /ietools/ole/ — single dev server, multi-app shell.
-  // Production builds use the per-app base resolved from VITE_APP_ID.
-  const base = command === 'serve' ? '/ietools/ole/' : buildBase;
+  // Dev always serves at /ietools/ — single dev server, multi-app shell.
+  // Each module's routes are namespaced under /ietools/<module>/* via the
+  // route paths themselves. Production builds still use the per-app base
+  // resolved from VITE_APP_ID so nginx routes to the right bundle.
+  const base = command === 'serve' ? '/ietools/' : buildBase;
 
   return {
     base,

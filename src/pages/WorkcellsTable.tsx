@@ -292,7 +292,7 @@ export default function WorkcellsTable() {
               return (
                 <button
                   key={row.id}
-                  onClick={() => navigate(`/workcell/${row.id}`)}
+                  onClick={() => navigate(`/pulse/workcell/${row.id}`)}
                   className="w-full grid items-center text-sm border-b border-border last:border-0 hover:bg-muted/40 transition-colors text-left group"
                   style={{ gridTemplateColumns: '2.5rem 1fr 5rem 5rem 7rem 7rem 7rem 7rem' }}
                 >

@@ -678,7 +678,7 @@ export default function OlePlantReport() {
                       if (dateTo) params.set('to', dateTo);
                       if (plant !== 'all') params.set('plant', plant);
                       const qs = params.toString();
-                      navigate(`/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
+                      navigate(`/ole/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
                     }}>
                     <div className="px-2 text-[9px] text-muted-foreground font-mono">{idx + 1}</div>
                     <div className="px-2 flex items-center gap-2">
@@ -695,7 +695,7 @@ export default function OlePlantReport() {
                           if (dateTo) params.set('to', dateTo);
                           if (plant !== 'all') params.set('plant', plant);
                           const qs = params.toString();
-                          navigate(`/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
+                          navigate(`/ole/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
                         }}
                         className="text-[10px] font-semibold text-foreground hover:text-primary transition-colors truncate text-left">
                         {wc.workcell}

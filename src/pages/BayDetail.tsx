@@ -203,10 +203,10 @@ export default function BayDetail() {
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </button>
             <span className="text-border">|</span>
-            <Link to="/workcells" className="hover:text-foreground transition-colors">Workcells</Link>
+            <Link to="/pulse/workcells" className="hover:text-foreground transition-colors">Workcells</Link>
             <span>/</span>
             {workcellName && (
-              <><Link to={`/workcell/${encodeURIComponent(workcellName)}`} className="hover:text-foreground transition-colors">{workcellName}</Link><span>/</span></>
+              <><Link to={`/pulse/workcell/${encodeURIComponent(workcellName)}`} className="hover:text-foreground transition-colors">{workcellName}</Link><span>/</span></>
             )}
             <span className="text-foreground font-medium">{bay.name}</span>
           </div>

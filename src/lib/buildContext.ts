@@ -38,5 +38,10 @@ export const BUILD_APP: AppConfig | undefined =
 /** Convenience predicate for conditionally mounting routes / nav. */
 export const includesApp = (id: AppId): boolean => BUILD_APPS.includes(id);
 
-/** Basename used for the BrowserRouter — derived from the build-time app. */
-export const BUILD_BASENAME: string = BUILD_APP?.basename ?? '/ietools/ole/';
+/**
+ * BrowserRouter basename — always the umbrella '/ietools/'.
+ * The per-module segment ('/ole', '/pulse', etc.) lives in each route's
+ * path rather than in the basename, so the module identifier is part of
+ * the URL the router actually matches against.
+ */
+export const BUILD_BASENAME: string = '/ietools/';

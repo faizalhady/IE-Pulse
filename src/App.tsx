@@ -59,7 +59,7 @@ function AppShell() {
   const { pathname } = useLocation();
   useEffect(() => {
     if (!includesApp('ole')) return;
-    if (pathname === '/' || pathname === '/map' || pathname.startsWith('/report')) {
+    if (pathname === '/' || pathname === '/ole/map' || pathname.startsWith('/ole/report')) {
       prefetchOleData();
     }
   }, [pathname]);
@@ -73,27 +73,31 @@ function AppShell() {
             <Route path="/" element={<HomeRedirect />} />
 
             {includesApp('ole') && <>
-              <Route path="/map" element={<MapPage />} />
-              <Route path="/smh" element={<OLESmh />} />
-              <Route path="/4q" element={<OLE4QReport />} />
-              <Route path="/analysis" element={<OleWowAnalysis />} />
-              <Route path="/report" element={<OlePlantReport />} />
-              <Route path="/report/wc/:workcell" element={<OleWorkcellReport />} />
-              <Route path="/downtime" element={<DowntimeManagement />} />
+              <Route path="/ole" element={<Navigate to="/ole/map" replace />} />
+              <Route path="/ole/map" element={<MapPage />} />
+              <Route path="/ole/smh" element={<OLESmh />} />
+              <Route path="/ole/4q" element={<OLE4QReport />} />
+              <Route path="/ole/analysis" element={<OleWowAnalysis />} />
+              <Route path="/ole/report" element={<OlePlantReport />} />
+              <Route path="/ole/report/wc/:workcell" element={<OleWorkcellReport />} />
+              <Route path="/ole/downtime" element={<DowntimeManagement />} />
             </>}
 
             {includesApp('pulse') && <>
-              <Route path="/overview" element={<GlobalOverview />} />
-              <Route path="/plants" element={<Plants />} />
-              <Route path="/workcells" element={<WorkcellsTable />} />
-              <Route path="/workcell/:id" element={<WorkcellView />} />
-              <Route path="/bay/:id" element={<BayDetail />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/documents" element={<Documents />} />
+              <Route path="/pulse" element={<Navigate to="/pulse/overview" replace />} />
+              <Route path="/pulse/overview" element={<GlobalOverview />} />
+              <Route path="/pulse/plants" element={<Plants />} />
+              <Route path="/pulse/workcells" element={<WorkcellsTable />} />
+              <Route path="/pulse/workcell/:id" element={<WorkcellView />} />
+              <Route path="/pulse/bay/:id" element={<BayDetail />} />
+              <Route path="/pulse/reports" element={<Reports />} />
+              <Route path="/pulse/documents" element={<Documents />} />
             </>}
 
             {includesApp('fsms') && <>
-              <Route path="/floor-map" element={<FloorMap />} />
+              <Route path="/fsms" element={<Navigate to="/fsms/plants" replace />} />
+              <Route path="/fsms/plants" element={<Plants />} />
+              <Route path="/fsms/floor-map" element={<FloorMap />} />
               <Route path="/fsms/editor" element={<LayoutEditor />} />
               <Route path="/fsms/bays" element={<BayManagement />} />
             </>}
