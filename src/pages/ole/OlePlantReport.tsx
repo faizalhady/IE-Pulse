@@ -267,12 +267,6 @@ export default function OlePlantReport() {
         </div>
       </div>
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-20 text-xs text-muted-foreground">
-          Loading OLE data…
-        </div>
-      )}
-
       <OleFilterBar
         weeks={weeks}
         selectedWeek={selectedWeek}
@@ -328,6 +322,15 @@ export default function OlePlantReport() {
         {/* ── LEFT COLUMN ── */}
         <div className="w-[340px] flex-shrink-0 flex flex-col gap-4">
 
+          {isLoading ? (
+            <>
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 180 }} />
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 130 }} />
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 120 }} />
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 240 }} />
+            </>
+          ) : (
+            <>
           {/* Site OLE hero + Output/Input strip (merged) */}
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="p-5">
@@ -555,11 +558,20 @@ export default function OlePlantReport() {
               ))}
             </div>
           )} */}
+            </>
+          )}
         </div>
 
         {/* ── RIGHT COLUMN ── */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
 
+          {isLoading ? (
+            <>
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 220 }} />
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 400 }} />
+            </>
+          ) : (
+            <>
           {/* Weekly trend chart */}
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-3">
@@ -733,6 +745,8 @@ export default function OlePlantReport() {
               )}
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

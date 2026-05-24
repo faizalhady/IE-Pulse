@@ -198,6 +198,7 @@ export default function OleWorkcellReport() {
   const rawResults = resultsHook.data ?? [];
   const rawProduction = productionHook.data ?? [];
   const smhList = smhLookupHook.data ?? [];
+  const isLoading = weeklyHook.loading && rawWeekly.length === 0;
 
   const smhMap = useMemo(() => {
     const m = new Map<string, number>();
@@ -434,6 +435,14 @@ export default function OleWorkcellReport() {
 
         {/* LEFT COLUMN */}
         <div className="w-[300px] flex-shrink-0 flex flex-col gap-4">
+          {isLoading ? (
+            <>
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 200 }} />
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 130 }} />
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 240 }} />
+            </>
+          ) : (
+            <>
           {/* Workcell OLE hero + Output/Input strip (merged) */}
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="p-5">
@@ -548,11 +557,20 @@ export default function OleWorkcellReport() {
               );
             })}
           </button>
+            </>
+          )}
         </div>
 
         {/* RIGHT COLUMN */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
 
+          {isLoading ? (
+            <>
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 200 }} />
+              <div className="rounded-xl border border-border bg-muted/40 animate-pulse" style={{ height: 400 }} />
+            </>
+          ) : (
+            <>
           {/* Weekly chart */}
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-3">
@@ -730,6 +748,8 @@ export default function OleWorkcellReport() {
               )}
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>
