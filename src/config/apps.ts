@@ -43,6 +43,8 @@ export interface AppConfig {
   iconBg: string;
   /** URL prefix the app is deployed under, e.g. /ietools/ole */
   basename: string;
+  /** Section in the Google-style AppSwitcher grid (e.g. 'Analytics', 'Operations'). */
+  category?: string;
   navItems: NavItem[];
 }
 
@@ -57,6 +59,7 @@ export const APPS: AppConfig[] = [
     color: 'text-blue-500',
     iconBg: 'bg-blue-500/15',
     basename: '/ietools/pulse',
+    category: 'Analytics',
     navItems: [
       { label: 'Overview', to: '/pulse/overview', icon: Home },
       { label: 'Plants / Layouts', to: '/pulse/plants', icon: MapPin },
@@ -73,6 +76,7 @@ export const APPS: AppConfig[] = [
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/ole',
+    category: 'Analytics',
     navItems: [
       { label: 'Map', to: '/ole/map', icon: MapPin },
       { label: 'Report', to: '/ole/report', icon: LineChart, exact: false },
@@ -97,6 +101,7 @@ export const APPS: AppConfig[] = [
     color: 'text-violet-500',
     iconBg: 'bg-violet-500/15',
     basename: '/ietools/fsms',
+    category: 'Operations',
     navItems: [
       { label: 'Plants', to: '/fsms/plants', icon: MapPin },
       { label: 'Floor Map', to: '/fsms/floor-map', icon: ClipboardList },
@@ -112,6 +117,7 @@ export const APPS: AppConfig[] = [
     color: 'text-orange-500',
     iconBg: 'bg-orange-500/15',
     basename: '/ietools/ebuild',
+    category: 'Operations',
     navItems: [
       { label: 'Build Plan', to: '/ebuild', icon: Home },
     ],
@@ -124,6 +130,7 @@ export const APPS: AppConfig[] = [
     color: 'text-amber-500',
     iconBg: 'bg-amber-500/15',
     basename: '/ietools/iebaseline',
+    category: 'Reference',
     navItems: [
       { label: 'Overview', to: '/iebaseline', icon: Home },
       { label: 'Edit', to: '/iebaseline/edit', icon: Pencil },
