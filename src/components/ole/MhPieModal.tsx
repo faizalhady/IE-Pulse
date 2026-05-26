@@ -5,10 +5,16 @@
  * Buckets: NVA / Lunch / MFG DT / Downtime / MFG Hour Lost.
  */
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useEscapeKey } from '@/hooks/shared/useEscapeKey';
 import { MODAL_DIM } from '@/lib/ole/oleChartStyles';
 import { cn } from '@/lib/utils';
-import { Download, FileSpreadsheet, X } from 'lucide-react';
+import { ChevronDown, Download, FileSpreadsheet, Image as ImageIcon, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -226,21 +232,30 @@ export function MhPieModal({ open, onClose, title, slices, total: totalProp, tot
             </p>
           </div>
           <div className="flex items-center gap-1" data-no-export="true">
-            <button
-              onClick={handleDownload}
-              disabled={downloading}
-              title="Download as PNG"
-              className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-            </button>
-            <button
-              onClick={handleExportExcel}
-              title="Export to Excel (.xlsx)"
-              className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  disabled={downloading}
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground border border-border hover:bg-accent transition-colors disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download
+                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={6} className="w-44">
+                <DropdownMenuItem onClick={handleDownload} className="gap-2 cursor-pointer">
+                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">PNG</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">image</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} className="gap-2 cursor-pointer">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
+                  <span className="text-sm">Excel</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">.xlsx</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
               <X className="h-4 w-4" />
             </button>
@@ -311,16 +326,7 @@ export function MhPieModal({ open, onClose, title, slices, total: totalProp, tot
                 </div>
               );
             })}
-            {/* Summary rows */}
-            <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 px-3 py-2 border-t border-border bg-muted/20">
-              <p className="text-xs font-bold text-foreground">Total</p>
-              <span className="text-xs font-mono font-bold tabular-nums text-right w-14 text-foreground">
-                {total > 0 ? `${((namedTotal / total) * 100).toFixed(2)}%` : '—'}
-              </span>
-              <span className="text-xs font-mono font-bold tabular-nums text-right w-20 text-foreground">
-                {namedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              </span>
-            </div>
+            {/* Overall Total summary row */}
             <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 px-3 py-2 border-t border-border bg-muted/30">
               <p className="text-xs font-bold text-foreground uppercase tracking-wider">Overall Total</p>
               <span className="text-xs font-mono font-bold tabular-nums text-right w-14 text-foreground">100.00%</span>

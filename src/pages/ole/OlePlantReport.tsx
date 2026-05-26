@@ -483,24 +483,12 @@ export default function OlePlantReport() {
                     </div>
                   );
                 })}
-                {/* Total + Overall Total summary rows */}
-                {(() => {
-                  const totalPct = mhTotals.paid > 0 ? (mhTotals.named / mhTotals.paid) * 100 : 0;
-                  return (
-                    <>
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 border-t border-border bg-muted/10">
-                        <p className="text-xs font-bold text-foreground">Total</p>
-                        <span className="text-sm font-mono font-bold tabular-nums text-right w-12 text-foreground">{mhTotals.paid > 0 ? `${totalPct.toFixed(1)}%` : '—'}</span>
-                        <span className="text-sm font-mono font-bold tabular-nums text-right w-16 text-foreground">{mhTotals.named.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                      </div>
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 border-t border-border bg-muted/20">
-                        <p className="text-xs font-bold text-foreground uppercase tracking-wider">Overall Total</p>
-                        <span className="text-sm font-mono font-bold tabular-nums text-right w-12 text-foreground">100.0%</span>
-                        <span className="text-sm font-mono font-bold tabular-nums text-right w-16 text-foreground">{mhTotals.paid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                      </div>
-                    </>
-                  );
-                })()}
+                {/* Overall Total summary row */}
+                <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 border-t border-border bg-muted/20">
+                  <p className="text-xs font-bold text-foreground uppercase tracking-wider">Overall Total</p>
+                  <span className="text-sm font-mono font-bold tabular-nums text-right w-12 text-foreground">100.0%</span>
+                  <span className="text-sm font-mono font-bold tabular-nums text-right w-16 text-foreground">{mhTotals.paid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
               </button>
 
               {/* Indirect labor — input hours only */}
