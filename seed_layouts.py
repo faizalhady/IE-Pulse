@@ -15,7 +15,7 @@ import urllib.request
 import urllib.error
 import random
 
-API_BASE = "http://localhost:3000/fsms"
+API_BASE = "http://localhost:3001/fsms"
 
 # ─── Area → layout name + image path mapping ─────────────────────────────────
 

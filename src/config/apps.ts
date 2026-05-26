@@ -14,13 +14,15 @@ import {
   MapPin,
   Microscope,
   Pencil,
+  Shuffle,
   TableProperties,
-  TrendingUp
+  TrendingUp,
+  Wrench
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline';
+export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'ppqt' | 'lbr' | 'ipk' | 'tools';
 
 export interface NavItem {
   label: string;
@@ -70,7 +72,7 @@ export const APPS: AppConfig[] = [
   },
   {
     id: 'ole',
-    label: 'OLE Analyzer',
+    label: 'OLE',
     description: 'Overall line efficiency analytics',
     icon: TrendingUp,
     color: 'text-emerald-500',
@@ -91,6 +93,45 @@ export const APPS: AppConfig[] = [
       // { label: 'Downtime Management', to: '/ole/downtime', icon: AlertTriangle },
       // { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
       // { label: 'API Test', to: '/ole-mart-api', icon: Database },
+    ],
+  },
+  {
+    id: 'ppqt',
+    label: 'PPQT',
+    description: 'Overall line efficiency analytics',
+    icon: Shuffle,
+    color: 'text-emerald-500',
+    iconBg: 'bg-emerald-500/15',
+    basename: '/ietools/ppqt',
+    category: 'Analytics',
+    navItems: [
+
+    ],
+  },
+  {
+    id: 'lbr',
+    label: 'LBR',
+    description: 'Overall line efficiency analytics',
+    icon: Shuffle,
+    color: 'text-emerald-500',
+    iconBg: 'bg-emerald-500/15',
+    basename: '/ietools/lbr',
+    category: 'Analytics',
+    navItems: [
+
+    ],
+  },
+  {
+    id: 'ipk',
+    label: 'IPK',
+    description: 'Overall line efficiency analytics',
+    icon: Shuffle,
+    color: 'text-emerald-500',
+    iconBg: 'bg-emerald-500/15',
+    basename: '/ietools/ipk',
+    category: 'Analytics',
+    navItems: [
+
     ],
   },
   {
@@ -130,10 +171,24 @@ export const APPS: AppConfig[] = [
     color: 'text-amber-500',
     iconBg: 'bg-amber-500/15',
     basename: '/ietools/iebaseline',
-    category: 'Reference',
+    category: 'Learning & Development',
     navItems: [
       { label: 'Overview', to: '/iebaseline', icon: Home },
       { label: 'Edit', to: '/iebaseline/edit', icon: Pencil },
+    ],
+  },
+  {
+    id: 'tools',
+    label: 'Tools',
+    description: 'Various tools for IE analysis',
+    icon: Wrench,
+    color: 'text-blue-500',
+    iconBg: 'bg-blue-500/15',
+    basename: '/ietools/tools',
+    category: 'Tools',
+    navItems: [
+      { label: 'Overview', to: '/tools', icon: Home },
+      { label: 'Edit', to: '/tools/edit', icon: Pencil },
     ],
   },
 ];

@@ -1,5 +1,6 @@
 import { ALL_BAYS, AREAS, BAY_IMAGES, type Area, type BayDef } from '@/data/bay'
 import { toPixels, useImageRect } from '@/hooks/useImageRect'
+import { assetUrl } from '@/lib/assetUrl'
 import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronLeft, ExternalLink, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -396,7 +397,7 @@ export default function FloorMap() {
                   </div>
                   <div className="h-6 w-16 bg-white/90 rounded flex items-center justify-center p-0.5 shrink-0">
                     <img
-                      src={hovered.customer?.includes('Arista') ? '/workcell logo/Arista.png' : '/workcell logo/keyisght.png'}
+                      src={hovered.customer?.includes('Arista') ? assetUrl('workcell logo/Arista.png') : assetUrl('workcell logo/keyisght.png')}
                       alt="Company Logo"
                       className="h-full w-full object-contain"
                     />
@@ -439,7 +440,7 @@ export default function FloorMap() {
                   <div className="flex items-start gap-3 shrink-0">
                     <div className="h-7 w-20 bg-white/90 rounded flex items-center justify-center p-1">
                       <img
-                        src={selected.customer?.includes('Arista') ? '/workcell logo/Arista.png' : '/workcell logo/keyisght.png'}
+                        src={selected.customer?.includes('Arista') ? assetUrl('workcell logo/Arista.png') : assetUrl('workcell logo/keyisght.png')}
                         alt="Company Logo"
                         className="h-full w-full object-contain"
                       />

@@ -15,11 +15,13 @@ import { ArrowLeft, Maximize2, ChevronUp, ChevronDown, Search } from 'lucide-rea
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import type { Machine, StatusLevel } from '@/types';
 
+import { assetUrl } from '@/lib/assetUrl';
+
 const WORKCELL_LOGOS: Record<string, string> = {
-  arista:   '/workcell logo/Arista.png',
-  keysight: '/workcell logo/keyisght.png',
-  aop:      '/workcell logo/aop.png',
-  micron:   '/workcell logo/micron.png',
+  arista:   assetUrl('workcell logo/Arista.png'),
+  keysight: assetUrl('workcell logo/keyisght.png'),
+  aop:      assetUrl('workcell logo/aop.png'),
+  micron:   assetUrl('workcell logo/micron.png'),
 };
 
 function WorkcellLogo({ workcellId }: { workcellId: string }) {

@@ -3,6 +3,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { assetUrl } from '@/lib/assetUrl';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ArrowUpDown, CalendarIcon, ChevronDown, ChevronUp, RefreshCw, Search, WifiOff } from 'lucide-react';
@@ -11,10 +12,10 @@ import { useEffect, useMemo, useState } from 'react';
 // ─── Customer badge ─────────────────────────────────────────────────────────────
 
 const CUSTOMER_LOGOS: Record<string, string> = {
-  arista: '/workcell logo/Arista.png',
-  keysight: '/workcell logo/keyisght.png',
-  aop: '/workcell logo/aop.png',
-  micron: '/workcell logo/micron.png',
+  arista:   assetUrl('workcell logo/Arista.png'),
+  keysight: assetUrl('workcell logo/keyisght.png'),
+  aop:      assetUrl('workcell logo/aop.png'),
+  micron:   assetUrl('workcell logo/micron.png'),
 };
 
 function CustomerBadge({ name }: { name: string }) {

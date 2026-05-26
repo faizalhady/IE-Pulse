@@ -269,7 +269,7 @@ export default function Plants() {
 
                 {/* PDF canvas or empty state */}
                 {hasLayouts ? (
-                  <PdfViewer src={`/layouts/${encodeURIComponent(activePdf!)}`} />
+                  <PdfViewer src={`${import.meta.env.BASE_URL ?? '/'}layouts/${encodeURIComponent(activePdf!)}`} />
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
                     <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-muted">

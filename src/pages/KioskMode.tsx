@@ -1,5 +1,6 @@
 import { statusText } from '@/components/StatusIndicator';
 import { bays } from '@/mocks/data';
+import { assetUrl } from '@/lib/assetUrl';
 import { cn } from '@/lib/utils';
 import type { StatusLevel } from '@/types';
 import { ArrowLeft, Moon, Sun } from 'lucide-react';
@@ -7,10 +8,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const WORKCELL_LOGOS: Record<string, string> = {
-  arista:   '/workcell logo/Arista.png',
-  keysight: '/workcell logo/keyisght.png',
-  aop:      '/workcell logo/aop.png',
-  micron:   '/workcell logo/micron.png',
+  arista:   assetUrl('workcell logo/Arista.png'),
+  keysight: assetUrl('workcell logo/keyisght.png'),
+  aop:      assetUrl('workcell logo/aop.png'),
+  micron:   assetUrl('workcell logo/micron.png'),
 };
 
 function KioskLogo({ workcellId }: { workcellId: string }) {

@@ -318,7 +318,7 @@ export default function LayoutEditor() {
 
   const handlePickExisting = async (name: string) => {
     const cleanName = name.replace('.png', '').replace('.pdf', '');
-    setImageSrc(`/layouts/${encodeURIComponent(name)}`);
+    setImageSrc(`${import.meta.env.BASE_URL ?? '/'}layouts/${encodeURIComponent(name)}`);
     setLayoutName(cleanName);
     setShowImagePicker(false);
     setPan({ x: 0, y: 0 });
@@ -415,7 +415,7 @@ export default function LayoutEditor() {
           >
             <option value="" disabled>Select layout...</option>
             {EXISTING_IMAGES.map(name => (
-              <option key={name} value={`/layouts/${encodeURIComponent(name)}`}>
+              <option key={name} value={`${import.meta.env.BASE_URL ?? '/'}layouts/${encodeURIComponent(name)}`}>
                 {name.replace('.png', '').replace('.pdf', '')}
               </option>
             ))}

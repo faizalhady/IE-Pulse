@@ -1,9 +1,9 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MhPieModal } from '@/components/ole/MhPieModal';
 import { OleFilterBar } from '@/components/ole/OleFilterBar';
 import { TrendModal } from '@/components/ole/TrendModal';
-import { useOleDateFilter } from '@/hooks/ole/useOleDateFilter';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIndirectLabor, useMhDistribution, useOleWeekly, useOleWorkcells } from '@/hooks/ole/useOleData';
-import { MhPieModal } from '@/components/ole/MhPieModal';
+import { useOleDateFilter } from '@/hooks/ole/useOleDateFilter';
 import type { OleWeeklyResult } from '@/lib/ole/oleApi';
 import {
   aggregateByWeek,
@@ -11,7 +11,6 @@ import {
   calculateOLE,
 } from '@/lib/ole/oleCalculations';
 import { TT } from '@/lib/ole/oleChartStyles';
-import type { WeekRow } from '@/lib/ole/oleTypes';
 import {
   OLE_COLOR,
   OLE_TARGET,
@@ -21,6 +20,7 @@ import {
   formatWeekLabel,
   getOleStatus, oleColor,
 } from '@/lib/ole/oleConstants';
+import type { WeekRow } from '@/lib/ole/oleTypes';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { AlertTriangle, Info } from 'lucide-react';
@@ -156,25 +156,30 @@ export default function OlePlantReport() {
   }, [weekFilteredWeekly, workcellConfigs]);
 
   // ── Man-hours distribution — per shift, summed under plant + date filter ────
+  // mfg_lost is RE-DERIVED from the aggregated buckets (the per-shift formula
+  // is non-linear, so summing per-shift mfg_lost would be wrong).
   const mhTotals = useMemo(() => {
     const rows = mhHook.data ?? [];
     const wcPlantMap = new Map(workcellConfigs.map(w => [w.workcell, w.plant]));
-    const acc = { nva: 0, lunch: 0, mfg_dt: 0, downtime: 0, mfg_lost: 0, paid: 0, output: 0 };
+    const acc = { nva: 0, lunch: 0, mfg_dt: 0, downtime: 0, paid: 0, output: 0 };
     for (const r of rows) {
       const wcPlant = wcPlantMap.get(r.workcell);
       if (!wcPlant) continue;
       if (plant !== 'all' && wcPlant !== plant) continue;
       if (dateFrom && r.date < dateFrom) continue;
       if (dateTo && r.date > dateTo) continue;
-      acc.nva      += r.nva_hours           || 0;
-      acc.lunch    += r.lunch_hours         || 0;
-      acc.mfg_dt   += r.mfg_dt_hours        || 0;
-      acc.downtime += r.downtime_hours      || 0;
-      acc.mfg_lost += r.mfg_lost_hours      || 0;
-      acc.paid     += r.total_paid_hours    || 0;
-      acc.output   += r.effective_output_smh|| 0;
+      acc.nva += r.nva_hours || 0;
+      acc.lunch += r.lunch_hours || 0;
+      acc.mfg_dt += r.mfg_dt_hours || 0;
+      acc.downtime += r.downtime_hours || 0;
+      acc.paid += r.total_paid_hours || 0;
+      acc.output += r.effective_output_smh || 0;
     }
-    return acc;
+    // MFG Hour Lost = paid − named (signed). Keeps row %s additive so the
+    // mfg_lost row's % equals 100% − Σ(other row %).
+    const named = acc.output + acc.nva + acc.lunch + acc.mfg_dt + acc.downtime;
+    const mfg_lost = acc.paid - named;
+    return { ...acc, named, mfg_lost };
   }, [mhHook.data, workcellConfigs, plant, dateFrom, dateTo]);
 
   const [mhModalOpen, setMhModalOpen] = useState(false);
@@ -310,12 +315,12 @@ export default function OlePlantReport() {
           title={`${plant === 'all' ? 'All Plants' : plant} — Man-Hours Distribution`}
           total={mhTotals.paid}
           slices={[
-            { name: 'Output (Productive)', value: mhTotals.output,   color: '#22c55e' },
-            { name: 'NVA Input',           value: mhTotals.nva,      color: '#ef4444' },
-            { name: 'Lunch',               value: mhTotals.lunch,    color: '#94a3b8' },
-            { name: 'MFG DT',              value: mhTotals.mfg_dt,   color: '#6366f1' },
-            { name: 'Downtime',            value: mhTotals.downtime, color: '#a855f7' },
-            { name: 'MFG Hour Lost',       value: mhTotals.mfg_lost, color: '#f59e0b' },
+            { name: 'Output SMH', value: mhTotals.output, color: '#22c55e' },
+            { name: 'NVA Input', value: mhTotals.nva, color: '#ef4444' },
+            { name: 'Lunch', value: mhTotals.lunch, color: '#94a3b8' },
+            { name: 'MFG DT', value: mhTotals.mfg_dt, color: '#6366f1' },
+            { name: 'Downtime', value: mhTotals.downtime, color: '#a855f7' },
+            { name: 'MFG Hour Lost', value: mhTotals.mfg_lost, color: '#f59e0b' },
           ]}
         />
 
@@ -331,185 +336,205 @@ export default function OlePlantReport() {
             </>
           ) : (
             <>
-          {/* Site OLE hero + Output/Input strip (merged) */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold">
-                    {plant} · {weekLabel}
-                  </p>
-                  <p className="text-5xl font-mono font-black mt-1 leading-none" style={{ color: siteColor }}>
-                    {siteOle.toFixed(1)}%
-                  </p>
-                </div>
-                <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0', STATUS_BADGE[siteStatus])}>
-                  {STATUS_LABEL[siteStatus]}
-                </span>
-              </div>
-              <div className="mt-3 h-1 rounded-full bg-muted/40 overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${Math.min(siteOle, 100)}%`, background: siteColor }} />
-              </div>
-            </div>
-
-            <button
-              onClick={() => setTrendModalOpen(true)}
-              className="block w-full text-left border-t border-border hover:bg-muted/20 transition-colors group"
-            >
-              <div className="grid grid-cols-2 divide-x divide-border">
-                <div className="p-3">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Output SMH</p>
-                  <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">
-                    {(site.total_output_smh / 1000).toFixed(1)}k
-                  </p>
-                  <p className="text-[9px] text-muted-foreground"> <span className="text-primary/60">view trend ↗</span></p>
-                </div>
-                <div className="p-3">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
-                  <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">
-                    {(site.total_input_hours / 1000).toFixed(1)}k
-                  </p>
-                  <p className="text-[9px] text-muted-foreground"> <span className="text-violet-400/60">view trend ↗</span></p>
-                </div>
-              </div>
-            </button>
-          </div>
-
-          {/* Plant comparison */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-border">
-              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Plant Comparison</p>
-            </div>
-            {(plant === 'Plant 1'
-              ? [{ label: 'Plant 2', data: plantAgg.p2 }]
-              : plant === 'Plant 2'
-              ? [{ label: 'Plant 1', data: plantAgg.p1 }]
-              : [
-                  { label: 'Plant 1', data: plantAgg.p1 },
-                  { label: 'Plant 2', data: plantAgg.p2 },
-                ]
-            ).map(({ label, data }, i, arr) => {
-              const clr = oleColor(data.ole_pct);
-              return (
-                <div key={label}
-                  className={cn('flex items-center gap-3 px-4 py-3', i < arr.length - 1 && 'border-b border-border')}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-foreground">{label}</p>
-                    <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${Math.min(data.ole_pct, 100)}%`, background: clr }} />
+              {/* Site OLE hero + Output/Input strip (merged) */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold">
+                        {plant} · {weekLabel}
+                      </p>
+                      <p className="text-5xl font-mono font-black mt-1 leading-none" style={{ color: siteColor }}>
+                        {siteOle.toFixed(1)}%
+                      </p>
                     </div>
-                  </div>
-                  <span className="text-xl font-mono font-bold flex-shrink-0" style={{ color: clr }}>
-                    {data.ole_pct.toFixed(1)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Headcount breakdown */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
-              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Headcount</p>
-              <span className="text-base font-mono font-bold text-foreground">
-                {(vaTotal + nvaTotal).toLocaleString()}
-              </span>
-            </div>
-            {[
-              { label: 'VA',  count: vaTotal,  color: 'text-emerald-400', bar: '#22c55e' },
-              { label: 'NVA', count: nvaTotal, color: 'text-amber-400',   bar: '#f59e0b' },
-            ].map((r, i, arr) => {
-              const total = vaTotal + nvaTotal;
-              const pct = total > 0 ? (r.count / total) * 100 : 0;
-              return (
-                <div key={r.label}
-                  className={cn('flex items-center gap-3 px-4 py-3', i < arr.length - 1 && 'border-b border-border')}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-foreground">{r.label}</p>
-                    <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: r.bar }} />
-                    </div>
-                  </div>
-                  <span className={cn('text-xl font-mono font-bold flex-shrink-0', r.color)}>
-                    {r.count > 0 ? r.count.toLocaleString() : '—'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Man-hours distribution — click to open pie modal */}
-          <button
-            type="button"
-            onClick={() => setMhModalOpen(true)}
-            className="rounded-xl border border-border bg-card overflow-hidden w-full text-left hover:border-primary/40 hover:bg-muted/20 transition-colors"
-          >
-            <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
-              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Man-Hrs Distribution</p>
-              <span className="text-[9px] text-muted-foreground">view pie ↗</span>
-            </div>
-            <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-4 py-2 border-b border-border bg-muted/20">
-              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Man Hrs</p>
-              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-12">Percentage</p>
-              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-16">Hrs</p>
-            </div>
-            {[
-              { label: 'NVA Input',     value: mhTotals.nva,      bar: '#ef4444', color: 'text-red-400' },
-              { label: 'Lunch',         value: mhTotals.lunch,    bar: '#94a3b8', color: 'text-slate-400' },
-              { label: 'MFG DT',        value: mhTotals.mfg_dt,   bar: '#6366f1', color: 'text-indigo-400' },
-              { label: 'Downtime',      value: mhTotals.downtime, bar: '#a855f7', color: 'text-purple-400' },
-              { label: 'MFG Hour Lost', value: mhTotals.mfg_lost, bar: '#f59e0b', color: 'text-amber-400' },
-            ].map((r, i, arr) => {
-              const pct = mhTotals.paid > 0 ? (r.value / mhTotals.paid) * 100 : 0;
-              return (
-                <div
-                  key={r.label}
-                  className={cn('grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5', i < arr.length - 1 && 'border-b border-border')}
-                >
-                  <p className="text-xs font-semibold text-foreground truncate">{r.label}</p>
-                  <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-12', r.color)}>
-                    {pct > 0 ? `${pct.toFixed(0)}%` : '—'}
-                  </span>
-                  <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-16', r.color)}>
-                    {r.value > 0 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
-                  </span>
-                </div>
-              );
-            })}
-          </button>
-
-          {/* Indirect labor — input hours only */}
-          {indirectByEntity.length > 0 && (
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Indirect Labor — Input Hours</p>
-              </div>
-              <div className="grid grid-cols-[1fr_auto] gap-x-3 px-4 py-2 border-b border-border bg-muted/20">
-                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Entities</p>
-                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-16">Hrs</p>
-              </div>
-              {indirectByEntity.map((r, i) => {
-                const m = r.label.match(/^P([12])$/);
-                const display = m ? `Warehouse Plant ${m[1]}`
-                  : r.label === 'Support' ? `Support ${r.plant}`
-                  : r.label;
-                return (
-                  <div
-                    key={r.entity}
-                    className={cn('grid grid-cols-[1fr_auto] gap-x-3 items-center px-4 py-2.5', i < indirectByEntity.length - 1 && 'border-b border-border')}
-                  >
-                    <p className="text-xs font-semibold text-foreground truncate">{display}</p>
-                    <span className="text-sm font-mono font-bold text-violet-400 tabular-nums text-right w-16">
-                      {r.hours > 0 ? r.hours.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                    <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0', STATUS_BADGE[siteStatus])}>
+                      {STATUS_LABEL[siteStatus]}
                     </span>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div className="mt-3 h-1 rounded-full bg-muted/40 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${Math.min(siteOle, 100)}%`, background: siteColor }} />
+                  </div>
+                </div>
 
-          {/* Hours distribution */}
-          {/* <div className="rounded-xl border border-border bg-card p-4">
+                <button
+                  onClick={() => setTrendModalOpen(true)}
+                  className="block w-full text-left border-t border-border hover:bg-muted/20 transition-colors group"
+                >
+                  <div className="grid grid-cols-2 divide-x divide-border">
+                    <div className="p-3">
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Output SMH</p>
+                      <p className="text-xl font-mono font-bold text-primary mt-0.5 group-hover:text-primary/80 transition-colors">
+                        {(site.total_output_smh / 1000).toFixed(1)}k
+                      </p>
+                      <p className="text-[9px] text-muted-foreground"> <span className="text-primary/60">view trend ↗</span></p>
+                    </div>
+                    <div className="p-3">
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Input Hours</p>
+                      <p className="text-xl font-mono font-bold text-violet-400 mt-0.5 group-hover:text-violet-400/80 transition-colors">
+                        {(site.total_input_hours / 1000).toFixed(1)}k
+                      </p>
+                      <p className="text-[9px] text-muted-foreground"> <span className="text-violet-400/60">view trend ↗</span></p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Plant comparison */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border">
+                  <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Plant Comparison</p>
+                </div>
+                {(plant === 'Plant 1'
+                  ? [{ label: 'Plant 2', data: plantAgg.p2 }]
+                  : plant === 'Plant 2'
+                    ? [{ label: 'Plant 1', data: plantAgg.p1 }]
+                    : [
+                      { label: 'Plant 1', data: plantAgg.p1 },
+                      { label: 'Plant 2', data: plantAgg.p2 },
+                    ]
+                ).map(({ label, data }, i, arr) => {
+                  const clr = oleColor(data.ole_pct);
+                  return (
+                    <div key={label}
+                      className={cn('flex items-center gap-3 px-4 py-3', i < arr.length - 1 && 'border-b border-border')}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground">{label}</p>
+                        <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(data.ole_pct, 100)}%`, background: clr }} />
+                        </div>
+                      </div>
+                      <span className="text-xl font-mono font-bold flex-shrink-0" style={{ color: clr }}>
+                        {data.ole_pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Headcount breakdown */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Headcount</p>
+                  <span className="text-base font-mono font-bold text-foreground">
+                    {(vaTotal + nvaTotal).toLocaleString()}
+                  </span>
+                </div>
+                {[
+                  { label: 'VA', count: vaTotal, color: 'text-emerald-400', bar: '#22c55e' },
+                  { label: 'NVA', count: nvaTotal, color: 'text-amber-400', bar: '#f59e0b' },
+                ].map((r, i, arr) => {
+                  const total = vaTotal + nvaTotal;
+                  const pct = total > 0 ? (r.count / total) * 100 : 0;
+                  return (
+                    <div key={r.label}
+                      className={cn('flex items-center gap-3 px-4 py-3', i < arr.length - 1 && 'border-b border-border')}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground">{r.label}</p>
+                        <div className="mt-1.5 h-1 rounded-full bg-muted/40 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: r.bar }} />
+                        </div>
+                      </div>
+                      <span className={cn('text-xl font-mono font-bold flex-shrink-0', r.color)}>
+                        {r.count > 0 ? r.count.toLocaleString() : '—'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Man-hours distribution — click to open pie modal */}
+              <button
+                type="button"
+                onClick={() => setMhModalOpen(true)}
+                className="rounded-xl border border-border bg-card overflow-hidden w-full text-left hover:border-primary/40 hover:bg-muted/20 transition-colors"
+              >
+                <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Man-Hrs Distribution</p>
+                  <span className="text-[9px] text-muted-foreground">view pie ↗</span>
+                </div>
+                <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-4 py-2 border-b border-border bg-muted/20">
+                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Man Hrs</p>
+                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-12">%</p>
+                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-16">Hrs</p>
+                </div>
+                {[
+                  { label: 'Output (OLE)', value: mhTotals.output, color: 'text-emerald-400' },
+                  { label: 'NVA Input', value: mhTotals.nva, color: 'text-red-400' },
+                  { label: 'Lunch', value: mhTotals.lunch, color: 'text-slate-400' },
+                  { label: 'MFG DT', value: mhTotals.mfg_dt, color: 'text-indigo-400' },
+                  { label: 'Downtime', value: mhTotals.downtime, color: 'text-purple-400' },
+                  { label: 'MFG Hour Lost', value: mhTotals.mfg_lost, color: 'text-amber-400' },
+                ].map((r, i, arr) => {
+                  const pct = mhTotals.paid > 0 ? (r.value / mhTotals.paid) * 100 : 0;
+                  const showPct = mhTotals.paid > 0 && Math.abs(r.value) > 0.01;
+                  return (
+                    <div
+                      key={r.label}
+                      className={cn('grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5', i < arr.length - 1 && 'border-b border-border')}
+                    >
+                      <p className="text-xs font-semibold text-foreground truncate">{r.label}</p>
+                      <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-12', r.color)}>
+                        {showPct ? `${pct.toFixed(1)}%` : '—'}
+                      </span>
+                      <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-16', r.color)}>
+                        {Math.abs(r.value) > 0.01 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                      </span>
+                    </div>
+                  );
+                })}
+                {/* Total + Overall Total summary rows */}
+                {(() => {
+                  const totalPct = mhTotals.paid > 0 ? (mhTotals.named / mhTotals.paid) * 100 : 0;
+                  return (
+                    <>
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 border-t border-border bg-muted/10">
+                        <p className="text-xs font-bold text-foreground">Total</p>
+                        <span className="text-sm font-mono font-bold tabular-nums text-right w-12 text-foreground">{mhTotals.paid > 0 ? `${totalPct.toFixed(1)}%` : '—'}</span>
+                        <span className="text-sm font-mono font-bold tabular-nums text-right w-16 text-foreground">{mhTotals.named.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 border-t border-border bg-muted/20">
+                        <p className="text-xs font-bold text-foreground uppercase tracking-wider">Overall Total</p>
+                        <span className="text-sm font-mono font-bold tabular-nums text-right w-12 text-foreground">100.0%</span>
+                        <span className="text-sm font-mono font-bold tabular-nums text-right w-16 text-foreground">{mhTotals.paid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </button>
+
+              {/* Indirect labor — input hours only */}
+              {indirectByEntity.length > 0 && (
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-border">
+                    <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Indirect Labor — Input Hours</p>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto] gap-x-3 px-4 py-2 border-b border-border bg-muted/20">
+                    <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Entities</p>
+                    <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-16">Hrs</p>
+                  </div>
+                  {indirectByEntity.map((r, i) => {
+                    const m = r.label.match(/^P([12])$/);
+                    const display = m ? `Warehouse Plant ${m[1]}`
+                      : r.label === 'Support' ? `Support ${r.plant}`
+                        : r.label;
+                    return (
+                      <div
+                        key={r.entity}
+                        className={cn('grid grid-cols-[1fr_auto] gap-x-3 items-center px-4 py-2.5', i < indirectByEntity.length - 1 && 'border-b border-border')}
+                      >
+                        <p className="text-xs font-semibold text-foreground truncate">{display}</p>
+                        <span className="text-sm font-mono font-bold text-violet-400 tabular-nums text-right w-16">
+                          {r.hours > 0 ? r.hours.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Hours distribution */}
+              {/* <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider mb-3">Hours Distribution</p>
             <div className="space-y-2">
               {[
@@ -527,8 +552,8 @@ export default function OlePlantReport() {
             </div>
           </div> */}
 
-          {/* Attention items */}
-          {/* {attention.length > 0 && (
+              {/* Attention items */}
+              {/* {attention.length > 0 && (
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <div className="px-4 py-2.5 border-b border-border">
                 <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Attention</p>
@@ -572,134 +597,117 @@ export default function OlePlantReport() {
             </>
           ) : (
             <>
-          {/* Weekly trend chart */}
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-xs font-semibold text-foreground">Weekly OLE Trend — FY26</p>
-                <p className="text-[9px] text-muted-foreground flex items-center gap-1">
-                  <Info className="h-2.5 w-2.5" />
-                  Click a bar to filter by week · highlighted = active
-                </p>
-              </div>
-              <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" /> ≥{OLE_TARGET}%</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" /> 45–{OLE_TARGET - 1}%</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" /> &lt;45%</span>
-              </div>
-            </div>
-            <div style={{ height: 180 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  data={siteWeekly}
-                  margin={{ top: 24, right: 4, left: -24, bottom: 0 }}
-                  onClick={(d) => {
-                    if (!d?.activePayload) return;
-                    const iw = d.activePayload[0]?.payload?.isoWeek;
-                    const found = weeks.find(w => w.isoWeek === iw);
-                    if (found) selectWeek(found);
-                  }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="w" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                  <Tooltip {...TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']}
-                    cursor={{ fill: 'hsl(var(--primary) / 0.06)' }}
-                  />
-                  <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
-                  {selectedWeek !== null && (
-                    <ReferenceLine
-                      x={formatWeekLabel(selectedWeek)}
-                      stroke="hsl(var(--foreground))"
-                      strokeWidth={1.5}
-                      strokeDasharray="4 2"
-                      strokeOpacity={0.4}
-                    />
-                  )}
-                  <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer"
-                    label={(props: any) => {
-                      const { x, y, width, value } = props;
-                      const d = siteWeekly[props.index];
-                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
-                      return (
-                        <text
-                          x={x + width / 2}
-                          y={y - 4}
-                          textAnchor="middle"
-                          fontSize={15}
-                          fontFamily="monospace"
-                          fontWeight="bold"
-                          fill={baseColor}
-                          opacity={1}
-                          fillOpacity={1}
-                        >
-                          {Number(value).toFixed(1)}%
-                        </text>
-                      );
-                    }}
-                  >
-                    {siteWeekly.map((d, i) => {
-                      const isSelected = d.isoWeek === selectedWeek;
-                      const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
-                      return (
-                        <Cell
-                          key={i}
-                          fill={baseColor}
-                          opacity={isSelected ? 1 : 0.45}
-                          stroke={isSelected ? baseColor : 'none'}
-                          strokeWidth={isSelected ? 2 : 0}
+              {/* Weekly trend chart */}
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Weekly OLE Trend — FY26</p>
+                    <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                      <Info className="h-2.5 w-2.5" />
+                      Click a bar to filter by week · highlighted = active
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" /> ≥{OLE_TARGET}%</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" /> 45–{OLE_TARGET - 1}%</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" /> &lt;45%</span>
+                  </div>
+                </div>
+                <div style={{ height: 180 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart
+                      data={siteWeekly}
+                      margin={{ top: 24, right: 4, left: -24, bottom: 0 }}
+                      onClick={(d) => {
+                        if (!d?.activePayload) return;
+                        const iw = d.activePayload[0]?.payload?.isoWeek;
+                        const found = weeks.find(w => w.isoWeek === iw);
+                        if (found) selectWeek(found);
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                      <XAxis dataKey="w" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                      <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                      <Tooltip {...TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']}
+                        cursor={{ fill: 'hsl(var(--primary) / 0.06)' }}
+                      />
+                      <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
+                      {selectedWeek !== null && (
+                        <ReferenceLine
+                          x={formatWeekLabel(selectedWeek)}
+                          stroke="hsl(var(--foreground))"
+                          strokeWidth={1.5}
+                          strokeDasharray="4 2"
+                          strokeOpacity={0.4}
                         />
-                      );
-                    })}
-                  </Bar>
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Workcell table */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
-              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">
-                Workcell Performance · {workcellsSorted.length} workcells · {weekLabel}
-              </p>
-              <p className="text-[9px] text-muted-foreground">Sorted lowest OLE first · click name for detail</p>
-            </div>
-            <div className="overflow-x-auto">
-              <div className="grid bg-muted/40 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
-                style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem' }}>
-                {['#', 'Workcell', 'Plant', 'OLE %', 'Output SMH', 'Input Hrs', 'Status'].map(h => (
-                  <div key={h} className="px-2 py-2">{h}</div>
-                ))}
-              </div>
-              {workcellsSorted.map((wc, idx) => {
-                const st = getOleStatus(wc.ole_pct);
-                const clr = oleColor(wc.ole_pct);
-                const wcConf = workcellConfigs.find(w => w.workcell === wc.workcell);
-                const k = wc.workcell.toLowerCase().replace(/[^a-z]/g, '');
-                const lk = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
-                const logo = lk ? WORKCELL_LOGOS[lk] : null;
-                return (
-                  <div key={wc.workcell}
-                    className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                    style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem', height: 44 }}
-                    onClick={() => {
-                      const params = new URLSearchParams();
-                      if (selectedWeek !== null) params.set('week', String(selectedWeek));
-                      if (dateFrom) params.set('from', dateFrom);
-                      if (dateTo) params.set('to', dateTo);
-                      if (plant !== 'all') params.set('plant', plant);
-                      const qs = params.toString();
-                      navigate(`/ole/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
-                    }}>
-                    <div className="px-2 text-[9px] text-muted-foreground font-mono">{idx + 1}</div>
-                    <div className="px-2 flex items-center gap-2">
-                      {logo && (
-                        <div className="w-16 h-6 rounded flex-shrink-0 flex items-center justify-center overflow-hidden border border-border bg-white">
-                          <img src={logo} alt={wc.workcell} className="w-full h-full object-contain p-0.5" />
-                        </div>
                       )}
-                      <button
+                      <Bar dataKey="ole" radius={[3, 3, 0, 0]} maxBarSize={24} cursor="pointer"
+                        label={(props: any) => {
+                          const { x, y, width, value } = props;
+                          const d = siteWeekly[props.index];
+                          const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
+                          return (
+                            <text
+                              x={x + width / 2}
+                              y={y - 4}
+                              textAnchor="middle"
+                              fontSize={15}
+                              fontFamily="monospace"
+                              fontWeight="bold"
+                              fill={baseColor}
+                              opacity={1}
+                              fillOpacity={1}
+                            >
+                              {Number(value).toFixed(1)}%
+                            </text>
+                          );
+                        }}
+                      >
+                        {siteWeekly.map((d, i) => {
+                          const isSelected = d.isoWeek === selectedWeek;
+                          const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
+                          return (
+                            <Cell
+                              key={i}
+                              fill={baseColor}
+                              opacity={isSelected ? 1 : 0.45}
+                              stroke={isSelected ? baseColor : 'none'}
+                              strokeWidth={isSelected ? 2 : 0}
+                            />
+                          );
+                        })}
+                      </Bar>
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Workcell table */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">
+                    Workcell Performance · {workcellsSorted.length} workcells · {weekLabel}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground">Sorted lowest OLE first · click name for detail</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <div className="grid bg-muted/40 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
+                    style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem' }}>
+                    {['#', 'Workcell', 'Plant', 'OLE %', 'Output SMH', 'Input Hrs', 'Status'].map(h => (
+                      <div key={h} className="px-2 py-2">{h}</div>
+                    ))}
+                  </div>
+                  {workcellsSorted.map((wc, idx) => {
+                    const st = getOleStatus(wc.ole_pct);
+                    const clr = oleColor(wc.ole_pct);
+                    const wcConf = workcellConfigs.find(w => w.workcell === wc.workcell);
+                    const k = wc.workcell.toLowerCase().replace(/[^a-z]/g, '');
+                    const lk = Object.keys(WORKCELL_LOGOS).find(x => k.startsWith(x));
+                    const logo = lk ? WORKCELL_LOGOS[lk] : null;
+                    return (
+                      <div key={wc.workcell}
+                        className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                        style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem', height: 44 }}
                         onClick={() => {
                           const params = new URLSearchParams();
                           if (selectedWeek !== null) params.set('week', String(selectedWeek));
@@ -708,43 +716,60 @@ export default function OlePlantReport() {
                           if (plant !== 'all') params.set('plant', plant);
                           const qs = params.toString();
                           navigate(`/ole/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
-                        }}
-                        className="text-[10px] font-semibold text-foreground hover:text-primary transition-colors truncate text-left">
-                        {wc.workcell}
-                      </button>
-                      {wc.flagged_shifts > 0 && <AlertTriangle className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
-                    </div>
-                    <div className="px-2 text-[9px] text-muted-foreground">{wcConf?.plant}</div>
-                    <div className="px-2">
-                      <span className={cn('text-sm font-mono font-bold block', OLE_COLOR[st])}>
-                        {wc.ole_pct.toFixed(1)}%
-                      </span>
-                      <div className="h-0.5 rounded-full bg-muted/40 overflow-hidden mt-0.5" style={{ width: 56 }}>
-                        <div className="h-full rounded-full" style={{ width: `${Math.min(wc.ole_pct, 100)}%`, background: clr }} />
+                        }}>
+                        <div className="px-2 text-[9px] text-muted-foreground font-mono">{idx + 1}</div>
+                        <div className="px-2 flex items-center gap-2">
+                          {logo && (
+                            <div className="w-16 h-6 rounded flex-shrink-0 flex items-center justify-center overflow-hidden border border-border bg-white">
+                              <img src={logo} alt={wc.workcell} className="w-full h-full object-contain p-0.5" />
+                            </div>
+                          )}
+                          <button
+                            onClick={() => {
+                              const params = new URLSearchParams();
+                              if (selectedWeek !== null) params.set('week', String(selectedWeek));
+                              if (dateFrom) params.set('from', dateFrom);
+                              if (dateTo) params.set('to', dateTo);
+                              if (plant !== 'all') params.set('plant', plant);
+                              const qs = params.toString();
+                              navigate(`/ole/report/wc/${encodeURIComponent(wc.workcell)}${qs ? `?${qs}` : ''}`);
+                            }}
+                            className="text-[10px] font-semibold text-foreground hover:text-primary transition-colors truncate text-left">
+                            {wc.workcell}
+                          </button>
+                          {wc.flagged_shifts > 0 && <AlertTriangle className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
+                        </div>
+                        <div className="px-2 text-[9px] text-muted-foreground">{wcConf?.plant}</div>
+                        <div className="px-2">
+                          <span className={cn('text-sm font-mono font-bold block', OLE_COLOR[st])}>
+                            {wc.ole_pct.toFixed(1)}%
+                          </span>
+                          <div className="h-0.5 rounded-full bg-muted/40 overflow-hidden mt-0.5" style={{ width: 56 }}>
+                            <div className="h-full rounded-full" style={{ width: `${Math.min(wc.ole_pct, 100)}%`, background: clr }} />
+                          </div>
+                        </div>
+                        <div className="px-2 text-[10px] font-mono text-foreground text-right">
+                          {Math.round(wc.total_output_smh).toLocaleString()}
+                        </div>
+                        <div className="px-2 text-[10px] font-mono text-foreground text-right">
+                          {Math.round(wc.total_input_hours).toLocaleString()}
+                        </div>
+                        {/* <div className="px-2 text-[10px] font-mono text-foreground text-right">{wc.total_shifts}</div> */}
+                        <div className="px-2">
+                          <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border whitespace-nowrap', STATUS_BADGE[st])}>
+                            {STATUS_LABEL[st]}
+                          </span>
+                        </div>
                       </div>
+                    );
+                  })}
+                  {workcellsSorted.length === 0 && (
+                    <div className="px-4 py-8 text-center text-[10px] text-muted-foreground">
+                      No data for selected period
                     </div>
-                    <div className="px-2 text-[10px] font-mono text-foreground text-right">
-                      {Math.round(wc.total_output_smh).toLocaleString()}
-                    </div>
-                    <div className="px-2 text-[10px] font-mono text-foreground text-right">
-                      {Math.round(wc.total_input_hours).toLocaleString()}
-                    </div>
-                    {/* <div className="px-2 text-[10px] font-mono text-foreground text-right">{wc.total_shifts}</div> */}
-                    <div className="px-2">
-                      <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border whitespace-nowrap', STATUS_BADGE[st])}>
-                        {STATUS_LABEL[st]}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {workcellsSorted.length === 0 && (
-                <div className="px-4 py-8 text-center text-[10px] text-muted-foreground">
-                  No data for selected period
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
             </>
           )}
         </div>

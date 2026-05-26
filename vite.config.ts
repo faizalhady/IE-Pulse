@@ -43,6 +43,12 @@ export default defineConfig(({ command, mode }) => {
         // No /userinfo proxy: NTLM can't be forwarded by Vite's proxy
         // (would 401). Dev calls AD_GET directly via its absolute URL;
         // see USER_INFO_URL in src/hooks/useCurrentUser.ts.
+        //
+        // OLE FastAPI backend (DuckDB/Parquet OLE mart) is reached only via
+        // its specific paths — /ietools/ole/api/* (prod-shaped) and /ole-api/*
+        // (dev test page). Everything else under /api/* goes to the MES Hub
+        // on :3001, which serves /workcells, /locations, /production,
+        // /assemblies, /fsms, /ebuild routes at root.
         '/ietools/ole/api': {
           target: 'http://localhost:8000',
           changeOrigin: true,
@@ -54,8 +60,9 @@ export default defineConfig(({ command, mode }) => {
           rewrite: (p) => p.replace(/^\/ole-api/, ''),
         },
         '/api': {
-          target: 'http://localhost:8000',
+          target: 'http://localhost:9009',
           changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/api/, ''),
         },
       },
     },

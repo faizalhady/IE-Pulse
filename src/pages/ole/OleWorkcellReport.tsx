@@ -321,9 +321,11 @@ export default function OleWorkcellReport() {
   const kpiHrs = useMemo(() => laborRows.reduce((s, r) => s + r.total_input_hours, 0), [laborRows]);
 
   // ── Man-hours distribution — pre-computed per shift, summed under current filter
+  // mfg_lost is RE-DERIVED from aggregated buckets (the per-shift formula is
+  // non-linear, so summing per-shift mfg_lost would be wrong).
   const mhTotals = useMemo(() => {
     const rows = mhHook.data ?? [];
-    const acc = { nva: 0, lunch: 0, mfg_dt: 0, downtime: 0, mfg_lost: 0, paid: 0 };
+    const acc = { nva: 0, lunch: 0, mfg_dt: 0, downtime: 0, paid: 0, output: 0 };
     for (const r of rows) {
       if (r.workcell !== workcell) continue;
       if (selectedWeek !== null) {
@@ -332,14 +334,18 @@ export default function OleWorkcellReport() {
         if (dateFrom && r.date < dateFrom) continue;
         if (dateTo && r.date > dateTo) continue;
       }
-      acc.nva      += r.nva_hours       || 0;
-      acc.lunch    += r.lunch_hours     || 0;
-      acc.mfg_dt   += r.mfg_dt_hours    || 0;
-      acc.downtime += r.downtime_hours  || 0;
-      acc.mfg_lost += r.mfg_lost_hours  || 0;
-      acc.paid     += r.total_paid_hours || 0;
+      acc.nva      += r.nva_hours              || 0;
+      acc.lunch    += r.lunch_hours            || 0;
+      acc.mfg_dt   += r.mfg_dt_hours           || 0;
+      acc.downtime += r.downtime_hours         || 0;
+      acc.paid     += r.total_paid_hours       || 0;
+      acc.output   += r.effective_output_smh   || 0;
     }
-    return acc;
+    // MFG Hour Lost = paid − named (signed). Keeps row %s additive so the
+    // mfg_lost row's % equals 100% − Σ(other row %).
+    const named = acc.output + acc.nva + acc.lunch + acc.mfg_dt + acc.downtime;
+    const mfg_lost = acc.paid - named;
+    return { ...acc, named, mfg_lost };
   }, [mhHook.data, workcell, selectedWeek, dateFrom, dateTo, filteredWeekly]);
 
   // Overall VA / NVA counts — pre-aggregated in ole_computed (no paid_hours walk).
@@ -390,7 +396,7 @@ export default function OleWorkcellReport() {
         title={`${workcell} — Man-Hours Distribution`}
         total={mhTotals.paid}
         slices={[
-          { name: 'Output (Productive)', value: kpiSmh,         color: '#22c55e' },
+          { name: 'Output SMH',          value: kpiSmh,         color: '#22c55e' },
           { name: 'NVA Input',     value: mhTotals.nva,          color: '#ef4444' },
           { name: 'Lunch',         value: mhTotals.lunch,        color: '#94a3b8' },
           { name: 'MFG DT',        value: mhTotals.mfg_dt,       color: '#6366f1' },
@@ -530,17 +536,19 @@ export default function OleWorkcellReport() {
             </div>
             <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-4 py-2 border-b border-border bg-muted/20">
               <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Man Hrs</p>
-              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-12">Percentage</p>
+              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-12">%</p>
               <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-16">Hrs</p>
             </div>
             {[
-              { label: 'NVA Input',     value: mhTotals.nva,      bar: '#ef4444', color: 'text-red-400' },
-              { label: 'Lunch',         value: mhTotals.lunch,    bar: '#94a3b8', color: 'text-slate-400' },
-              { label: 'MFG DT',        value: mhTotals.mfg_dt,   bar: '#6366f1', color: 'text-indigo-400' },
-              { label: 'Downtime',      value: mhTotals.downtime, bar: '#a855f7', color: 'text-purple-400' },
-              { label: 'MFG Hour Lost', value: mhTotals.mfg_lost, bar: '#f59e0b', color: 'text-amber-400' },
+              { label: 'Output (OLE)',  value: mhTotals.output,   color: 'text-emerald-400' },
+              { label: 'NVA Input',     value: mhTotals.nva,      color: 'text-red-400' },
+              { label: 'Lunch',         value: mhTotals.lunch,    color: 'text-slate-400' },
+              { label: 'MFG DT',        value: mhTotals.mfg_dt,   color: 'text-indigo-400' },
+              { label: 'Downtime',      value: mhTotals.downtime, color: 'text-purple-400' },
+              { label: 'MFG Hour Lost', value: mhTotals.mfg_lost, color: 'text-amber-400' },
             ].map((r, i, arr) => {
               const pct = mhTotals.paid > 0 ? (r.value / mhTotals.paid) * 100 : 0;
+              const showPct = mhTotals.paid > 0 && Math.abs(r.value) > 0.01;
               return (
                 <div
                   key={r.label}
@@ -548,14 +556,31 @@ export default function OleWorkcellReport() {
                 >
                   <p className="text-xs font-semibold text-foreground truncate">{r.label}</p>
                   <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-12', r.color)}>
-                    {pct > 0 ? `${pct.toFixed(0)}%` : '—'}
+                    {showPct ? `${pct.toFixed(1)}%` : '—'}
                   </span>
                   <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-16', r.color)}>
-                    {r.value > 0 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                    {Math.abs(r.value) > 0.01 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
                   </span>
                 </div>
               );
             })}
+            {(() => {
+              const totalPct = mhTotals.paid > 0 ? (mhTotals.named / mhTotals.paid) * 100 : 0;
+              return (
+                <>
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 border-t border-border bg-muted/10">
+                    <p className="text-xs font-bold text-foreground">Total</p>
+                    <span className="text-sm font-mono font-bold tabular-nums text-right w-12 text-foreground">{mhTotals.paid > 0 ? `${totalPct.toFixed(1)}%` : '—'}</span>
+                    <span className="text-sm font-mono font-bold tabular-nums text-right w-16 text-foreground">{mhTotals.named.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 border-t border-border bg-muted/20">
+                    <p className="text-xs font-bold text-foreground uppercase tracking-wider">Overall Total</p>
+                    <span className="text-sm font-mono font-bold tabular-nums text-right w-12 text-foreground">100.0%</span>
+                    <span className="text-sm font-mono font-bold tabular-nums text-right w-16 text-foreground">{mhTotals.paid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                </>
+              );
+            })()}
           </button>
             </>
           )}

@@ -2429,10 +2429,12 @@ export const ALL_BAYS: BayDef[] = [
 export const AREAS = ['P1A', 'P1B-G', 'P1B-L2', 'P1B-L3', 'P1C'] as const
 export type Area = typeof AREAS[number]
 
+const ASSET_BASE = import.meta.env.BASE_URL ?? '/';
+
 export const BAY_IMAGES: Record<string, string> = {
-  'P1A': '/floor-maps/P1A.png',
-  'P1B-G': '/floor-maps/P1B.png',
-  'P1B-L2': '/floor-maps/P1B L2.png',
-  'P1B-L3': '/floor-maps/P1B L3.png',
-  'P1C': '/floor-maps/P1C.png',
+  'P1A':   `${ASSET_BASE}floor-maps/P1A.png`,
+  'P1B-G': `${ASSET_BASE}floor-maps/P1B.png`,
+  'P1B-L2':`${ASSET_BASE}floor-maps/P1B L2.png`,
+  'P1B-L3':`${ASSET_BASE}floor-maps/P1B L3.png`,
+  'P1C':   `${ASSET_BASE}floor-maps/P1C.png`,
 }
