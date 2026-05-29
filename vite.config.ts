@@ -12,6 +12,7 @@ const APP_BASENAMES: Record<string, string> = {
   fsms: '/ietools/fsms/',
   ebuild: '/ietools/ebuild/',
   iebaseline: '/ietools/iebaseline/',
+  'cycle-time': '/ietools/cycle-time/',
 };
 
 export default defineConfig(({ command, mode }) => {
@@ -53,6 +54,14 @@ export default defineConfig(({ command, mode }) => {
           target: 'http://localhost:8000',
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/ietools\/ole\/api/, '/api'),
+        },
+        // Cycle Time module — same backend, different URL prefix.
+        // Backend mounts router at /api/cycle-time/* so we rewrite the
+        // FE prefix to that.
+        '/ietools/cycle-time/api': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/ietools\/cycle-time\/api/, '/api/cycle-time'),
         },
         '/ole-api': {
           target: 'http://localhost:8000',

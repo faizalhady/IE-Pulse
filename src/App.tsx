@@ -27,6 +27,7 @@ import OLESmh from "@/pages/ole/OLESmh";
 import OlePlantReport from "@/pages/ole/OlePlantReport";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
+import CycleTimeHome from "@/pages/cycletime/CycleTimeHome";
 import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -100,6 +101,10 @@ function AppShell() {
               <Route path="/fsms/floor-map" element={<FloorMap />} />
               <Route path="/fsms/editor" element={<LayoutEditor />} />
               <Route path="/fsms/bays" element={<BayManagement />} />
+            </>}
+
+            {includesApp('cycle-time') && <>
+              <Route path="/cycle-time" element={<CycleTimeHome />} />
             </>}
 
             {includesApp('ebuild') && <>

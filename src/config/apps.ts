@@ -9,20 +9,23 @@ import {
   FileText,
   FlaskConical,
   Home,
+  Kanban,
+  Layers,
   LineChart,
   LucideIcon,
   MapPin,
   Microscope,
   Pencil,
-  Shuffle,
+  Scale,
   TableProperties,
-  TrendingUp,
+  Timer,
+  UserCheck,
   Wrench
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'ppqt' | 'lbr' | 'ipk' | 'tools';
+export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'tools';
 
 export interface NavItem {
   label: string;
@@ -74,7 +77,7 @@ export const APPS: AppConfig[] = [
     id: 'ole',
     label: 'OLE',
     description: 'Overall line efficiency analytics',
-    icon: TrendingUp,
+    icon: UserCheck,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/ole',
@@ -96,10 +99,23 @@ export const APPS: AppConfig[] = [
     ],
   },
   {
+    id: 'cycle-time',
+    label: 'Cycle Time',
+    description: 'Cycle time analysis and reporting',
+    icon: Timer,
+    color: 'text-emerald-500',
+    iconBg: 'bg-emerald-500/15',
+    basename: '/ietools/cycle-time',
+    category: 'Analytics',
+    navItems: [
+      { label: 'Overview', to: '/cycle-time', icon: Home },
+    ],
+  },
+  {
     id: 'ppqt',
     label: 'PPQT',
     description: 'Overall line efficiency analytics',
-    icon: Shuffle,
+    icon: Layers,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/ppqt',
@@ -112,7 +128,7 @@ export const APPS: AppConfig[] = [
     id: 'lbr',
     label: 'LBR',
     description: 'Overall line efficiency analytics',
-    icon: Shuffle,
+    icon: Scale,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/lbr',
@@ -125,7 +141,7 @@ export const APPS: AppConfig[] = [
     id: 'ipk',
     label: 'IPK',
     description: 'Overall line efficiency analytics',
-    icon: Shuffle,
+    icon: Kanban,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/ipk',
