@@ -26,3 +26,7 @@ dist-ssr
 # Local-only dev artifacts
 .claude/
 plans/knowledge/
+
+# Reference files (kept locally, not part of the codebase)
+plans/*.xlsx
+src/pages/swagger.json
