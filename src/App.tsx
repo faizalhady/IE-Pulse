@@ -28,6 +28,13 @@ import OlePlantReport from "@/pages/ole/OlePlantReport";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
 import CycleTimeHome from "@/pages/cycletime/CycleTimeHome";
+import PPQTHome from "@/pages/ppqt/PPQTHome";
+import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
+import PPQTWorkcellProfile from "@/pages/ppqt/PPQTWorkcellProfile";
+import PPQTSubWorkcenterProfile from "@/pages/ppqt/PPQTSubWorkcenterProfile";
+import PPQTProcessDetail from "@/pages/ppqt/PPQTProcessDetail";
+import PPQTAssemblyDetail from "@/pages/ppqt/PPQTAssemblyDetail";
+import PPQTConfig from "@/pages/ppqt/PPQTConfig";
 import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -105,6 +112,16 @@ function AppShell() {
 
             {includesApp('cycle-time') && <>
               <Route path="/cycle-time" element={<CycleTimeHome />} />
+            </>}
+
+            {includesApp('ppqt') && <>
+              <Route path="/ppqt"                                                                       element={<PPQTHome />} />
+              <Route path="/ppqt/workcell"                                                              element={<PPQTWorkcells />} />
+              <Route path="/ppqt/workcell/:workcell"                                                    element={<PPQTWorkcellProfile />} />
+              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter"                                  element={<PPQTSubWorkcenterProfile />} />
+              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process"                    element={<PPQTProcessDetail />} />
+              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process/asm/:assembly"      element={<PPQTAssemblyDetail />} />
+              <Route path="/ppqt/config"                                                                element={<PPQTConfig />} />
             </>}
 
             {includesApp('ebuild') && <>

@@ -11,12 +11,14 @@ import {
   Home,
   Kanban,
   Layers,
+  LayoutDashboard,
   LineChart,
   LucideIcon,
   MapPin,
   Microscope,
   Pencil,
   Scale,
+  Settings2,
   TableProperties,
   Timer,
   UserCheck,
@@ -114,14 +116,16 @@ export const APPS: AppConfig[] = [
   {
     id: 'ppqt',
     label: 'PPQT',
-    description: 'Overall line efficiency analytics',
+    description: 'Capacity sizing and Takt time analysis',
     icon: Layers,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/ppqt',
     category: 'Analytics',
     navItems: [
-
+      { label: 'Dashboard', to: '/ppqt',          icon: LayoutDashboard },
+      { label: 'Workcells', to: '/ppqt/workcell', icon: Factory },
+      { label: 'Config',    to: '/ppqt/config',   icon: Settings2 },
     ],
   },
   {
