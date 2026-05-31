@@ -61,7 +61,7 @@ const META_COLS: MetaCol[] = [
 ];
 
 const ROW_HEIGHT = 28; // px — matches Tailwind h-7
-const HEADER_HEIGHT = 36; // px — single header row
+const HEADER_MIN_HEIGHT = 38; // px — expands when an alias maps to multiple processes
 
 type SortState = { col: string; dir: 'asc' | 'desc' } | null;
 
@@ -187,37 +187,41 @@ export default function CycleTimeTable({
             <div
               key={c.key as string}
               onClick={() => onHeaderClick(c.key as string)}
-              className={`group cursor-pointer select-none bg-muted hover:bg-muted-foreground/10 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-20 flex items-center ${
+              className={`group cursor-pointer select-none bg-muted hover:bg-muted-foreground/10 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-20 flex items-center overflow-hidden ${
                 c.sticky ? 'sticky left-0 z-30' : ''
               }`}
-              style={{ height: HEADER_HEIGHT, gridRow: 1, gridColumn: idx + 1 }}
+              style={{ minHeight: HEADER_MIN_HEIGHT, gridRow: 1, gridColumn: idx + 1 }}
             >
-              {c.label}
+              <span className="truncate">{c.label}</span>
               <SortIcon col={c.key as string} />
             </div>
           ))}
           {processCols.map((p, idx) => {
+            // `p` is the column key from the parquet — that's the ALIAS
+            // (or the Process code, when alias was null and ingest fell back).
+            // Header shows the underlying Process code(s); tooltip shows the Alias.
             const info = aliasMap?.[p];
+            // Process labels: one per line when an alias maps to multiple processes.
+            const labels = info && info.processes.length ? info.processes : [p];
             const tooltip = info && info.processes.length
-              ? `${p}\nProcess: ${info.processes.join(', ')}`
+              ? `Alias: ${p}\nProcess${info.processes.length > 1 ? 'es' : ''}: ${info.processes.join(', ')}`
               : p;
             return (
               <div
                 key={p}
                 onClick={() => onHeaderClick(p)}
                 title={tooltip}
-                className="group cursor-pointer select-none bg-muted hover:bg-muted-foreground/10 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-20 text-right font-mono flex flex-col items-end justify-center whitespace-nowrap"
-                style={{ height: HEADER_HEIGHT, gridRow: 1, gridColumn: META_COLS.length + idx + 1 }}
+                className="group cursor-pointer select-none bg-muted hover:bg-muted-foreground/10 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-20 text-right font-mono flex items-center justify-end gap-1 overflow-hidden"
+                style={{ minHeight: HEADER_MIN_HEIGHT, gridRow: 1, gridColumn: META_COLS.length + idx + 1 }}
               >
-                <span className="inline-flex items-center">
-                  {p}
-                  <SortIcon col={p} />
-                </span>
-                {info && info.processes.length > 0 && (
-                  <span className="text-[8px] font-normal normal-case tracking-normal text-muted-foreground/60">
-                    {info.processes.join(' / ')}
-                  </span>
-                )}
+                <div className="flex flex-col items-end leading-tight min-w-0 flex-1">
+                  {labels.map((label, i) => (
+                    <span key={i} className="truncate block max-w-full">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+                <SortIcon col={p} />
               </div>
             );
           })}
