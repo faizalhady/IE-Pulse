@@ -34,6 +34,7 @@ export const ctKeys = {
   aliases:    (customer?: string) => [...ctKeys.all, 'aliases', customer ?? ''] as const,
   data:       (filters: CycleTimeDataFilters) => [...ctKeys.all, 'data', filters] as const,
   raw:        (filters: CycleTimeRawFilters)  => [...ctKeys.all, 'raw', filters]  as const,
+  profile:    (customer: string) => [...ctKeys.all, 'profile', customer] as const,
   live:       (customer: string, pageSize: number, subWc?: string) =>
                 [...ctKeys.all, 'live', customer, pageSize, subWc ?? ''] as const,
   status:     () => [...ctKeys.all, 'refresh', 'status'] as const,
@@ -139,6 +140,20 @@ export function useCycleTimeLive(
     aliasMap,
     totalCount,
   };
+}
+
+/**
+ * Workcell analytical breakdown (counts, by-line, by-assembly). Scoped to one
+ * customer; skips the fetch until a customer is selected. Powers the
+ * Breakdown tab.
+ */
+export function useCycleTimeProfile(customer: string | undefined) {
+  return useQuery({
+    queryKey: ctKeys.profile(customer ?? ''),
+    queryFn:  () => cycleTimeApi.profile.get(customer!),
+    enabled:  Boolean(customer),
+    staleTime: 5 * 60_000,
+  });
 }
 
 /** Paginated raw rows (one row per process). Used for detail/drawer views. */

@@ -168,6 +168,84 @@ export interface CycleTimeLivePage {
   note: string;
 }
 
+// ─── Workcell profile (analytical breakdown) ─────────────────────────────────
+// Every figure is the cycle-time column rolled up: build total = sum of process
+// cycle times; line/assembly stats aggregate from there. See /profile endpoint.
+
+export interface CycleTimeProfileBottleneck {
+  alias: string;
+  process: string | null;
+  builds_bottlenecked: number;
+  total_builds: number;
+  pct: number;
+}
+
+export interface CycleTimeProfileSummary {
+  assemblies: number;
+  lines: number;
+  processes: number;
+  revisions: number;
+  builds: number;
+  avg_fpy: number | null;
+  updated_on: string | null;
+  /** Workcell-wide bottleneck — present but NOT shown in the simple breakdown
+   *  (it averages across unlike lines; handled per-line in a later step). */
+  bottleneck: CycleTimeProfileBottleneck | null;
+}
+
+/** One production line (sub_workcenter) within the workcell. */
+export interface CycleTimeProfileLine {
+  sub_workcenter: string;
+  builds: number;
+  assemblies: number;
+  avg_build_seconds: number | null;
+  /** Average operators (headcount) to build one unit on this line. */
+  avg_build_hc: number | null;
+}
+
+/** One assembly build, ranked among the longest. */
+export interface CycleTimeProfileAssembly {
+  assembly: string;
+  revision: string;
+  sub_workcenter: string;
+  total_seconds: number | null;
+  n_processes: number;
+  total_hc: number | null;
+  avg_fpy: number | null;
+  bottleneck_alias: string | null;
+}
+
+/** Process roll-up (parked in the simple breakdown — averages across lines). */
+export interface CycleTimeProfileProcess {
+  alias: string;
+  process: string | null;
+  occurrences: number;
+  avg_seconds: number | null;
+  total_seconds: number | null;
+  avg_hc: number | null;
+}
+
+export interface CycleTimeProfileBottleneckRow {
+  alias: string;
+  process: string | null;
+  builds_bottlenecked: number;
+  pct: number;
+}
+
+export interface CycleTimeProfile {
+  customer: string;
+  summary: CycleTimeProfileSummary;
+  bottleneck_pareto: CycleTimeProfileBottleneckRow[];
+  process_pareto: CycleTimeProfileProcess[];
+  lines: CycleTimeProfileLine[];
+  top_assemblies: CycleTimeProfileAssembly[];
+}
+
+export interface CycleTimeProfileOpts {
+  pareto_limit?: number;
+  top_limit?: number;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export const cycleTimeApi = {
@@ -194,6 +272,11 @@ export const cycleTimeApi = {
     /** Live IEDB proxy — one IEDB page per call, pivoted on the server. */
     page: (filters: CycleTimeLiveFilters) =>
       get<CycleTimeLivePage>('/live', filters as Record<string, string | number | undefined>),
+  },
+  profile: {
+    /** Workcell analytical breakdown — counts, by-line, by-assembly, Paretos. */
+    get: (customer: string, opts: CycleTimeProfileOpts = {}) =>
+      get<CycleTimeProfile>('/profile', { customer, ...opts }),
   },
   refresh: {
     trigger: (mode: 'full' | 'incremental' = 'incremental') =>
@@ -239,4 +322,19 @@ export function formatCycleHMS(s: number | null | undefined): string {
   const m = Math.floor((total % 3600) / 60);
   const sec = total % 60;
   return `${h} H ${String(m).padStart(2, '0')} M ${String(sec).padStart(2, '0')} s`;
+}
+
+/**
+ * Compact build-duration label for the breakdown tables — "14h 45m" / "12m 30s".
+ * Build totals are hours-scale, so we drop seconds once we're past a minute.
+ */
+export function formatBuildDuration(s: number | null | undefined): string {
+  if (s == null || Number.isNaN(s)) return '—';
+  const total = Math.round(s);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(sec).padStart(2, '0')}s`;
+  return `${sec}s`;
 }

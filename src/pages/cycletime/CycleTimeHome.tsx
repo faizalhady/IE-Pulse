@@ -10,7 +10,10 @@
 
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronDown, Clock, Database, Download, FileSpreadsheet, Loader2, Wifi } from 'lucide-react';
+import {
+  ChevronDown, Clock, Database, Download, FileSpreadsheet,
+  LayoutGrid, Loader2, Rows3, Wifi,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -27,10 +30,12 @@ import {
 } from '@/hooks/cycle_time/useCycleTimeData';
 import { exportCycleTimeXlsx } from '@/lib/cycle_time/cycleTimeExport';
 
+import CycleTimeBreakdown from './CycleTimeBreakdown';
 import CycleTimeFilters, { useCycleTimeFilters } from './CycleTimeFilters';
 import CycleTimeTable from './CycleTimeTable';
 
 type Source = 'db' | 'live';
+type View = 'table' | 'breakdown';
 const LIVE_PAGE_SIZE = 500;
 
 export default function CycleTimeHome() {
@@ -44,8 +49,9 @@ export default function CycleTimeHome() {
     setParams(out, { replace: true });
   };
 
-  const [filters] = useCycleTimeFilters();
+  const [filters, setFilters] = useCycleTimeFilters();
   const [exporting, setExporting] = useState(false);
+  const [view, setView] = useState<View>('table');
 
   // DB mode — full pivoted dataset for the picked customer (cached).
   const dbQ = useCycleTimeData(
@@ -115,6 +121,8 @@ export default function CycleTimeHome() {
         </h1>
 
         <div className="flex items-center gap-3">
+          {/* DB|Live + Download are table-only controls. */}
+          {view === 'table' && (<>
           {/* Source toggle */}
           <div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5 text-xs">
             <button
@@ -163,25 +171,66 @@ export default function CycleTimeHome() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </>)}
         </div>
       </div>
 
-      {/* ─── Filters ────────────────────────────────────────────────── */}
+      {/* ─── View tabs ──────────────────────────────────────────────── */}
+      <div className="flex items-center gap-4 border-b border-border px-6">
+        <TabButton active={view === 'table'}     onClick={() => setView('table')}     icon={Rows3}      label="Table" />
+        <TabButton active={view === 'breakdown'} onClick={() => setView('breakdown')} icon={LayoutGrid} label="Breakdown" />
+      </div>
+
+      {/* ─── Filters (shared customer selector) ─────────────────────── */}
       <CycleTimeFilters availableLines={lines} rowCount={rows?.length ?? 0} />
 
-      {/* ─── Table ──────────────────────────────────────────────────── */}
+      {/* ─── Body ───────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0">
-        <CycleTimeTable
-          rows={rows}
-          loading={tableLoading}
-          error={tableError}
-          aliasMap={aliasMap}
-          onScrollEnd={onScrollEnd}
-          hasMore={hasMore}
-          fetchingMore={fetchingMore}
-          totalKnown={totalKnown}
-        />
+        {view === 'breakdown' ? (
+          <CycleTimeBreakdown
+            customer={filters.customer || undefined}
+            onOpenAssembly={(assembly, line) => {
+              setFilters({ assembly, sub_workcenter: line });
+              setView('table');
+            }}
+          />
+        ) : (
+          <CycleTimeTable
+            rows={rows}
+            loading={tableLoading}
+            error={tableError}
+            aliasMap={aliasMap}
+            onScrollEnd={onScrollEnd}
+            hasMore={hasMore}
+            fetchingMore={fetchingMore}
+            totalKnown={totalKnown}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+/** Underline-style view tab. */
+function TabButton({
+  active, onClick, icon: Icon, label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: typeof Rows3;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`-mb-px flex items-center gap-1.5 border-b-2 px-1 py-2.5 text-sm font-medium transition-colors ${
+        active
+          ? 'border-emerald-500 text-foreground'
+          : 'border-transparent text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <Icon className="h-4 w-4" /> {label}
+    </button>
   );
 }
