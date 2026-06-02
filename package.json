@@ -14,6 +14,7 @@
     "build:cycletime": "node setup-pdfjs-worker.js && vite build --mode cycle-time",
     "build:ipk": "node setup-pdfjs-worker.js && vite build --mode ipk",
     "build:lbr": "node setup-pdfjs-worker.js && vite build --mode lbr",
+    "build:all": "node setup-pdfjs-worker.js && vite build --mode all",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

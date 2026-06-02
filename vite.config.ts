@@ -18,20 +18,29 @@ const APP_BASENAMES: Record<string, string> = {
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const appId = env.VITE_APP_ID || 'ole';
-  const buildBase = APP_BASENAMES[appId] ?? '/ietools/ole/';
+
+  // "Core" build: VITE_APPS lists more than one module → produce a single
+  // bundle that serves the WHOLE IE Pulse shell (every module's routes + the
+  // app switcher) mounted at the umbrella /ietools/ base. A normal per-module
+  // build uses that module's own /ietools/<module>/ base so each can be
+  // deployed independently.
+  const coreApps = (env.VITE_APPS ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  const isCoreBuild = coreApps.length > 1;
+
+  const buildBase = isCoreBuild ? '/ietools/' : (APP_BASENAMES[appId] ?? '/ietools/ole/');
 
   // Dev always serves at /ietools/ — single dev server, multi-app shell.
   // Each module's routes are namespaced under /ietools/<module>/* via the
-  // route paths themselves. Production builds still use the per-app base
-  // resolved from VITE_APP_ID so nginx routes to the right bundle.
+  // route paths themselves. Production builds use the per-app base resolved
+  // from VITE_APP_ID (or /ietools/ for a core build) so nginx routes correctly.
   const base = command === 'serve' ? '/ietools/' : buildBase;
 
   return {
     base,
     build: {
-      // Each app's production build goes into dist/<appId> so they can be
-      // deployed independently without overwriting each other.
-      outDir: `dist/${appId}`,
+      // Per-module builds go to dist/<appId> so they can be deployed
+      // independently; the core build goes to dist/all.
+      outDir: isCoreBuild ? 'dist/all' : `dist/${appId}`,
       emptyOutDir: true,
     },
     server: {
