@@ -42,6 +42,8 @@ interface CycleTimeTableProps {
   fetchingMore?: boolean;
   /** Optional totalCount banner (live mode shows "1,200 of 9,708 loaded"). */
   totalKnown?: number;
+  /** Click a row → open the assembly drawer on that build. */
+  onRowClick?: (row: CycleTimePivotedRow) => void;
 }
 
 interface MetaCol {
@@ -55,8 +57,6 @@ const META_COLS: MetaCol[] = [
   { key: 'assembly',        label: 'Assembly', sticky: true, width: 'min-w-[180px]' },
   { key: 'revision',        label: 'Rev',                    width: 'w-12 min-w-12' },
   { key: 'sub_workcenter',  label: 'Line',                   width: 'min-w-[180px]' },
-  { key: 'family',          label: 'Family',                 width: 'min-w-[110px]' },
-  { key: 'workcenter',      label: 'WC',                     width: 'w-16 min-w-16' },
   { key: 'workcenter_type', label: 'WC Type',                width: 'min-w-[100px]' },
 ];
 
@@ -81,7 +81,7 @@ function compareBy(a: CycleTimePivotedRow, b: CycleTimePivotedRow, col: string, 
 
 export default function CycleTimeTable({
   rows, loading, error, aliasMap,
-  onScrollEnd, hasMore, fetchingMore, totalKnown,
+  onScrollEnd, hasMore, fetchingMore, totalKnown, onRowClick,
 }: CycleTimeTableProps) {
   const [sort, setSort] = useState<SortState>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -243,7 +243,10 @@ export default function CycleTimeTable({
               return (
                 <div
                   key={`${row.assembly}-${row.revision}-${row.sub_workcenter}-${vi.index}`}
-                  className="absolute left-0 right-0 grid hover:bg-muted/40 group [&>div]:border-r [&>div]:border-b [&>div]:border-border [&>div]:px-2 [&>div]:py-1 [&>div]:overflow-hidden [&>div]:text-ellipsis [&>div]:whitespace-nowrap"
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  className={`absolute left-0 right-0 grid hover:bg-muted/40 group [&>div]:border-r [&>div]:border-b [&>div]:border-border [&>div]:px-2 [&>div]:py-1 [&>div]:overflow-hidden [&>div]:text-ellipsis [&>div]:whitespace-nowrap ${
+                    onRowClick ? 'cursor-pointer' : ''
+                  }`}
                   style={{
                     transform: `translateY(${vi.start}px)`,
                     height: vi.size,

@@ -112,7 +112,6 @@ export const APPS: AppConfig[] = [
     basename: '/ietools/cycle-time',
     category: 'Analytics',
     navItems: [
-      { label: 'Overview', to: '/cycle-time', icon: Home },
       { label: 'Workcells', to: '/cycle-time/workcells', icon: Factory },
     ],
   },

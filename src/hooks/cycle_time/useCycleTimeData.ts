@@ -20,6 +20,7 @@ import {
   cycleTimeApi,
   CycleTimeAliasMap,
   CycleTimeDataFilters,
+  CycleTimeDataPage,
   CycleTimeLivePage,
   CycleTimePivotedRow,
   CycleTimeRawFilters,
@@ -31,8 +32,13 @@ export const ctKeys = {
   all:        ['cycle_time'] as const,
   health:     () => [...ctKeys.all, 'health'] as const,
   customers:  () => [...ctKeys.all, 'customers'] as const,
+  coverage:   () => [...ctKeys.all, 'coverage'] as const,
   aliases:    (customer?: string) => [...ctKeys.all, 'aliases', customer ?? ''] as const,
+  assemblies: (customer?: string, line?: string, assembly?: string) =>
+                [...ctKeys.all, 'assemblies', customer ?? '', line ?? '', assembly ?? ''] as const,
   data:       (filters: CycleTimeDataFilters) => [...ctKeys.all, 'data', filters] as const,
+  dataPage:   (filters: CycleTimeDataFilters, pageSize: number) =>
+                [...ctKeys.all, 'dataPage', filters, pageSize] as const,
   raw:        (filters: CycleTimeRawFilters)  => [...ctKeys.all, 'raw', filters]  as const,
   profile:    (customer: string) => [...ctKeys.all, 'profile', customer] as const,
   live:       (customer: string, pageSize: number, subWc?: string) =>
@@ -58,6 +64,15 @@ export function useCycleTimeCustomers() {
   });
 }
 
+/** Per-customer with-data assembly counts + freshness (one request for the league table). */
+export function useCycleTimeCoverage() {
+  return useQuery({
+    queryKey: ctKeys.coverage(),
+    queryFn:  cycleTimeApi.coverage.list,
+    staleTime: 5 * 60_000,
+  });
+}
+
 /** alias → process code + lines, scoped to a customer (so tooltips can show
  *  "the friendly column header 'MA 1' maps to API process 'Assembly 1'"). */
 export function useCycleTimeAliases(customer: string | undefined) {
@@ -78,6 +93,49 @@ export function useCycleTimeData(filters: CycleTimeDataFilters) {
     queryKey: ctKeys.data(filters),
     queryFn:  () => cycleTimeApi.data.list(filters),
     enabled:  Boolean(filters.customer),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * DB-mode pivoted rows with server-side pagination + infinite scroll. The first
+ * page paints almost instantly; more pages load as the user scrolls. Returns a
+ * flattened `rows` plus `totalCount` (mirrors useCycleTimeLive's shape so the
+ * table can treat DB and Live modes identically).
+ */
+export function useCycleTimeDataInfinite(filters: CycleTimeDataFilters, pageSize = 300) {
+  const q = useInfiniteQuery<
+    CycleTimeDataPage,
+    Error,
+    { pages: CycleTimeDataPage[]; pageParams: number[] },
+    ReturnType<typeof ctKeys.dataPage>,
+    number
+  >({
+    queryKey: ctKeys.dataPage(filters, pageSize),
+    enabled:  Boolean(filters.customer),
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      cycleTimeApi.data.page({ ...filters, page: pageParam, page_size: pageSize }),
+    getNextPageParam: (last) => (last.has_next ? last.page + 1 : undefined),
+    staleTime: 5 * 60_000,
+  });
+
+  const rows = useMemo<CycleTimePivotedRow[]>(
+    () => (q.data?.pages ?? []).flatMap((p) => p.rows),
+    [q.data],
+  );
+  const totalCount = q.data?.pages?.[0]?.total ?? 0;
+
+  return { ...q, rows, totalCount };
+}
+
+/** Per-assembly aggregate for Breakdown B (server-computed), optionally scoped
+ *  to one line and/or a single assembly (drawer header). */
+export function useCycleTimeAssemblies(customer: string | undefined, line?: string, assembly?: string) {
+  return useQuery({
+    queryKey: ctKeys.assemblies(customer, line, assembly),
+    queryFn:  () => cycleTimeApi.assemblies.list(customer!, line || undefined, assembly || undefined),
+    enabled:  Boolean(customer),
     staleTime: 5 * 60_000,
   });
 }

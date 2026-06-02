@@ -62,6 +62,13 @@ export interface CycleTimeCustomer {
   assembly_count: number;
 }
 
+/** Per-customer data coverage — distinct assemblies with cycle-time data + freshness. */
+export interface CycleTimeCoverageRow {
+  customer: string;
+  assemblies: number;
+  updated_on: string | null;
+}
+
 /**
  * Pivoted row. Metadata columns are typed; process-step columns are dynamic
  * (vary per customer) and reachable via index access `row['Hi-Pot 1']`.
@@ -106,6 +113,32 @@ export interface CycleTimeRawPage {
   page_size: number;
   pages: number;
   data: CycleTimeRawRow[];
+}
+
+/** One page of pivoted rows (DB-mode infinite scroll). */
+export interface CycleTimeDataPage {
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+  has_next: boolean;
+  /** The customer's stable process-column set (same on every page). */
+  columns: string[];
+  rows: CycleTimePivotedRow[];
+}
+
+/** Per-assembly aggregate for Breakdown B (server-computed). */
+export interface CycleTimeAssemblyAgg {
+  assembly: string;
+  family: string | null;
+  builds: number;
+  /** One-unit cycle time, start to finish = rep SMT + rep TH + rep BE. */
+  total: number | null;
+  /** Cycle time of the representative line per stage (not summed across lines). Additive: smt + th + be = total. */
+  smt: number | null;
+  th: number | null;
+  be: number | null;
+  bottleneck: string | null;
 }
 
 export interface CycleTimeRefreshResponse {
@@ -255,14 +288,28 @@ export const cycleTimeApi = {
   customers: {
     list: () => get<CycleTimeCustomer[]>('/customers'),
   },
+  coverage: {
+    /** Per-customer with-data assembly counts + freshness, in one request. */
+    list: () => get<CycleTimeCoverageRow[]>('/coverage'),
+  },
   aliases: {
     /** Map of column-header alias → underlying Process code(s) + lines. */
     list: (customer?: string) =>
       get<CycleTimeAliasMap>('/aliases', customer ? { customer } : undefined),
   },
   data: {
+    /** Full (unpaginated) array — used by Excel export. */
     list: (filters: CycleTimeDataFilters = {}) =>
       get<CycleTimePivotedRow[]>('/data', filters),
+    /** One page of pivoted rows — DB-mode infinite scroll. */
+    page: (filters: CycleTimeDataFilters & { page: number; page_size?: number }) =>
+      get<CycleTimeDataPage>('/data', filters as Record<string, string | number | undefined>),
+  },
+  assemblies: {
+    /** Per-assembly aggregate for Breakdown B, optionally scoped to one line
+     *  and/or a single assembly (drawer header). */
+    list: (customer: string, sub_workcenter?: string, assembly?: string) =>
+      get<CycleTimeAssemblyAgg[]>('/assemblies', { customer, sub_workcenter, assembly }),
   },
   raw: {
     list: (filters: CycleTimeRawFilters = {}) =>

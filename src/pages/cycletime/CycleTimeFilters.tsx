@@ -8,11 +8,11 @@
  * filter bar feels identical across apps.
  */
 
+import { ReactNode, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCycleTimeCustomers } from '@/hooks/cycle_time/useCycleTimeData';
+import { useCycleTimeCoverage, useCycleTimeCustomers } from '@/hooks/cycle_time/useCycleTimeData';
 
 const ALL = '__all__';
 
@@ -33,8 +33,14 @@ export interface CycleTimeFiltersValue {
 interface CycleTimeFiltersProps {
   /** Lines (sub_workcenters) available in the currently loaded customer's data. */
   availableLines: string[];
-  /** Number of rows currently shown — rendered on the right, OLE-style. */
-  rowCount: number;
+  /** Rendered at the far right of the filter row (e.g. the Download button). */
+  rightSlot?: ReactNode;
+  /**
+   * When set, the customer is fixed (e.g. on the dedicated workcell page where
+   * it comes from the route). The customer Select is hidden and Line/Assembly
+   * stay enabled against this customer.
+   */
+  lockedCustomer?: string;
 }
 
 /** Hook that exposes filter state synced to the URL. */
@@ -59,98 +65,92 @@ export function useCycleTimeFilters(): [
   return [value, setValue];
 }
 
-export default function CycleTimeFilters({ availableLines, rowCount }: CycleTimeFiltersProps) {
+export default function CycleTimeFilters({ availableLines, rightSlot, lockedCustomer }: CycleTimeFiltersProps) {
   const customers = useCycleTimeCustomers();
+  const coverage = useCycleTimeCoverage();
   const [filters, setFilters] = useCycleTimeFilters();
 
-  const hasFilters = !!(filters.customer || filters.sub_workcenter || filters.assembly);
+  // Effective customer: the route-locked one (workcell page) or the picked one.
+  const activeCustomer = lockedCustomer ?? filters.customer;
+  const locked = Boolean(lockedCustomer);
+
+  const hasFilters = !!(filters.sub_workcenter || filters.assembly);
+
+  // Only offer workcells that actually have cycle-time data (same rule as the
+  // league table). Sorted A–Z.
+  const withDataCustomers = useMemo(() => {
+    const has = new Set((coverage.data ?? []).filter((c) => c.assemblies > 0).map((c) => c.customer));
+    return (customers.data ?? [])
+      .filter((c) => has.has(c.customer))
+      .slice()
+      .sort((a, b) => a.customer.localeCompare(b.customer));
+  }, [customers.data, coverage.data]);
 
   return (
-    <div className="px-6 pt-4 pb-3 flex flex-wrap items-end gap-3 transition-colors duration-200">
+    <div className="px-6 pt-4 pb-3 flex flex-wrap items-center gap-3 transition-colors duration-200">
 
-      {/* 1. Customer (required — pick first) */}
-      <div className="min-w-[200px]">
-        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-          Customer <span className="text-red-500/80">*</span>
-        </Label>
+      {/* 1. Workcell (required — pick first). Hidden when locked by the route. */}
+      {!locked && (
         <Select
           value={filters.customer || undefined}
           onValueChange={(v) => setFilters({ customer: v, sub_workcenter: '' })}
         >
-          <SelectTrigger className="mt-1 h-9">
-            <SelectValue placeholder="Select customer…" />
+          <SelectTrigger className="h-9 w-[220px]">
+            <SelectValue placeholder="Select workcell…" />
           </SelectTrigger>
           <SelectContent>
-            {(customers.data ?? [])
-              .slice()
-              .sort((a, b) => a.customer.localeCompare(b.customer))
-              .map((c) => (
-                <SelectItem key={c.customer} value={c.customer}>
-                  {c.customer}{' '}
-                  <span className="text-muted-foreground">
-                    ({c.assembly_count.toLocaleString()})
-                  </span>
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* 2. Line (optional) */}
-      <div className="min-w-[220px]">
-        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-          Line
-        </Label>
-        <Select
-          value={filters.sub_workcenter || ALL}
-          onValueChange={(v) => setFilters({ sub_workcenter: v === ALL ? '' : v })}
-          disabled={!filters.customer || availableLines.length === 0}
-        >
-          <SelectTrigger className="mt-1 h-9">
-            <SelectValue placeholder="All lines" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All lines</SelectItem>
-            {availableLines.map((line) => (
-              <SelectItem key={line} value={line}>
-                {line}
+            {withDataCustomers.map((c) => (
+              <SelectItem key={c.customer} value={c.customer}>
+                {c.customer}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      )}
+
+      {/* 2. Assembly search */}
+      <div className="relative w-[260px]">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={filters.assembly}
+          onChange={(e) => setFilters({ assembly: e.target.value })}
+          placeholder="Search assembly…"
+          className="h-9 pl-8"
+          disabled={!activeCustomer}
+        />
       </div>
 
-      {/* 3. Assembly search */}
-      <div className="flex flex-col">
-        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-          Search assembly
-        </Label>
-        <div className="relative mt-1 w-[240px] lg:w-[300px]">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={filters.assembly}
-            onChange={(e) => setFilters({ assembly: e.target.value })}
-            placeholder="e.g. 00-27000"
-            className="pl-8 h-9"
-            disabled={!filters.customer}
-          />
-        </div>
-      </div>
+      {/* 3. Line (optional) */}
+      <Select
+        value={filters.sub_workcenter || ALL}
+        onValueChange={(v) => setFilters({ sub_workcenter: v === ALL ? '' : v })}
+        disabled={!activeCustomer || availableLines.length === 0}
+      >
+        <SelectTrigger className="h-9 w-[220px]">
+          <SelectValue placeholder="All lines" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All lines</SelectItem>
+          {availableLines.map((line) => (
+            <SelectItem key={line} value={line}>
+              {line}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      {/* 4. Clear */}
+      {/* 4. Clear — leaves a route-locked customer intact. */}
       {hasFilters && (
         <button
-          onClick={() => setFilters({ customer: '', sub_workcenter: '', assembly: '' })}
+          onClick={() => setFilters(locked ? { sub_workcenter: '', assembly: '' } : { customer: '', sub_workcenter: '', assembly: '' })}
           className="h-9 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-colors whitespace-nowrap"
         >
           Clear all
         </button>
       )}
 
-      {/* Row count — far right */}
-      <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap">
-        {rowCount.toLocaleString()} rows
-      </span>
+      {/* Far-right slot (e.g. Download) */}
+      {rightSlot && <div className="ml-auto flex items-center">{rightSlot}</div>}
     </div>
   );
 }
