@@ -4,10 +4,12 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  Cog,
   Factory,
   FileSpreadsheet,
   FileText,
   FlaskConical,
+  GitFork,
   Home,
   Kanban,
   Layers,
@@ -111,6 +113,7 @@ export const APPS: AppConfig[] = [
     category: 'Analytics',
     navItems: [
       { label: 'Overview', to: '/cycle-time', icon: Home },
+      { label: 'Workcells', to: '/cycle-time/workcells', icon: Factory },
     ],
   },
   {
@@ -131,27 +134,35 @@ export const APPS: AppConfig[] = [
   {
     id: 'lbr',
     label: 'LBR',
-    description: 'Overall line efficiency analytics',
-    icon: Scale,
+    description: 'Line Balance Rate — workload balance across stations',
+    icon: GitFork,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/lbr',
     category: 'Analytics',
+    // Workcell-scoped pages (profile / assembly / playbook / workcell config) are
+    // reached by drilling in from Home; the sidebar only carries always-valid
+    // static routes — same approach as IPK.
     navItems: [
-
+      { label: 'Home',          to: '/lbr',        icon: LayoutDashboard },
+      { label: 'Global Config', to: '/lbr/config', icon: Cog },
     ],
   },
   {
     id: 'ipk',
     label: 'IPK',
-    description: 'Overall line efficiency analytics',
+    description: 'In-Process Kanban simulation & trolley sizing',
     icon: Kanban,
     color: 'text-emerald-500',
     iconBg: 'bg-emerald-500/15',
     basename: '/ietools/ipk',
     category: 'Analytics',
+    // Workcell-scoped pages (Simulate / History / Matrix / Config) are reached
+    // from the IPKDashboard nav cards + per-page sub-nav once a workcell is
+    // selected, so the sidebar only carries the always-valid Home entry.
     navItems: [
-
+      { label: 'Home', to: '/ipk', icon: LayoutDashboard },
+      { label: 'Workcells', to: '/ipk/workcells', icon: Factory },
     ],
   },
   {

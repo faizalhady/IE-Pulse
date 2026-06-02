@@ -106,9 +106,6 @@ export default function PPQTWorkcellProfile() {
                   <p className="text-sm font-semibold text-foreground truncate mt-0.5">{workcell.name}</p>
                   <p className="text-[10px] text-muted-foreground truncate">{workcell.division}</p>
                 </div>
-                <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0', PPQT_STATUS_BADGE[heroStatus])}>
-                  {PPQT_STATUS_LABEL[heroStatus]}
-                </span>
               </div>
 
               <p className={cn('text-5xl font-mono font-black mt-4 leading-none tabular-nums', PPQT_UTIL_TEXT[heroStatus])}>

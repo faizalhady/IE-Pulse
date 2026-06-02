@@ -28,6 +28,8 @@ import OlePlantReport from "@/pages/ole/OlePlantReport";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
 import CycleTimeHome from "@/pages/cycletime/CycleTimeHome";
+import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
+import CycleTimeWorkcell from "@/pages/cycletime/CycleTimeWorkcell";
 import PPQTHome from "@/pages/ppqt/PPQTHome";
 import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
 import PPQTWorkcellProfile from "@/pages/ppqt/PPQTWorkcellProfile";
@@ -35,6 +37,20 @@ import PPQTSubWorkcenterProfile from "@/pages/ppqt/PPQTSubWorkcenterProfile";
 import PPQTProcessDetail from "@/pages/ppqt/PPQTProcessDetail";
 import PPQTAssemblyDetail from "@/pages/ppqt/PPQTAssemblyDetail";
 import PPQTConfig from "@/pages/ppqt/PPQTConfig";
+import IPKHome from "@/pages/ipk/IPKHome";
+import IPKWorkcells from "@/pages/ipk/IPKWorkcells";
+import IPKDashboard from "@/pages/ipk/IPKDashboard";
+import IPKSimulate from "@/pages/ipk/IPKSimulate";
+import IPKResults from "@/pages/ipk/IPKResults";
+import IPKHistory from "@/pages/ipk/IPKHistory";
+import IPKMatrix from "@/pages/ipk/IPKMatrix";
+import IPKConfig from "@/pages/ipk/IPKConfig";
+import LBRHome from "@/pages/lbr/LBRHome";
+import LBRGlobalConfig from "@/pages/lbr/LBRGlobalConfig";
+import LBRWorkcellProfile from "@/pages/lbr/LBRWorkcellProfile";
+import LBRWorkcellConfig from "@/pages/lbr/LBRWorkcellConfig";
+import LBRAssemblyDetail from "@/pages/lbr/LBRAssemblyDetail";
+import LBRPlaybookDetail from "@/pages/lbr/LBRPlaybookDetail";
 import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -112,6 +128,8 @@ function AppShell() {
 
             {includesApp('cycle-time') && <>
               <Route path="/cycle-time" element={<CycleTimeHome />} />
+              <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
+              <Route path="/cycle-time/wc/:customer" element={<CycleTimeWorkcell />} />
             </>}
 
             {includesApp('ppqt') && <>
@@ -122,6 +140,26 @@ function AppShell() {
               <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process"                    element={<PPQTProcessDetail />} />
               <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process/asm/:assembly"      element={<PPQTAssemblyDetail />} />
               <Route path="/ppqt/config"                                                                element={<PPQTConfig />} />
+            </>}
+
+            {includesApp('ipk') && <>
+              <Route path="/ipk"                          element={<IPKHome />} />
+              <Route path="/ipk/workcells"                element={<IPKWorkcells />} />
+              <Route path="/ipk/:workcell"                element={<IPKDashboard />} />
+              <Route path="/ipk/:workcell/simulate"       element={<IPKSimulate />} />
+              <Route path="/ipk/:workcell/results/:runId" element={<IPKResults />} />
+              <Route path="/ipk/:workcell/history"        element={<IPKHistory />} />
+              <Route path="/ipk/:workcell/matrix"         element={<IPKMatrix />} />
+              <Route path="/ipk/:workcell/config"         element={<IPKConfig />} />
+            </>}
+
+            {includesApp('lbr') && <>
+              <Route path="/lbr"                               element={<LBRHome />} />
+              <Route path="/lbr/config"                        element={<LBRGlobalConfig />} />
+              <Route path="/lbr/:workcell"                     element={<LBRWorkcellProfile />} />
+              <Route path="/lbr/:workcell/config"              element={<LBRWorkcellConfig />} />
+              <Route path="/lbr/:workcell/:assembly"           element={<LBRAssemblyDetail />} />
+              <Route path="/lbr/:workcell/:assembly/:playbook" element={<LBRPlaybookDetail />} />
             </>}
 
             {includesApp('ebuild') && <>

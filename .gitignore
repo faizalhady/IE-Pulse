@@ -30,3 +30,7 @@ plans/knowledge/
 # Reference files (kept locally, not part of the codebase)
 plans/*.xlsx
 src/pages/swagger.json
+
+# Agent context / local docs (not part of the shipped codebase)
+CLAUDE.md
+docs/

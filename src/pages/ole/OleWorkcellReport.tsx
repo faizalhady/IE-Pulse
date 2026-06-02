@@ -16,7 +16,6 @@ import {
   OLE_COLOR,
   OLE_TARGET,
   OLE_WARNING,
-  STATUS_BADGE, STATUS_LABEL,
   WORKCELL_LOGOS,
   dayName,
   fmtDate,
@@ -462,9 +461,6 @@ export default function OleWorkcellReport() {
                   <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold">Workcell OLE · {weekLabel}</p>
                   <p className="text-[10px] font-semibold text-foreground truncate mt-0.5">{workcell}</p>
                 </div>
-                <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0', STATUS_BADGE[getOleStatus(siteOle)])}>
-                  {STATUS_LABEL[getOleStatus(siteOle)]}
-                </span>
               </div>
               <p className="text-5xl font-mono font-black mt-3 leading-none" style={{ color: siteColor }}>
                 {siteOle.toFixed(1)}%
