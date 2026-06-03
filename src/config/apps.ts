@@ -112,7 +112,12 @@ export const APPS: AppConfig[] = [
     basename: '/ietools/cycle-time',
     category: 'Analytics',
     navItems: [
-      { label: 'Workcells', to: '/cycle-time/workcells', icon: Factory },
+      { label: 'Home', to: '/cycle-time/workcells', icon: Home },
+      // Hidden from the sidebar (routes still work):
+      //  • Assemblies → now lives in the workcell Breakdown→Assemblies tab
+      //  • Data → still reachable directly at /cycle-time/data
+      // { label: 'Assemblies', to: '/cycle-time/assemblies', icon: Boxes },
+      // { label: 'Data', to: '/cycle-time/data', icon: Database },
     ],
   },
   {

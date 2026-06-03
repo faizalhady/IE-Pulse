@@ -124,6 +124,17 @@
   .font-mono {
     font-family: var(--font-mono);
   }
+  /* Numeric font SCOPED to the Cycle Time → Assemblies table only (class-gated,
+     not a global font change). System fonts → no CDN dependency, so it renders
+     even if Google Fonts is blocked on the corporate network. Tahoma/Verdana
+     have wide, unambiguous digits (0 never reads as 8); tabular figures keep
+     columns aligned without needing a monospace. */
+  .ct-num {
+    font-family: 'Tahoma', 'Verdana', 'Segoe UI', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums slashed-zero;
+    font-feature-settings: 'tnum' 1;
+    letter-spacing: -0.01em;
+  }
   @keyframes pulse-status {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }

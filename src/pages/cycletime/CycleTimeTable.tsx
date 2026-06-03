@@ -15,7 +15,7 @@
  */
 
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,6 +44,14 @@ interface CycleTimeTableProps {
   totalKnown?: number;
   /** Click a row → open the assembly drawer on that build. */
   onRowClick?: (row: CycleTimePivotedRow) => void;
+  /** Classic prev/next pagination (DB mode). When set, shows page controls
+   *  instead of the live-mode "load more". */
+  pagination?: {
+    page: number;
+    pages: number;
+    loading: boolean;
+    onPage: (page: number) => void;
+  };
 }
 
 interface MetaCol {
@@ -62,6 +70,7 @@ const META_COLS: MetaCol[] = [
 
 const ROW_HEIGHT = 28; // px — matches Tailwind h-7
 const HEADER_MIN_HEIGHT = 38; // px — expands when an alias maps to multiple processes
+const NUM_COL_W = 44; // px — leading sticky "#" column
 
 type SortState = { col: string; dir: 'asc' | 'desc' } | null;
 
@@ -81,7 +90,7 @@ function compareBy(a: CycleTimePivotedRow, b: CycleTimePivotedRow, col: string, 
 
 export default function CycleTimeTable({
   rows, loading, error, aliasMap,
-  onScrollEnd, hasMore, fetchingMore, totalKnown, onRowClick,
+  onScrollEnd, hasMore, fetchingMore, totalKnown, onRowClick, pagination,
 }: CycleTimeTableProps) {
   const [sort, setSort] = useState<SortState>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -113,6 +122,11 @@ export default function CycleTimeTable({
     // Fire when the last rendered item is within 10 of the loaded tail.
     if (last.index >= displayRows.length - 10) onScrollEnd();
   }, [virt, displayRows.length, hasMore, fetchingMore, onScrollEnd]);
+
+  // Jump back to the top when the page changes (DB pagination).
+  useEffect(() => {
+    if (pagination) scrollRef.current?.scrollTo({ top: 0 });
+  }, [pagination?.page]);
 
   if (error) {
     return (
@@ -161,6 +175,7 @@ export default function CycleTimeTable({
   // Column widths for the grid layout (must match header & body).
   // We use CSS grid template columns to avoid <table> + virtualization quirks.
   const gridTemplate =
+    `${NUM_COL_W}px ` +
     META_COLS.map((c) => {
       if (c.width?.includes('w-12'))      return '52px';
       if (c.width?.includes('w-16'))      return '60px';
@@ -183,14 +198,22 @@ export default function CycleTimeTable({
           style={{ gridTemplateColumns: gridTemplate, width: 'max-content', minWidth: '100%' }}
         >
           {/* ─── Header ──────────────────────────────────────────────── */}
+          {/* "#" header — sticky top + left. */}
+          <div
+            className="select-none bg-muted text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-30 flex items-center justify-center"
+            style={{ minHeight: HEADER_MIN_HEIGHT, gridRow: 1, gridColumn: 1, left: 0 }}
+          >
+            #
+          </div>
           {META_COLS.map((c, idx) => (
             <div
               key={c.key as string}
               onClick={() => onHeaderClick(c.key as string)}
-              className={`group cursor-pointer select-none bg-muted hover:bg-muted-foreground/10 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-20 flex items-center overflow-hidden ${
-                c.sticky ? 'sticky left-0 z-30' : ''
+              title={c.label}
+              className={`group cursor-pointer select-none bg-muted hover:bg-accent text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 flex items-center overflow-hidden ${
+                c.sticky ? 'z-30' : 'z-20'
               }`}
-              style={{ minHeight: HEADER_MIN_HEIGHT, gridRow: 1, gridColumn: idx + 1 }}
+              style={{ minHeight: HEADER_MIN_HEIGHT, gridRow: 1, gridColumn: idx + 2, ...(c.sticky ? { left: NUM_COL_W } : {}) }}
             >
               <span className="truncate">{c.label}</span>
               <SortIcon col={c.key as string} />
@@ -211,8 +234,8 @@ export default function CycleTimeTable({
                 key={p}
                 onClick={() => onHeaderClick(p)}
                 title={tooltip}
-                className="group cursor-pointer select-none bg-muted hover:bg-muted-foreground/10 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-20 text-right font-mono flex items-center justify-end gap-1 overflow-hidden"
-                style={{ minHeight: HEADER_MIN_HEIGHT, gridRow: 1, gridColumn: META_COLS.length + idx + 1 }}
+                className="group cursor-pointer select-none bg-muted hover:bg-accent text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-20 text-right font-mono flex items-center justify-end gap-1 overflow-hidden"
+                style={{ minHeight: HEADER_MIN_HEIGHT, gridRow: 1, gridColumn: META_COLS.length + idx + 2 }}
               >
                 <div className="flex flex-col items-end leading-tight min-w-0 flex-1">
                   {labels.map((label, i) => (
@@ -230,7 +253,7 @@ export default function CycleTimeTable({
           {/* Spacer to give the grid the right total scroll height. */}
           <div
             style={{
-              gridColumn: `1 / span ${META_COLS.length + processCols.length}`,
+              gridColumn: `1 / span ${META_COLS.length + processCols.length + 1}`,
               gridRow: 2,
               height: totalSize,
               position: 'relative',
@@ -255,16 +278,28 @@ export default function CycleTimeTable({
                     minWidth: '100%',
                   }}
                 >
-                  {META_COLS.map((c) => (
-                    <div
-                      key={c.key as string}
-                      className={`bg-card flex items-center ${
-                        c.sticky ? 'sticky left-0 z-10 font-medium group-hover:bg-muted' : ''
-                      }`}
-                    >
-                      {(row[c.key] as string | null) ?? '—'}
-                    </div>
-                  ))}
+                  {/* "#" — sticky row number. */}
+                  <div
+                    className="bg-card flex items-center justify-center sticky z-10 tabular-nums text-muted-foreground group-hover:bg-muted"
+                    style={{ left: 0 }}
+                  >
+                    {vi.index + 1}
+                  </div>
+                  {META_COLS.map((c) => {
+                    const val = (row[c.key] as string | null) ?? '—';
+                    return (
+                      <div
+                        key={c.key as string}
+                        title={val}
+                        className={`bg-card flex items-center ${
+                          c.sticky ? 'sticky z-10 font-medium group-hover:bg-muted' : ''
+                        }`}
+                        style={c.sticky ? { left: NUM_COL_W } : undefined}
+                      >
+                        {val}
+                      </div>
+                    );
+                  })}
                   {processCols.map((p) => {
                     const v = row[p];
                     const num = typeof v === 'number' ? v : null;
@@ -297,11 +332,42 @@ export default function CycleTimeTable({
           rows · {processCols.length} process columns
           {sort && <> · sorted by <span className="font-medium text-foreground">{sort.col}</span> {sort.dir}</>}
         </span>
-        {fetchingMore && (
+        {pagination ? (
+          <div className="flex items-center gap-2">
+            {pagination.loading && <Loader2 className="h-3 w-3 animate-spin text-emerald-600" />}
+            <button
+              type="button"
+              onClick={() => pagination.onPage(Math.max(1, pagination.page - 1))}
+              disabled={pagination.page <= 1 || pagination.loading}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted/60 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            >
+              <ChevronLeft className="h-3 w-3" /> Prev
+            </button>
+            <span className="tabular-nums">
+              Page <span className="font-medium text-foreground">{pagination.page}</span> of {pagination.pages.toLocaleString()}
+            </span>
+            <button
+              type="button"
+              onClick={() => pagination.onPage(Math.min(pagination.pages, pagination.page + 1))}
+              disabled={pagination.page >= pagination.pages || pagination.loading}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted/60 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            >
+              Next <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+        ) : fetchingMore ? (
           <span className="inline-flex items-center gap-1 text-emerald-600">
             <Loader2 className="h-3 w-3 animate-spin" /> Loading more…
           </span>
-        )}
+        ) : hasMore && onScrollEnd ? (
+          <button
+            type="button"
+            onClick={() => onScrollEnd()}
+            className="rounded-md border border-border bg-background px-3 py-1 text-[11px] font-medium text-foreground hover:bg-muted/60 transition-colors"
+          >
+            Load more
+          </button>
+        ) : null}
       </div>
     </div>
   );

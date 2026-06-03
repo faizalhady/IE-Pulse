@@ -29,34 +29,82 @@ export function shiftLabel(value: string | number | undefined | null): string {
 // ─── Date Formatter ─────────────────────────────────────────────────────────
 // fmtDate lives in src/lib/shared/dateUtils.ts. Re-exported here for
 // convenient access alongside the other OLE display helpers.
-export { fmtDate, dayName } from '../shared/dateUtils';
+export { dayName, fmtDate } from '../shared/dateUtils';
 
 // ─── Workcell Logos ─────────────────────────────────────────────────────────
 const _base = import.meta.env.BASE_URL ?? '/';
 
 export const WORKCELL_LOGOS: Record<string, string> = {
-  aop:            `${_base}workcell logo/aop.png`,
-  arista:         `${_base}workcell logo/Arista.png`,
-  asp:            `${_base}workcell logo/asp.jpg`,
+  aop: `${_base}workcell logo/aop.png`,
+  arista: `${_base}workcell logo/Arista.png`,
+  asp: `${_base}workcell logo/asp.jpg`,
   beckmancoulter: `${_base}workcell logo/bc.png`,
-  collins:        `${_base}workcell logo/collins.png`,
-  danaher:        `${_base}workcell logo/danaher.png`,
-  dyson:          `${_base}workcell logo/dyson.png`,
-  fortive:        `${_base}workcell logo/fortive.png`,
-  imed:           `${_base}workcell logo/imed.png`,
-  infinera:       `${_base}workcell logo/infinera.jpg`,
-  keyisght:       `${_base}workcell logo/keysight.png`,
-  keysight:       `${_base}workcell logo/keysight.png`,
-  lamresearch:    `${_base}workcell logo/lam_research.png`,
-  masimo:         `${_base}workcell logo/masimo.png`,
-  micron:         `${_base}workcell logo/micron.png`,
-  msi:            `${_base}workcell logo/msi.png`,
-  photonics:      `${_base}workcell logo/photonics.png`,
-  resmed:         `${_base}workcell logo/resmed.png`,
-  tellabs:        `${_base}workcell logo/tellabs.png`,
-  utas:           `${_base}workcell logo/collins.png`,
-  wabtec:         `${_base}workcell logo/wabtec.png`,
+  collins: `${_base}workcell logo/collins.png`,
+  danaher: `${_base}workcell logo/danaher.png`,
+  dyson: `${_base}workcell logo/dyson.png`,
+  fortive: `${_base}workcell logo/fortive.png`,
+  imed: `${_base}workcell logo/imed.png`,
+  infinera: `${_base}workcell logo/infinera.jpg`,
+  keyisght: `${_base}workcell logo/keysight.png`,
+  keysight: `${_base}workcell logo/keysight.png`,
+  lamresearch: `${_base}workcell logo/lam_research.png`,
+  lammec: `${_base}workcell logo/lam_research.png`,   // shares Lam logo (distinguished by bg tint)
+  lamgb: `${_base}workcell logo/lam_research.png`,    // shares Lam logo (distinguished by bg tint)
+  masimo: `${_base}workcell logo/masimo.png`,
+  micron: `${_base}workcell logo/micron.png`,
+  msi: `${_base}workcell logo/msi.png`,
+  photonics: `${_base}workcell logo/photonics.png`,
+  resmed: `${_base}workcell logo/resmed.png`,
+  tellabs: `${_base}workcell logo/tellabs.png`,
+  utas: `${_base}workcell logo/collins.png`,
+  wabtec: `${_base}workcell logo/wabtec.png`,
+  // ── Fetched from Wikipedia (cohu/life360 are low-res favicon placeholders) ──
+  // NOTE: `advantest` MUST stay before `adva` (prefix match would otherwise
+  // grab ADVANTEST for the ADVA logo).
+  motorola: `${_base}workcell logo/motorola.png`,
+  nokia: `${_base}workcell logo/nokia.png`,
+  bd: `${_base}workcell logo/bd.png`,
+  illumina: `${_base}workcell logo/illumina.png`,
+  intel: `${_base}workcell logo/intel.png`,
+  advantest: `${_base}workcell logo/advantest.png`,
+  adva: `${_base}workcell logo/adva.png`,
+  akamai: `${_base}workcell logo/akamai.png`,
+  medtronic: `${_base}workcell logo/medtronic.png`,
+  amat: `${_base}workcell logo/amat.png`,
+  gopro: `${_base}workcell logo/gopro.png`,
+  barco: `${_base}workcell logo/barco.png`,
+  skydio: `${_base}workcell logo/skydio.png`,
+  tmo: `${_base}workcell logo/thermofisher.png`,   // TMO = Thermo Fisher
+  ltx: `${_base}workcell logo/cohu.png`,           // LTX-Credence → Cohu
+  life: `${_base}workcell logo/life360.png`,        // LIFE360
+  elenion: `${_base}workcell logo/elenion.png`,
+  endurance: `${_base}workcell logo/endurance.png`, // Elenion → acquired by Nokia
 };
+
+/**
+ * Optional per-workcell background tint for the logo box. Used to visually
+ * distinguish workcells that SHARE the same logo image (the three LAM lines,
+ * the two Arista lines). Keyed the same way as WORKCELL_LOGOS (normalized-name
+ * prefix). Workcells with no entry fall back to white.
+ * NOTE: keep the more specific key (aristanetworksglacier) BEFORE the general
+ * one (arista) so the prefix match resolves to the right tint.
+ */
+export const WORKCELL_LOGO_BG: Record<string, string> = {
+  // LAM lines — same Lam Research logo, different light tints
+  lamresearch: '#fef2f2', // light red
+  lammec: '#ecfdf5',      // light emerald
+  lamgb: '#fffbeb',       // light amber
+  // Arista lines — same Arista logo, different light tints
+  aristanetworksglacier: '#f5f3ff', // light violet (Glacier)
+  arista: '#eff6ff',                // light blue
+};
+
+export function getWorkcellLogoBg(workcell: string | null | undefined): string | null {
+  if (!workcell) return null;
+  const k = workcell.toLowerCase().replace(/[^a-z]/g, '');
+  const lk = Object.keys(WORKCELL_LOGO_BG).find(x => k.startsWith(x));
+  return lk ? WORKCELL_LOGO_BG[lk] : null;
+}
 
 // ─── OLE Target ────────────────────────────────────────────────────────────
 export const OLE_TARGET = 61;

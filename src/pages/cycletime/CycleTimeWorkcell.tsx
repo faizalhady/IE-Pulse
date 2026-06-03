@@ -14,7 +14,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { getWorkcellLogo } from '@/lib/ole/oleConstants';
+import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import {
   useCycleTimeCustomers,
@@ -46,7 +46,6 @@ export default function CycleTimeWorkcell() {
   return (
     <CycleTimeExplorer
       lockedCustomer={customer}
-      enableBreakdown={false}
       aside={<AssemblyCoverageCard total={totalAssemblies} withData={withData} />}
       headerLeft={
         <div className="flex items-center gap-3 min-w-0">
@@ -61,11 +60,14 @@ export default function CycleTimeWorkcell() {
 
           {/* Logo */}
           {logo ? (
-            <div className="flex h-10 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-white">
+            <div
+              className="flex h-10 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-border"
+              style={{ backgroundColor: getWorkcellLogoBg(customer) ?? '#ffffff' }}
+            >
               <img src={logo} alt={customer} className="h-full w-full object-contain p-1" />
             </div>
           ) : (
-            <div className="flex h-10 w-14 flex-shrink-0 items-center justify-center rounded-md border border-border bg-muted">
+            <div className="flex h-10 w-24 flex-shrink-0 items-center justify-center rounded-md border border-border bg-muted">
               <span className="text-xs font-bold text-muted-foreground">{customer.slice(0, 3).toUpperCase()}</span>
             </div>
           )}

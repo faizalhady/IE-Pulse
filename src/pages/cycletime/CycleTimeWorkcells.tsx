@@ -16,13 +16,13 @@
  */
 
 import { useCycleTimeCoverage, useCycleTimeCustomers } from '@/hooks/cycle_time/useCycleTimeData';
-import { getWorkcellLogo } from '@/lib/ole/oleConstants';
+import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
-import { ChevronRight, Clock, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const GRID = '2.5rem minmax(12rem,1fr) 22rem 8rem 1.5rem';
+const GRID = '2.5rem minmax(15rem,1fr) 22rem 8rem 1.5rem';
 const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Updated', ''];
 
 /** Data-coverage % (assemblies with cycle-time data ÷ catalogue total). */
@@ -51,7 +51,7 @@ interface Row {
 
 export default function CycleTimeWorkcells() {
   const navigate = useNavigate();
-  const { data: customers = [], isFetching: custFetching, refetch } = useCycleTimeCustomers();
+  const { data: customers = [], isFetching: custFetching } = useCycleTimeCustomers();
   const { data: coverage = [], isFetching: covFetching } = useCycleTimeCoverage();
 
   const covByCustomer = useMemo(() => {
@@ -61,7 +61,7 @@ export default function CycleTimeWorkcells() {
   }, [coverage]);
 
   // Build rows, then keep only those that actually have data, sorted A–Z.
-  const { visible, hiddenNames } = useMemo(() => {
+  const { visible } = useMemo(() => {
     const rows: Row[] = customers.map((c) => {
       const cov = covByCustomer.get(c.customer);
       const withData = cov?.assemblies ?? 0;
@@ -89,38 +89,7 @@ export default function CycleTimeWorkcells() {
   const loading = (custFetching && customers.length === 0) || (covFetching && coverage.length === 0);
 
   return (
-    <div className="relative">
-      {/* ─── Sticky header ─────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-6">
-        <div className="pt-4 pb-4 flex items-center justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
-              <Clock className="h-5 w-5 text-emerald-500" />
-              Cycle Time Workcells
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {visible.length} workcells · sorted A–Z
-              {hiddenNames.length > 0 && (
-                <span title={`No cycle-time data yet:\n${hiddenNames.join('\n')}`} className="cursor-help">
-                  {' · '}
-                  <span className="underline decoration-dotted underline-offset-2">
-                    {hiddenNames.length} hidden (no data)
-                  </span>
-                </span>
-              )}
-            </p>
-          </div>
-          <button
-            onClick={() => refetch()}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Loader2 className={cn('h-3.5 w-3.5', custFetching ? 'animate-spin' : 'hidden')} />
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <div className="p-5">
+    <div className="p-5">
         {/* league table */}
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div
@@ -151,9 +120,6 @@ export default function CycleTimeWorkcells() {
                   className="group grid items-center w-full text-left border-b border-border last:border-0 hover:bg-muted/30 transition-colors relative"
                   style={{ gridTemplateColumns: GRID, height: 60 }}
                 >
-                  {/* coverage quality accent */}
-                  <span className={cn('absolute left-0 top-0 bottom-0 w-0.5', coverageBar(r.cov))} />
-
                   {/* position */}
                   <div className="px-2">
                     <span className="text-sm font-mono font-bold text-muted-foreground tabular-nums">{idx + 1}</span>
@@ -162,17 +128,20 @@ export default function CycleTimeWorkcells() {
                   {/* logo + name */}
                   <div className="px-2 flex items-center gap-3 min-w-0">
                     {logo ? (
-                      <div className="w-12 h-7 rounded border border-border bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <div
+                        className="w-24 h-9 rounded border border-border flex items-center justify-center overflow-hidden flex-shrink-0"
+                        style={{ backgroundColor: getWorkcellLogoBg(r.customer) ?? '#ffffff' }}
+                      >
                         <img src={logo} alt={r.customer} className="w-full h-full object-contain p-0.5" />
                       </div>
                     ) : (
-                      <div className="w-12 h-7 rounded border border-border bg-muted flex items-center justify-center flex-shrink-0">
+                      <div className="w-24 h-9 rounded border border-border bg-muted flex items-center justify-center flex-shrink-0">
                         <span className="text-[9px] font-bold text-muted-foreground">{r.customer.slice(0, 3).toUpperCase()}</span>
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">{r.customer}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{r.division}</p>
+                      <p className="text-base font-semibold text-foreground truncate">{r.customer}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{r.division}</p>
                     </div>
                   </div>
 
@@ -210,10 +179,9 @@ export default function CycleTimeWorkcells() {
         <p className="text-[10px] text-muted-foreground mt-3">
           Sorted alphabetically. <span className="font-medium text-foreground/80">Assemblies</span> shows how many
           have cycle-time data vs the customer's total catalogue — the bar and % are that coverage (red &lt;50%, amber
-          &lt;90%, green ≥90%). Workcells with no data yet are hidden (count shown above). Click a workcell to open its
+          &lt;90%, green ≥90%). Workcells with no data yet are hidden. Click a workcell to open its
           full profile.
         </p>
-      </div>
     </div>
   );
 }

@@ -141,6 +141,26 @@ export interface CycleTimeAssemblyAgg {
   bottleneck: string | null;
 }
 
+/** Lightweight per-assembly LIST row — collapsed rows on the Assemblies page. */
+export interface CycleTimeAssemblyListRow {
+  assembly: string;
+  family: string | null;
+  builds: number;
+  has_smt: boolean;
+  has_th: boolean;
+  has_be: boolean;
+}
+
+/** One long row of per-build process detail (from /assembly-builds). The FE
+ *  groups these into builds by revision/line/workcenter. */
+export interface CycleTimeAssemblyBuildStep {
+  revision: string;
+  sub_workcenter: string;
+  workcenter: string;
+  step: string;
+  seconds: number | null;
+}
+
 export interface CycleTimeRefreshResponse {
   status: 'accepted';
   message: string;
@@ -310,6 +330,18 @@ export const cycleTimeApi = {
      *  and/or a single assembly (drawer header). */
     list: (customer: string, sub_workcenter?: string, assembly?: string) =>
       get<CycleTimeAssemblyAgg[]>('/assemblies', { customer, sub_workcenter, assembly }),
+  },
+  assemblyList: {
+    /** Lightweight collapsed-row list for the Assemblies page (identity + stage
+     *  footprint only — no cycle-time math). */
+    list: (customer: string, sub_workcenter?: string) =>
+      get<CycleTimeAssemblyListRow[]>('/assembly-list', { customer, sub_workcenter }),
+  },
+  assemblyBuilds: {
+    /** Per-build process detail for ONE assembly (expanded row). Long rows the
+     *  FE groups into builds. */
+    list: (customer: string, assembly: string, sub_workcenter?: string) =>
+      get<CycleTimeAssemblyBuildStep[]>('/assembly-builds', { customer, assembly, sub_workcenter }),
   },
   raw: {
     list: (filters: CycleTimeRawFilters = {}) =>

@@ -13,7 +13,7 @@
  * backport OLE.
  */
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 
 import {
@@ -36,6 +36,10 @@ export const ctKeys = {
   aliases:    (customer?: string) => [...ctKeys.all, 'aliases', customer ?? ''] as const,
   assemblies: (customer?: string, line?: string, assembly?: string) =>
                 [...ctKeys.all, 'assemblies', customer ?? '', line ?? '', assembly ?? ''] as const,
+  assemblyList: (customer?: string, line?: string) =>
+                [...ctKeys.all, 'assemblyList', customer ?? '', line ?? ''] as const,
+  assemblyBuilds: (customer?: string, assembly?: string, line?: string) =>
+                [...ctKeys.all, 'assemblyBuilds', customer ?? '', assembly ?? '', line ?? ''] as const,
   data:       (filters: CycleTimeDataFilters) => [...ctKeys.all, 'data', filters] as const,
   dataPage:   (filters: CycleTimeDataFilters, pageSize: number) =>
                 [...ctKeys.all, 'dataPage', filters, pageSize] as const,
@@ -129,6 +133,20 @@ export function useCycleTimeDataInfinite(filters: CycleTimeDataFilters, pageSize
   return { ...q, rows, totalCount };
 }
 
+/**
+ * DB-mode pivoted rows for a SINGLE page (classic prev/next pagination). Shows
+ * one page at a time; keeps the previous page visible while the next loads.
+ */
+export function useCycleTimeDataPage(filters: CycleTimeDataFilters, page: number, pageSize = 300) {
+  return useQuery({
+    queryKey: [...ctKeys.dataPage(filters, pageSize), page] as const,
+    queryFn:  () => cycleTimeApi.data.page({ ...filters, page, page_size: pageSize }),
+    enabled:  Boolean(filters.customer),
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
 /** Per-assembly aggregate for Breakdown B (server-computed), optionally scoped
  *  to one line and/or a single assembly (drawer header). */
 export function useCycleTimeAssemblies(customer: string | undefined, line?: string, assembly?: string) {
@@ -136,6 +154,28 @@ export function useCycleTimeAssemblies(customer: string | undefined, line?: stri
     queryKey: ctKeys.assemblies(customer, line, assembly),
     queryFn:  () => cycleTimeApi.assemblies.list(customer!, line || undefined, assembly || undefined),
     enabled:  Boolean(customer),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Lightweight collapsed-row list for the Assemblies page — one cheap grouped
+ *  scan of raw (identity + stage footprint, no cycle-time math). */
+export function useCycleTimeAssemblyList(customer: string | undefined, line?: string) {
+  return useQuery({
+    queryKey: ctKeys.assemblyList(customer, line),
+    queryFn:  () => cycleTimeApi.assemblyList.list(customer!, line || undefined),
+    enabled:  Boolean(customer),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Per-build process detail for ONE assembly — fetched lazily when its row is
+ *  expanded. Long rows the component groups into builds. */
+export function useCycleTimeAssemblyBuilds(customer: string | undefined, assembly: string | undefined, line?: string) {
+  return useQuery({
+    queryKey: ctKeys.assemblyBuilds(customer, assembly, line),
+    queryFn:  () => cycleTimeApi.assemblyBuilds.list(customer!, assembly!, line || undefined),
+    enabled:  Boolean(customer && assembly),
     staleTime: 5 * 60_000,
   });
 }

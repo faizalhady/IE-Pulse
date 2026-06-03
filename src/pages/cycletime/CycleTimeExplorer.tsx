@@ -16,7 +16,7 @@
  *   Live  — paginated proxy directly to IEDB, infinite scroll
  */
 
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   Boxes, ChevronDown, Download, FileSpreadsheet, Loader2, Rows3,
 } from 'lucide-react';
@@ -31,20 +31,21 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   useCycleTimeAliases,
-  useCycleTimeDataInfinite,
+  useCycleTimeDataPage,
   useCycleTimeLive,
 } from '@/hooks/cycle_time/useCycleTimeData';
 import { cycleTimeApi } from '@/lib/cycle_time/cycleTimeApi';
 import { exportCycleTimeXlsx } from '@/lib/cycle_time/cycleTimeExport';
 
+import CycleTimeAssembliesTable from './CycleTimeAssembliesTable';
 import CycleTimeAssemblyDrawer, { DrawerBuildRef } from './CycleTimeAssemblyDrawer';
-import CycleTimeBreakdownB from './CycleTimeBreakdownB';
 import CycleTimeFilters, { useCycleTimeFilters } from './CycleTimeFilters';
 import CycleTimeTable from './CycleTimeTable';
 
 type Source = 'db' | 'live';
 type View = 'table' | 'breakdown';
 const LIVE_PAGE_SIZE = 500;
+const DB_PAGE_SIZE = 300;
 
 interface CycleTimeExplorerProps {
   /** Left side of the sticky header — a title or a workcell brand block. */
@@ -77,7 +78,7 @@ export default function CycleTimeExplorer({
 
   const [filters] = useCycleTimeFilters();
   const [exporting, setExporting] = useState(false);
-  const [view, setView] = useState<View>('table');
+  const [view, setView] = useState<View>('breakdown');
   // Table-tab drawer: which assembly + which build (row) to pre-select.
   const [drawer, setDrawer] = useState<{ assembly: string; build: DrawerBuildRef } | null>(null);
   // With breakdown disabled (Data page) the table is the only view.
@@ -86,16 +87,17 @@ export default function CycleTimeExplorer({
   // Active customer: route-locked (workcell page) or picked in the filter bar.
   const customer = lockedCustomer ?? (filters.customer || undefined);
 
-  // DB mode — server-paginated pivoted rows, infinite scroll (first page fast).
-  const dbQ = useCycleTimeDataInfinite(
-    source === 'db'
-      ? {
-          customer,
-          sub_workcenter: filters.sub_workcenter || undefined,
-          assembly:       filters.assembly || undefined,
-        }
-      : { customer: undefined }, // skip fetch in live mode
-  );
+  // DB mode — one page at a time (classic prev/next pagination).
+  const [page, setPage] = useState(1);
+  const dbFilters = {
+    customer,
+    sub_workcenter: filters.sub_workcenter || undefined,
+    assembly:       filters.assembly || undefined,
+  };
+  // Reset to page 1 whenever the filter scope changes.
+  useEffect(() => { setPage(1); }, [customer, filters.sub_workcenter, filters.assembly]);
+
+  const dbQ = useCycleTimeDataPage(source === 'db' ? dbFilters : { customer: undefined }, page, DB_PAGE_SIZE);
 
   // Live mode — infinite-scroll pages straight from IEDB.
   const liveQ = useCycleTimeLive(
@@ -108,23 +110,33 @@ export default function CycleTimeExplorer({
   // server-built map embedded in each /live page response.
   const dbAliasMapQ = useCycleTimeAliases(source === 'db' ? customer : undefined);
 
-  // Both modes are infinite queries with the same shape — pick the active one.
-  const activeQ = source === 'live' ? liveQ : dbQ;
-  const rows         = activeQ.rows;
-  const aliasMap     = source === 'live' ? liveQ.aliasMap : dbAliasMapQ.data;
-  const tableLoading = activeQ.isLoading;
-  const tableError   = activeQ.error as Error | null;
-  const totalKnown   = activeQ.totalCount;
-  const hasMore      = Boolean(activeQ.hasNextPage);
-  const fetchingMore = Boolean(activeQ.isFetchingNextPage);
-  const onScrollEnd  = () => activeQ.fetchNextPage();
+  // ── Unified view-model: DB = paged page, Live = infinite scroll ─────────────
+  const isLive = source === 'live';
+  const rows         = isLive ? liveQ.rows       : dbQ.data?.rows;
+  const aliasMap     = isLive ? liveQ.aliasMap   : dbAliasMapQ.data;
+  const tableLoading = isLive ? liveQ.isLoading  : dbQ.isLoading;
+  const tableError   = (isLive ? liveQ.error     : dbQ.error) as Error | null;
+  const totalKnown   = isLive ? liveQ.totalCount : (dbQ.data?.total ?? 0);
 
-  // Lines available for the Line filter — derived from currently loaded rows.
+  // Live → infinite scroll / load-more. DB → page controls.
+  const hasMore      = isLive ? Boolean(liveQ.hasNextPage)       : false;
+  const fetchingMore = isLive ? Boolean(liveQ.isFetchingNextPage) : false;
+  const onScrollEnd  = isLive ? () => liveQ.fetchNextPage()       : undefined;
+  const pagination   = isLive
+    ? undefined
+    : {
+        page:    dbQ.data?.page ?? page,
+        pages:   dbQ.data?.pages ?? 1,
+        loading: dbQ.isFetching,
+        onPage:  setPage,
+      };
+
+  // Line options come from the alias map (complete, not just the current page).
   const lines = useMemo(() => {
     const set = new Set<string>();
-    (rows ?? []).forEach((r) => set.add(r.sub_workcenter));
+    Object.values(aliasMap ?? {}).forEach((info) => info.lines.forEach((l) => set.add(l)));
     return Array.from(set).sort();
-  }, [rows]);
+  }, [aliasMap]);
 
   const hasRows = (rows?.length ?? 0) > 0;
 
@@ -158,8 +170,8 @@ export default function CycleTimeExplorer({
       {/* ─── View tabs (omitted entirely when breakdown is disabled) ──── */}
       {enableBreakdown && (
         <div className="flex items-center gap-4 border-b border-border px-6">
+          <TabButton active={view === 'breakdown'} onClick={() => setView('breakdown')} icon={Boxes} label="Assemblies" />
           <TabButton active={view === 'table'}     onClick={() => setView('table')}     icon={Rows3} label="Table" />
-          <TabButton active={view === 'breakdown'} onClick={() => setView('breakdown')} icon={Boxes} label="Breakdown" />
         </div>
       )}
 
@@ -195,7 +207,7 @@ export default function CycleTimeExplorer({
       {/* ─── Body ───────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0">
         {activeView === 'breakdown' ? (
-          <CycleTimeBreakdownB customer={customer} />
+          <CycleTimeAssembliesTable lockedCustomer={customer} />
         ) : (
           <CycleTimeTable
             rows={rows}
@@ -206,6 +218,7 @@ export default function CycleTimeExplorer({
             hasMore={hasMore}
             fetchingMore={fetchingMore}
             totalKnown={totalKnown}
+            pagination={pagination}
             onRowClick={(row) =>
               setDrawer({
                 assembly: row.assembly,

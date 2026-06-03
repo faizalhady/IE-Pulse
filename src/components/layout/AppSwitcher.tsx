@@ -11,9 +11,12 @@ import { useApp } from '@/context/AppContext';
 import { IS_SINGLE_APP } from '@/lib/buildContext';
 import { useFeatureFlag } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
-import { Grip } from 'lucide-react';
+import { AlertTriangle, Grip } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+/** Modules that are live/in-production. Everything else gets a "not live" warning. */
+const LIVE_APPS = new Set<AppId>(['ole', 'cycle-time']);
 
 interface AppSwitcherProps {
   collapsed: boolean;
@@ -108,6 +111,7 @@ export default function AppSwitcher({ collapsed }: AppSwitcherProps) {
                   {list.map(app => {
                     const AppIcon = app.icon;
                     const isActive = app.id === activeApp.id;
+                    const isLive = LIVE_APPS.has(app.id as AppId);
                     return (
                       <Tooltip key={app.id}>
                         <TooltipTrigger asChild>
@@ -118,8 +122,25 @@ export default function AppSwitcher({ collapsed }: AppSwitcherProps) {
                               isActive ? 'bg-zinc-800/80' : 'hover:bg-zinc-800/50',
                             )}
                           >
-                            <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-sm', app.iconBg)}>
-                              <AppIcon className={cn('h-5 w-5', app.color)} />
+                            <div className="relative">
+                              <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-sm', app.iconBg)}>
+                                <AppIcon className={cn('h-5 w-5', app.color)} />
+                              </div>
+                              {isLive ? (
+                                // On air — live module
+                                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5" title="Live module">
+                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                  <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-zinc-950" />
+                                </span>
+                              ) : (
+                                // Warning — not live yet
+                                <span
+                                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 ring-2 ring-zinc-950"
+                                  title="Not live yet"
+                                >
+                                  <AlertTriangle className="h-2.5 w-2.5 text-zinc-950" />
+                                </span>
+                              )}
                             </div>
                             <span className={cn(
                               'text-xs font-medium truncate w-full px-0.5',
@@ -131,6 +152,9 @@ export default function AppSwitcher({ collapsed }: AppSwitcherProps) {
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs font-medium max-w-[220px]">
                           {app.description}
+                          <span className={cn('mt-1 block font-semibold', isLive ? 'text-emerald-400' : 'text-amber-400')}>
+                            {isLive ? '● Live module' : '⚠ Not live yet'}
+                          </span>
                         </TooltipContent>
                       </Tooltip>
                     );
