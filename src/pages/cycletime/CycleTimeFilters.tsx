@@ -8,7 +8,7 @@
  * filter bar feels identical across apps.
  */
 
-import { ReactNode, useMemo } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -20,7 +20,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCycleTimeCoverage, useCycleTimeCustomers } from '@/hooks/cycle_time/useCycleTimeData';
+import {
+  useCycleTimeAssemblyList,
+  useCycleTimeCoverage,
+  useCycleTimeCustomers,
+} from '@/hooks/cycle_time/useCycleTimeData';
+import { cn } from '@/lib/utils';
+
+/** Cap rendered combobox options — big customers (KEYSIGHT) have 50k+ assemblies. */
+const MAX_OPTIONS = 100;
 
 const ALL = '__all__';
 
@@ -76,6 +84,17 @@ export default function CycleTimeFilters({ availableLines, rightSlot, lockedCust
 
   const hasFilters = !!(filters.sub_workcenter || filters.assembly);
 
+  // Assembly box — single input that also shows a selectable dropdown of the
+  // customer's assemblies (type to filter OR click to select).
+  const [assemblyOpen, setAssemblyOpen] = useState(false);
+  const assembliesQ = useCycleTimeAssemblyList(activeCustomer || undefined, filters.sub_workcenter || undefined);
+  const { options, totalMatches } = useMemo(() => {
+    const all = assembliesQ.data ?? [];
+    const q = filters.assembly.trim().toLowerCase();
+    const matched = q ? all.filter((a) => a.assembly.toLowerCase().includes(q)) : all;
+    return { options: matched.slice(0, MAX_OPTIONS).map((a) => a.assembly), totalMatches: matched.length };
+  }, [assembliesQ.data, filters.assembly]);
+
   // Only offer workcells that actually have cycle-time data (same rule as the
   // league table). Sorted A–Z.
   const withDataCustomers = useMemo(() => {
@@ -108,16 +127,52 @@ export default function CycleTimeFilters({ availableLines, rightSlot, lockedCust
         </Select>
       )}
 
-      {/* 2. Assembly search */}
+      {/* 2. Assembly — single input that also lists selectable assemblies */}
       <div className="relative w-[260px]">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           value={filters.assembly}
-          onChange={(e) => setFilters({ assembly: e.target.value })}
-          placeholder="Search assembly…"
+          onChange={(e) => { setFilters({ assembly: e.target.value }); setAssemblyOpen(true); }}
+          onFocus={() => setAssemblyOpen(true)}
+          onBlur={() => setAssemblyOpen(false)}
+          placeholder="Search or select assembly…"
           className="h-9 pl-8"
           disabled={!activeCustomer}
+          autoComplete="off"
         />
+        {assemblyOpen && activeCustomer && (
+          <div className="absolute left-0 top-10 z-50 max-h-72 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md">
+            {assembliesQ.isLoading ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">Loading…</div>
+            ) : options.length === 0 ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">No assemblies found.</div>
+            ) : (
+              <>
+                {options.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    // preventDefault keeps the input focused so this click registers
+                    // before the input's onBlur closes the dropdown.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { setFilters({ assembly: a }); setAssemblyOpen(false); }}
+                    className={cn(
+                      'flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted',
+                      filters.assembly === a && 'bg-muted',
+                    )}
+                  >
+                    <span className="truncate">{a}</span>
+                  </button>
+                ))}
+                {totalMatches > options.length && (
+                  <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                    Showing {options.length} of {totalMatches.toLocaleString()} — keep typing to narrow.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 3. Line (optional) */}

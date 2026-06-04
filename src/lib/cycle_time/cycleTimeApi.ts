@@ -82,6 +82,8 @@ export interface CycleTimePivotedRow {
   workcenter: string;
   workcenter_type: string;
   sub_workcenter: string;
+  /** Build-level routing rank (min over steps) — 1 = primary route. */
+  priority: number | null;
   // Process columns: dynamic, value is seconds or null.
   [processName: string]: string | number | null;
 }
@@ -146,6 +148,12 @@ export interface CycleTimeAssemblyListRow {
   assembly: string;
   family: string | null;
   builds: number;
+  /** Distinct revisions for this assembly (Assemblies table column). */
+  revisions: number;
+  /** Distinct priority-1 routings (what the Flow tab shows by default). */
+  primary_builds: number;
+  /** True when the assembly has any priority>1 (alternate) routing. */
+  has_alternates: boolean;
   has_smt: boolean;
   has_th: boolean;
   has_be: boolean;
@@ -155,10 +163,25 @@ export interface CycleTimeAssemblyListRow {
  *  groups these into builds by revision/line/workcenter. */
 export interface CycleTimeAssemblyBuildStep {
   revision: string;
+  /** Routing rank — 1 = primary route, 2+ = alternates. */
+  priority: number;
   sub_workcenter: string;
   workcenter: string;
   step: string;
   seconds: number | null;
+  /** Physical step sequence (IEDB `order`). Sort ascending for the flow. */
+  step_order: number | null;
+  /** Capacity (CAP) for the step. */
+  cap: number | null;
+  /** Sample size (N) for the step. Displayed cycle time = seconds × n. */
+  n: number | null;
+  /** Time components from the IEDB step editor. */
+  lct: number | null;
+  mach: number | null;
+  imt: number | null;
+  hand: number | null;
+  pb: number | null;
+  hc: number | null;
 }
 
 export interface CycleTimeRefreshResponse {
@@ -170,6 +193,9 @@ export interface CycleTimeRefreshResponse {
 export interface CycleTimeAliasInfo {
   processes: string[];
   lines: string[];
+  /** Canonical sequence position (min IEDB `order`) — sorts the wide-table
+   *  process columns by physical flow. Null when no order was recorded. */
+  order?: number | null;
 }
 export type CycleTimeAliasMap = Record<string, CycleTimeAliasInfo>;
 
@@ -369,7 +395,7 @@ export const cycleTimeApi = {
 /** Identify which fields on a pivoted row are process columns (not metadata). */
 const PIVOT_META_COLS = new Set([
   'customer', 'division', 'family', 'assembly', 'revision',
-  'workcenter', 'workcenter_type', 'sub_workcenter',
+  'workcenter', 'workcenter_type', 'sub_workcenter', 'priority',
 ]);
 
 export function processColumnsOf(rows: CycleTimePivotedRow[]): string[] {

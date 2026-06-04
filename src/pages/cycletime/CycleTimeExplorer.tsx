@@ -18,7 +18,7 @@
 
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import {
-  Boxes, ChevronDown, Download, FileSpreadsheet, Loader2, Rows3,
+  ChevronDown, Download, FileSpreadsheet, Loader2,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -37,13 +37,13 @@ import {
 import { cycleTimeApi } from '@/lib/cycle_time/cycleTimeApi';
 import { exportCycleTimeXlsx } from '@/lib/cycle_time/cycleTimeExport';
 
-import CycleTimeAssembliesTable from './CycleTimeAssembliesTable';
 import CycleTimeAssemblyDrawer, { DrawerBuildRef } from './CycleTimeAssemblyDrawer';
+import CycleTimeAssemblyFlow from './CycleTimeAssemblyFlow';
 import CycleTimeFilters, { useCycleTimeFilters } from './CycleTimeFilters';
 import CycleTimeTable from './CycleTimeTable';
 
 type Source = 'db' | 'live';
-type View = 'table' | 'breakdown';
+type View = 'table' | 'flow';
 const LIVE_PAGE_SIZE = 500;
 const DB_PAGE_SIZE = 300;
 
@@ -78,11 +78,11 @@ export default function CycleTimeExplorer({
 
   const [filters] = useCycleTimeFilters();
   const [exporting, setExporting] = useState(false);
-  const [view, setView] = useState<View>('breakdown');
   // Table-tab drawer: which assembly + which build (row) to pre-select.
   const [drawer, setDrawer] = useState<{ assembly: string; build: DrawerBuildRef } | null>(null);
-  // With breakdown disabled (Data page) the table is the only view.
-  const activeView: View = enableBreakdown ? view : 'table';
+  // Tabs are hidden for now: the workcell explorer shows the Assemblies (flow)
+  // view; the Data page (breakdown disabled) shows the wide table.
+  const activeView: View = enableBreakdown ? 'flow' : 'table';
 
   // Active customer: route-locked (workcell page) or picked in the filter bar.
   const customer = lockedCustomer ?? (filters.customer || undefined);
@@ -167,15 +167,9 @@ export default function CycleTimeExplorer({
         {aside}
       </div>
 
-      {/* ─── View tabs (omitted entirely when breakdown is disabled) ──── */}
-      {enableBreakdown && (
-        <div className="flex items-center gap-4 border-b border-border px-6">
-          <TabButton active={view === 'breakdown'} onClick={() => setView('breakdown')} icon={Boxes} label="Assemblies" />
-          <TabButton active={view === 'table'}     onClick={() => setView('table')}     icon={Rows3} label="Table" />
-        </div>
-      )}
+      {/* Tabs hidden for now — workcell opens directly into the Assemblies view. */}
 
-      {/* ─── Filters (table tab only — Breakdown carries its own row) ──── */}
+      {/* ─── Filters (table tab only — Assemblies carries its own row) ──── */}
       {activeView === 'table' && (
         <CycleTimeFilters
           availableLines={lines}
@@ -206,8 +200,8 @@ export default function CycleTimeExplorer({
 
       {/* ─── Body ───────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0">
-        {activeView === 'breakdown' ? (
-          <CycleTimeAssembliesTable lockedCustomer={customer} />
+        {activeView === 'flow' ? (
+          <CycleTimeAssemblyFlow lockedCustomer={customer} />
         ) : (
           <CycleTimeTable
             rows={rows}
@@ -237,29 +231,5 @@ export default function CycleTimeExplorer({
         onClose={() => setDrawer(null)}
       />
     </div>
-  );
-}
-
-/** Underline-style view tab. */
-function TabButton({
-  active, onClick, icon: Icon, label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: typeof Rows3;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`-mb-px flex items-center gap-1.5 border-b-2 px-1 py-2.5 text-sm font-medium transition-colors ${
-        active
-          ? 'border-emerald-500 text-foreground'
-          : 'border-transparent text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      <Icon className="h-4 w-4" /> {label}
-    </button>
   );
 }
