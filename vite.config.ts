@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
+import fs from "fs";
 import path from "path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 
 /**
  * App basenames — mirrors src/config/apps.ts.
@@ -13,7 +14,49 @@ const APP_BASENAMES: Record<string, string> = {
   ebuild: '/ietools/ebuild/',
   iebaseline: '/ietools/iebaseline/',
   'cycle-time': '/ietools/cycle-time/',
+  ppqt: '/ietools/ppqt/',
+  ipk: '/ietools/ipk/',
+  lbr: '/ietools/lbr/',
 };
+
+/**
+ * Which public/ entries each per-module build ships. Vite copies ALL of
+ * public/ into every build; the prunePublicAssets plugin below deletes
+ * whatever a module's allowlist doesn't include. COMMON ships with every app.
+ * The core build (mode all) keeps everything.
+ */
+const COMMON_PUBLIC = ['favicon.ico', 'favicon.svg', 'robots.txt', 'placeholder.svg'];
+const APP_PUBLIC: Record<string, string[]> = {
+  ole:          ['workcell logo'],
+  'cycle-time': ['workcell logo'],
+  ppqt:         ['workcell logo'],
+  ipk:          ['workcell logo'],
+  lbr:          ['workcell logo'],
+  pulse:        ['workcell logo', 'floor-maps', 'layouts', 'world-countries.json', 'malaysia-peninsular.json', 'pdf.worker.min.mjs'],
+  fsms:         ['floor-maps', 'layouts', 'world-countries.json', 'pdf.worker.min.mjs'],
+  ebuild:       ['pdf.worker.min.mjs'],
+  iebaseline:   ['pdf.worker.min.mjs'],
+};
+
+/** After a per-module build, remove public/ entries the module doesn't use.
+ *  Only entries that exist in public/ are candidates, so build outputs
+ *  (assets/, index.html) are never touched. */
+function prunePublicAssets(appId: string, isCoreBuild: boolean): Plugin {
+  return {
+    name: 'prune-public-assets',
+    apply: 'build',
+    closeBundle() {
+      if (isCoreBuild) return; // core bundle serves every module
+      const allowed = new Set([...COMMON_PUBLIC, ...(APP_PUBLIC[appId] ?? [])]);
+      const outDir = path.resolve(__dirname, `dist/${appId}`);
+      for (const entry of fs.readdirSync(path.resolve(__dirname, 'public'))) {
+        if (!allowed.has(entry)) {
+          fs.rmSync(path.join(outDir, entry), { recursive: true, force: true });
+        }
+      }
+    },
+  };
+}
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -84,7 +127,7 @@ export default defineConfig(({ command, mode }) => {
         },
       },
     },
-    plugins: [react()],
+    plugins: [react(), prunePublicAssets(appId, isCoreBuild)],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
