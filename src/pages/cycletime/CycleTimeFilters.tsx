@@ -8,11 +8,12 @@
  * filter bar feels identical across apps.
  */
 
+import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { ReactNode, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -32,10 +33,20 @@ const MAX_OPTIONS = 100;
 
 const ALL = '__all__';
 
+/** The build stages a filter can target. */
+export const STAGES = ['SMT', 'TH', 'BE'] as const;
+
+/** Stage colour dots — match the Flow tab's workcenter colours. */
+const STAGE_DOT: Record<string, string> = {
+  SMT: 'bg-emerald-500', TH: 'bg-sky-500', BE: 'bg-violet-500',
+};
+
 export interface CycleTimeFiltersValue {
   customer: string;
   sub_workcenter: string;
   assembly: string;
+  /** Comma-joined stage set (e.g. "SMT,TH"); empty = All. */
+  stages: string;
 }
 
 interface CycleTimeFiltersProps {
@@ -49,6 +60,11 @@ interface CycleTimeFiltersProps {
    * stay enabled against this customer.
    */
   lockedCustomer?: string;
+  /**
+   * When true, the Line select is replaced by All/SMT/TH/BE stage buttons that
+   * filter assemblies by their exact stage footprint (used by the Flow tab).
+   */
+  stageMode?: boolean;
 }
 
 /** Hook that exposes filter state synced to the URL. */
@@ -58,9 +74,10 @@ export function useCycleTimeFilters(): [
 ] {
   const [params, setParams] = useSearchParams();
   const value: CycleTimeFiltersValue = {
-    customer:       params.get('customer')       ?? '',
+    customer: params.get('customer') ?? '',
     sub_workcenter: params.get('sub_workcenter') ?? '',
-    assembly:       params.get('assembly')       ?? '',
+    assembly: params.get('assembly') ?? '',
+    stages: params.get('stages') ?? '',
   };
   const setValue = (next: Partial<CycleTimeFiltersValue>) => {
     const merged = { ...value, ...next };
@@ -73,7 +90,7 @@ export function useCycleTimeFilters(): [
   return [value, setValue];
 }
 
-export default function CycleTimeFilters({ availableLines, rightSlot, lockedCustomer }: CycleTimeFiltersProps) {
+export default function CycleTimeFilters({ availableLines, rightSlot, lockedCustomer, stageMode }: CycleTimeFiltersProps) {
   const customers = useCycleTimeCustomers();
   const coverage = useCycleTimeCoverage();
   const [filters, setFilters] = useCycleTimeFilters();
@@ -82,7 +99,19 @@ export default function CycleTimeFilters({ availableLines, rightSlot, lockedCust
   const activeCustomer = lockedCustomer ?? filters.customer;
   const locked = Boolean(lockedCustomer);
 
-  const hasFilters = !!(filters.sub_workcenter || filters.assembly);
+  const hasFilters = !!(filters.sub_workcenter || filters.assembly || filters.stages);
+
+  // Stage filter (Flow tab): the selected set of build stages.
+  const stageSel = useMemo(
+    () => new Set(filters.stages ? filters.stages.split(',') : []),
+    [filters.stages],
+  );
+  const toggleStage = (st: string) => {
+    const next = new Set(stageSel);
+    next.has(st) ? next.delete(st) : next.add(st);
+    setFilters({ stages: Array.from(next).sort().join(',') });
+  };
+  const [stageOpen, setStageOpen] = useState(false);
 
   // Assembly box — single input that also shows a selectable dropdown of the
   // customer's assemblies (type to filter OR click to select).
@@ -175,29 +204,68 @@ export default function CycleTimeFilters({ availableLines, rightSlot, lockedCust
         )}
       </div>
 
-      {/* 3. Line (optional) */}
-      <Select
-        value={filters.sub_workcenter || ALL}
-        onValueChange={(v) => setFilters({ sub_workcenter: v === ALL ? '' : v })}
-        disabled={!activeCustomer || availableLines.length === 0}
-      >
-        <SelectTrigger className="h-9 w-[220px]">
-          <SelectValue placeholder="All lines" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>All lines</SelectItem>
-          {availableLines.map((line) => (
-            <SelectItem key={line} value={line}>
-              {line}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* 3a. Stage multi-select (Flow tab) — filter assemblies by exact stage set. */}
+      {stageMode ? (
+        <Popover open={stageOpen} onOpenChange={setStageOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              disabled={!activeCustomer}
+              className={cn(
+                'flex h-9 w-[200px] items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm',
+                'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-1.5 truncate">
+                {stageSel.size === 0 ? (
+                  <span className="text-muted-foreground">Select stages</span>
+                ) : (
+                  STAGES.filter((s) => stageSel.has(s)).map((s) => (
+                    <span key={s} className="flex items-center gap-1">
+                      <span className={cn('h-2 w-2 rounded-full', STAGE_DOT[s])} />{s}
+                    </span>
+                  ))
+                )}
+              </span>
+              <ChevronsUpDown className="h-4 w-4 flex-shrink-0 text-muted-foreground/60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-1" align="start">
+            <StageOption label="Default" selected={stageSel.size === 0} onClick={() => setFilters({ stages: '' })} />
+            <div className="my-1 h-px bg-border" />
+            {STAGES.map((st) => (
+              <StageOption key={st} label={st} dot={STAGE_DOT[st]} selected={stageSel.has(st)} onClick={() => toggleStage(st)} />
+            ))}
+          </PopoverContent>
+        </Popover>
+      ) : (
+        /* 3b. Line (optional) — used by the Table tab. */
+        <Select
+          value={filters.sub_workcenter || ALL}
+          onValueChange={(v) => setFilters({ sub_workcenter: v === ALL ? '' : v })}
+          disabled={!activeCustomer || availableLines.length === 0}
+        >
+          <SelectTrigger className="h-9 w-[220px]">
+            <SelectValue placeholder="All lines" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All lines</SelectItem>
+            {availableLines.map((line) => (
+              <SelectItem key={line} value={line}>
+                {line}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       {/* 4. Clear — leaves a route-locked customer intact. */}
       {hasFilters && (
         <button
-          onClick={() => setFilters(locked ? { sub_workcenter: '', assembly: '' } : { customer: '', sub_workcenter: '', assembly: '' })}
+          onClick={() => setFilters(locked
+            ? { sub_workcenter: '', assembly: '', stages: '' }
+            : { customer: '', sub_workcenter: '', assembly: '', stages: '' })}
           className="h-9 px-3 rounded-lg border border-red-500/30 text-xs text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-colors whitespace-nowrap"
         >
           Clear all
@@ -207,5 +275,23 @@ export default function CycleTimeFilters({ availableLines, rightSlot, lockedCust
       {/* Far-right slot (e.g. Download) */}
       {rightSlot && <div className="ml-auto flex items-center">{rightSlot}</div>}
     </div>
+  );
+}
+
+/** A row in the stage multi-select dropdown (All / SMT / TH / BE). Clicking
+ *  toggles the stage; the popover stays open so several can be picked. */
+function StageOption({
+  label, dot, selected, onClick,
+}: { label: string; dot?: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted"
+    >
+      <Check className={cn('h-4 w-4 flex-shrink-0 text-emerald-500', selected ? 'opacity-100' : 'opacity-0')} />
+      {dot ? <span className={cn('h-2 w-2 flex-shrink-0 rounded-full', dot)} /> : <span className="w-2 flex-shrink-0" />}
+      <span className="flex-1 font-medium">{label}</span>
+    </button>
   );
 }

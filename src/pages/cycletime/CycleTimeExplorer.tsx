@@ -81,7 +81,8 @@ export default function CycleTimeExplorer({
   // Table-tab drawer: which assembly + which build (row) to pre-select.
   const [drawer, setDrawer] = useState<{ assembly: string; build: DrawerBuildRef } | null>(null);
   // Tabs are hidden for now: the workcell explorer shows the Assemblies (flow)
-  // view; the Data page (breakdown disabled) shows the wide table.
+  // view — its Detail|Matrix toggle lives in the flow's own filter row; the
+  // Data page (breakdown disabled) shows the wide table.
   const activeView: View = enableBreakdown ? 'flow' : 'table';
 
   // Active customer: route-locked (workcell page) or picked in the filter bar.

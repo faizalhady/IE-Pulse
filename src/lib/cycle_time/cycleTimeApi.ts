@@ -171,10 +171,14 @@ export interface CycleTimeAssemblyBuildStep {
   seconds: number | null;
   /** Physical step sequence (IEDB `order`). Sort ascending for the flow. */
   step_order: number | null;
+  /** Group standard (GRP) for the step. */
+  grp: number | null;
   /** Capacity (CAP) for the step. */
   cap: number | null;
   /** Sample size (N) for the step. Displayed cycle time = seconds × n. */
   n: number | null;
+  /** Sampling percentage (S%, 1–100). */
+  sampling: number | null;
   /** Time components from the IEDB step editor. */
   lct: number | null;
   mach: number | null;
