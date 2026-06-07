@@ -6,9 +6,8 @@
  *
  * Route: /cycle-time/wc/:customer
  *
- * Same explorer as the Overview page (Table / Breakdown tabs, DB|Live toggle,
- * download) but branded with the workcell's logo + name and locked to this
- * customer — no customer Select in the filter bar.
+ * Branded header (logo + name + assembly coverage card) over the assemblies
+ * flow view, locked to this customer — no customer Select in the filter bar.
  */
 
 import { ArrowLeft } from 'lucide-react';
@@ -22,7 +21,7 @@ import {
   useInvalidateOnRefreshComplete,
 } from '@/hooks/cycle_time/useCycleTimeData';
 
-import CycleTimeExplorer from './CycleTimeExplorer';
+import CycleTimeAssemblyFlow from './CycleTimeAssemblyFlow';
 
 export default function CycleTimeWorkcell() {
   useInvalidateOnRefreshComplete();
@@ -44,10 +43,9 @@ export default function CycleTimeWorkcell() {
   const withData = summary?.assemblies ?? null;
 
   return (
-    <CycleTimeExplorer
-      lockedCustomer={customer}
-      aside={<AssemblyCoverageCard total={totalAssemblies} withData={withData} />}
-      headerLeft={
+    <div className="flex h-full flex-col">
+      {/* ─── Branded header (coverage card pinned far right) ───────────── */}
+      <div className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex items-center gap-3 min-w-0">
           {/* Back to league table */}
           <button
@@ -78,8 +76,15 @@ export default function CycleTimeWorkcell() {
             <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
           </div>
         </div>
-      }
-    />
+
+        <AssemblyCoverageCard total={totalAssemblies} withData={withData} />
+      </div>
+
+      {/* ─── Assemblies flow (filters + Detail|Compact toggle inside) ──── */}
+      <div className="flex-1 min-h-0">
+        <CycleTimeAssemblyFlow lockedCustomer={customer} />
+      </div>
+    </div>
   );
 }
 

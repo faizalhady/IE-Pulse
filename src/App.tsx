@@ -27,10 +27,8 @@ import OLESmh from "@/pages/ole/OLESmh";
 import OlePlantReport from "@/pages/ole/OlePlantReport";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
-import CycleTimeHome from "@/pages/cycletime/CycleTimeHome";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
 import CycleTimeWorkcell from "@/pages/cycletime/CycleTimeWorkcell";
-import CycleTimeAssemblies from "@/pages/cycletime/CycleTimeAssemblies";
 import PPQTHome from "@/pages/ppqt/PPQTHome";
 import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
 import PPQTWorkcellProfile from "@/pages/ppqt/PPQTWorkcellProfile";
@@ -131,8 +129,6 @@ function AppShell() {
               <Route path="/cycle-time" element={<Navigate to="/cycle-time/workcells" replace />} />
               <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
               <Route path="/cycle-time/wc/:customer" element={<CycleTimeWorkcell />} />
-              <Route path="/cycle-time/data" element={<CycleTimeHome />} />
-              <Route path="/cycle-time/assemblies" element={<CycleTimeAssemblies />} />
             </>}
 
             {includesApp('ppqt') && <>
