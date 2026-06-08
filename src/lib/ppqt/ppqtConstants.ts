@@ -88,3 +88,42 @@ export function gapTextClass(gap: number): string {
   if (gap < 0) return 'text-emerald-400';
   return 'text-muted-foreground';
 }
+
+// ═══ Dashboard 2 — capacity verdict (NEED vs HAVE) ═══════════════════════════
+// The verdict is the SME's mental model from the PPQT Excel: per step, compare
+// machines NEEDED (row 33) against machines AVAILABLE (row 32). A scope (line
+// or workcell) is SHORT when any step needs more machines than it has, TIGHT
+// when nothing is short but at least one step sits in the warning band, OK
+// otherwise.
+export type PPQTVerdict = 'short' | 'tight' | 'ok';
+
+/** Map shortfall counts to a capacity verdict. */
+export function getPPQTVerdict(machinesShort: number, stepsTight: number): PPQTVerdict {
+  if (machinesShort > 0) return 'short';
+  if (stepsTight > 0)    return 'tight';
+  return 'ok';
+}
+
+export const PPQT_VERDICT_BADGE: Record<PPQTVerdict, string> = {
+  short: 'bg-red-500/15     text-red-400     border-red-500/30',
+  tight: 'bg-amber-500/15   text-amber-400   border-amber-500/30',
+  ok:    'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+};
+
+export const PPQT_VERDICT_LABEL: Record<PPQTVerdict, string> = {
+  short: 'SHORT',
+  tight: 'TIGHT',
+  ok:    'OK',
+};
+
+export const PPQT_VERDICT_TEXT: Record<PPQTVerdict, string> = {
+  short: 'text-red-400',
+  tight: 'text-amber-400',
+  ok:    'text-emerald-400',
+};
+
+export const PPQT_VERDICT_DOT: Record<PPQTVerdict, string> = {
+  short: 'bg-red-500',
+  tight: 'bg-amber-400',
+  ok:    'bg-emerald-500',
+};

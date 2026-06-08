@@ -3,9 +3,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
-import KioskMode from "@/pages/KioskMode";
-import Login from "@/pages/Login";
+import { prefetchOleData } from "@/hooks/ole/useOleData";
+import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
+import CycleTimeWorkcell from "@/pages/cycletime/CycleTimeWorkcell";
+import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
 import Documents from "@/pages/Documents";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import FloorMap from "@/pages/FloorMap";
@@ -16,42 +18,42 @@ import IEBaseline from "@/pages/iebaseline/IEBaseline";
 import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
 import ModuleAdmin from "@/pages/iebaseline/ModuleAdmin";
 import ModuleOverview from "@/pages/iebaseline/ModuleOverview";
+import IPKConfig from "@/pages/ipk/IPKConfig";
+import IPKDashboard from "@/pages/ipk/IPKDashboard";
+import IPKHistory from "@/pages/ipk/IPKHistory";
+import IPKHome from "@/pages/ipk/IPKHome";
+import IPKMatrix from "@/pages/ipk/IPKMatrix";
+import IPKResults from "@/pages/ipk/IPKResults";
+import IPKSimulate from "@/pages/ipk/IPKSimulate";
+import IPKWorkcells from "@/pages/ipk/IPKWorkcells";
+import KioskMode from "@/pages/KioskMode";
+import LBRAssemblyDetail from "@/pages/lbr/LBRAssemblyDetail";
+import LBRGlobalConfig from "@/pages/lbr/LBRGlobalConfig";
+import LBRHome from "@/pages/lbr/LBRHome";
+import LBRPlaybookDetail from "@/pages/lbr/LBRPlaybookDetail";
+import LBRWorkcellConfig from "@/pages/lbr/LBRWorkcellConfig";
+import LBRWorkcellProfile from "@/pages/lbr/LBRWorkcellProfile";
+import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
+import OLE4QReport from "@/pages/ole/OLE4QReport";
+import OlePlantReport from "@/pages/ole/OlePlantReport";
+import OLESmh from "@/pages/ole/OLESmh";
+import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
+import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
 import Plants from "@/pages/Plants";
+import PPQT2AWorkcell from "@/pages/ppqt/dash2/PPQT2AWorkcell";
+import PPQT2AWorkcells from "@/pages/ppqt/dash2/PPQT2AWorkcells";
+import PPQTAssemblyDetail from "@/pages/ppqt/PPQTAssemblyDetail";
+import PPQTConfig from "@/pages/ppqt/PPQTConfig";
+import PPQTHome from "@/pages/ppqt/PPQTHome";
+import PPQTProcessDetail from "@/pages/ppqt/PPQTProcessDetail";
+import PPQTSubWorkcenterProfile from "@/pages/ppqt/PPQTSubWorkcenterProfile";
+import PPQTWorkcellProfile from "@/pages/ppqt/PPQTWorkcellProfile";
+import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
-import OLE4QReport from "@/pages/ole/OLE4QReport";
-import OLESmh from "@/pages/ole/OLESmh";
-import OlePlantReport from "@/pages/ole/OlePlantReport";
-import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
-import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
-import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
-import CycleTimeWorkcell from "@/pages/cycletime/CycleTimeWorkcell";
-import PPQTHome from "@/pages/ppqt/PPQTHome";
-import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
-import PPQTWorkcellProfile from "@/pages/ppqt/PPQTWorkcellProfile";
-import PPQTSubWorkcenterProfile from "@/pages/ppqt/PPQTSubWorkcenterProfile";
-import PPQTProcessDetail from "@/pages/ppqt/PPQTProcessDetail";
-import PPQTAssemblyDetail from "@/pages/ppqt/PPQTAssemblyDetail";
-import PPQTConfig from "@/pages/ppqt/PPQTConfig";
-import IPKHome from "@/pages/ipk/IPKHome";
-import IPKWorkcells from "@/pages/ipk/IPKWorkcells";
-import IPKDashboard from "@/pages/ipk/IPKDashboard";
-import IPKSimulate from "@/pages/ipk/IPKSimulate";
-import IPKResults from "@/pages/ipk/IPKResults";
-import IPKHistory from "@/pages/ipk/IPKHistory";
-import IPKMatrix from "@/pages/ipk/IPKMatrix";
-import IPKConfig from "@/pages/ipk/IPKConfig";
-import LBRHome from "@/pages/lbr/LBRHome";
-import LBRGlobalConfig from "@/pages/lbr/LBRGlobalConfig";
-import LBRWorkcellProfile from "@/pages/lbr/LBRWorkcellProfile";
-import LBRWorkcellConfig from "@/pages/lbr/LBRWorkcellConfig";
-import LBRAssemblyDetail from "@/pages/lbr/LBRAssemblyDetail";
-import LBRPlaybookDetail from "@/pages/lbr/LBRPlaybookDetail";
-import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
-import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -132,32 +134,35 @@ function AppShell() {
             </>}
 
             {includesApp('ppqt') && <>
-              <Route path="/ppqt"                                                                       element={<PPQTHome />} />
-              <Route path="/ppqt/workcell"                                                              element={<PPQTWorkcells />} />
-              <Route path="/ppqt/workcell/:workcell"                                                    element={<PPQTWorkcellProfile />} />
-              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter"                                  element={<PPQTSubWorkcenterProfile />} />
-              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process"                    element={<PPQTProcessDetail />} />
-              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process/asm/:assembly"      element={<PPQTAssemblyDetail />} />
-              <Route path="/ppqt/config"                                                                element={<PPQTConfig />} />
+              <Route path="/ppqt/" element={<PPQT2AWorkcells />} />
+              <Route path="/ppqt/workcell" element={<PPQTWorkcells />} />
+              <Route path="/ppqt/workcell/:workcell" element={<PPQTWorkcellProfile />} />
+              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter" element={<PPQTSubWorkcenterProfile />} />
+              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process" element={<PPQTProcessDetail />} />
+              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process/asm/:assembly" element={<PPQTAssemblyDetail />} />
+              <Route path="/ppqt/config" element={<PPQTConfig />} />
+              {/* Main dashboard — league table → tabbed workcell page (DASH / Report / Triage) */}
+              <Route path="/ppqt/dash2" element={<PPQTHome />} />
+              <Route path="/ppqt/dash2a/:workcell" element={<PPQT2AWorkcell />} />
             </>}
 
             {includesApp('ipk') && <>
-              <Route path="/ipk"                          element={<IPKHome />} />
-              <Route path="/ipk/workcells"                element={<IPKWorkcells />} />
-              <Route path="/ipk/:workcell"                element={<IPKDashboard />} />
-              <Route path="/ipk/:workcell/simulate"       element={<IPKSimulate />} />
+              <Route path="/ipk" element={<IPKHome />} />
+              <Route path="/ipk/workcells" element={<IPKWorkcells />} />
+              <Route path="/ipk/:workcell" element={<IPKDashboard />} />
+              <Route path="/ipk/:workcell/simulate" element={<IPKSimulate />} />
               <Route path="/ipk/:workcell/results/:runId" element={<IPKResults />} />
-              <Route path="/ipk/:workcell/history"        element={<IPKHistory />} />
-              <Route path="/ipk/:workcell/matrix"         element={<IPKMatrix />} />
-              <Route path="/ipk/:workcell/config"         element={<IPKConfig />} />
+              <Route path="/ipk/:workcell/history" element={<IPKHistory />} />
+              <Route path="/ipk/:workcell/matrix" element={<IPKMatrix />} />
+              <Route path="/ipk/:workcell/config" element={<IPKConfig />} />
             </>}
 
             {includesApp('lbr') && <>
-              <Route path="/lbr"                               element={<LBRHome />} />
-              <Route path="/lbr/config"                        element={<LBRGlobalConfig />} />
-              <Route path="/lbr/:workcell"                     element={<LBRWorkcellProfile />} />
-              <Route path="/lbr/:workcell/config"              element={<LBRWorkcellConfig />} />
-              <Route path="/lbr/:workcell/:assembly"           element={<LBRAssemblyDetail />} />
+              <Route path="/lbr" element={<LBRHome />} />
+              <Route path="/lbr/config" element={<LBRGlobalConfig />} />
+              <Route path="/lbr/:workcell" element={<LBRWorkcellProfile />} />
+              <Route path="/lbr/:workcell/config" element={<LBRWorkcellConfig />} />
+              <Route path="/lbr/:workcell/:assembly" element={<LBRAssemblyDetail />} />
               <Route path="/lbr/:workcell/:assembly/:playbook" element={<LBRPlaybookDetail />} />
             </>}
 

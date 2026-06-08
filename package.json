@@ -12,6 +12,7 @@
     "build:ebuild": "node setup-pdfjs-worker.js && vite build --mode ebuild",
     "build:iebaseline": "node setup-pdfjs-worker.js && vite build --mode iebaseline",
     "build:cycletime": "vite build --mode cycle-time",
+    "build:ppqt": "vite build --mode ppqt",
     "build:ipk": "vite build --mode ipk",
     "build:lbr": "vite build --mode lbr",
     "build:all": "node setup-pdfjs-worker.js && vite build --mode all",

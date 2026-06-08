@@ -19,7 +19,6 @@ import {
   MapPin,
   Microscope,
   Pencil,
-  Scale,
   Settings2,
   TableProperties,
   Timer,
@@ -130,9 +129,10 @@ export const APPS: AppConfig[] = [
     basename: '/ietools/ppqt',
     category: 'Analytics',
     navItems: [
-      { label: 'Dashboard', to: '/ppqt',          icon: LayoutDashboard },
+      { label: 'Dashboard', to: '/ppqt', icon: LayoutDashboard, exact: false },
+      { label: 'Testing Dashboard', to: '/ppqt/dash2', icon: FlaskConical },
       { label: 'Workcells', to: '/ppqt/workcell', icon: Factory },
-      { label: 'Config',    to: '/ppqt/config',   icon: Settings2 },
+      { label: 'Config', to: '/ppqt/config', icon: Settings2 },
     ],
   },
   {
@@ -148,7 +148,7 @@ export const APPS: AppConfig[] = [
     // reached by drilling in from Home; the sidebar only carries always-valid
     // static routes — same approach as IPK.
     navItems: [
-      { label: 'Home',          to: '/lbr',        icon: LayoutDashboard },
+      { label: 'Home', to: '/lbr', icon: LayoutDashboard },
       { label: 'Global Config', to: '/lbr/config', icon: Cog },
     ],
   },
