@@ -157,6 +157,10 @@ export interface CycleTimeAssemblyListRow {
   has_smt: boolean;
   has_th: boolean;
   has_be: boolean;
+  /** Standard Manufacturing Hour — operator content per unit (seconds):
+   *  Σ (IMT + Hand) × (S%/100) over the primary routing, averaged across the
+   *  assembly's priority-1 revisions. Null when no priority-1 build exists. */
+  smh: number | null;
 }
 
 /** One long row of per-build process detail (from /assembly-builds). The FE
@@ -186,6 +190,8 @@ export interface CycleTimeAssemblyBuildStep {
   hand: number | null;
   pb: number | null;
   hc: number | null;
+  /** First Pass Yield (FPY, 0–100) for the step. Drives UPH. */
+  fpy: number | null;
 }
 
 export interface CycleTimeRefreshResponse {

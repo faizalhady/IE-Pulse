@@ -16,10 +16,20 @@
  */
 
 import {
-  Check, ChevronDown, ChevronLeft, ChevronRight, Columns3, Copy, Loader2, Rows3,
+  Check, ChevronDown, ChevronLeft, ChevronRight, Columns3, Copy, Download, Loader2, Rows3,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -43,6 +53,7 @@ import {
 } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 
+import { exportFlowMetricsXlsx } from '@/lib/cycle_time/cycleTimeExport';
 import CycleTimeFilters, { useCycleTimeFilters } from './CycleTimeFilters';
 
 /** Workcenter (stage) colours — used as a dot next to the line name. */
@@ -75,6 +86,28 @@ function computeCycleTime(
   return (m + h * c) / ((c * nn) * (ss / 100));
 }
 
+/** Default line efficiency until real efficiency data is wired in. */
+const DEFAULT_EFFICIENCY = 0.85;
+
+/**
+ * Units-per-hour for a process:
+ *   UPH = 3600 / CT × Efficiency × (FPY/100)
+ * CT in seconds; efficiency defaults to 85%; FPY null → 100% (no yield loss).
+ * Returns null when CT is non-positive (can't divide).
+ */
+function computeUph(seconds: number, fpy: number | null): number | null {
+  if (!(seconds > 0)) return null;
+  const yieldRate = fpy != null && fpy > 0 ? fpy / 100 : 1;
+  return (3600 / seconds) * DEFAULT_EFFICIENCY * yieldRate;
+}
+
+/** Process label for display: drop the alias suffix after " - ".
+ *  e.g. "BIRTH 1 - LABELING" → "BIRTH 1". Full string stays in the tooltip. */
+function stepLabel(step: string): string {
+  const i = step.indexOf(' - ');
+  return i >= 0 ? step.slice(0, i).trim() : step;
+}
+
 /** One ordered step in a routing flow. */
 interface FlowStep {
   order: number;
@@ -93,6 +126,7 @@ interface FlowStep {
   hand: number | null;
   pb: number | null;
   hc: number | null;
+  fpy: number | null;
 }
 /** One complete routing = (revision, priority). */
 interface Routing {
@@ -108,8 +142,8 @@ interface Routing {
  *  'matrix' — transposed: processes as columns (ordered left→right), one cycle-time value row. */
 export type FlowVariant = 'detail' | 'matrix';
 
-// chevron · # · Assembly · Revisions · Stages
-const GRID = '28px 44px minmax(220px,0.5fr) 100px minmax(160px,1fr)';
+// chevron · # · Assembly · SMH · Revisions · Stages
+const GRID = '28px 44px minmax(220px,0.5fr) 96px 100px minmax(160px,1fr)';
 const HEADER_H = 34;
 const NUM = 'ct-num font-semibold text-[12px]';
 const PAGE_SIZE = 50;
@@ -131,14 +165,29 @@ interface Props {
   lockedCustomer?: string;
 }
 
+/** Exportable metrics for the download dialog. `key` is stable for later
+ *  wiring to the actual export builder. */
+const EXPORT_METRICS = [
+  { key: 'smh',     label: 'SMH' },
+  { key: 'manual',  label: 'Manual' },
+  { key: 'imt',     label: 'IMT' },
+  { key: 'machine', label: 'Machine' },
+  { key: 'total_ct', label: 'Total CT' },
+  { key: 'uph',     label: 'UPH' },
+] as const;
+type ExportMetric = typeof EXPORT_METRICS[number]['key'];
+
 export default function CycleTimeAssemblyFlow({ lockedCustomer }: Props) {
   const [filters] = useCycleTimeFilters();
   const customer = lockedCustomer ?? (filters.customer || undefined);
   const search = filters.assembly.trim().toLowerCase();
 
-  // How an expanded sub-workcenter renders its processes — switched by the
-  // Detail|Matrix toggle at the far right of the filter row.
-  const [variant, setVariant] = useState<FlowVariant>('detail');
+  // How an expanded sub-workcenter renders its processes. Toggle hidden for now
+  // — locked to the Compact (matrix) view.
+  const [variant] = useState<FlowVariant>('matrix');
+
+  // Export dialog — which metrics to pull from this workcell's data.
+  const [exportOpen, setExportOpen] = useState(false);
 
   const listQ = useCycleTimeAssemblyList(customer);
   const { data: aliasMap } = useCycleTimeAliases(customer);
@@ -199,7 +248,26 @@ export default function CycleTimeAssemblyFlow({ lockedCustomer }: Props) {
         availableLines={[]}
         lockedCustomer={lockedCustomer}
         stageMode
-        rightSlot={<ViewToggle variant={variant} onChange={setVariant} />}
+        rightSlot={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              disabled={!customer}
+              onClick={() => setExportOpen(true)}
+            >
+              <Download className="h-3.5 w-3.5" /> Export
+            </Button>
+          </div>
+        }
+      />
+
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        customer={customer}
+        assemblies={sorted.map((a) => a.assembly)}
       />
 
       <div className="flex-1 min-h-0">
@@ -298,6 +366,7 @@ function FlowList({
           <div />
           <div className="text-center">#</div>
           <SortHead label="Assembly" k="assembly" sort={sort} onSort={onSort} />
+          <div className="text-right" title="Standard Manufacturing Hour — operator content per unit: (IMT + Hand) × S%, summed over the primary routing">SMH</div>
           <SortHead label="Revisions" k="revisions" sort={sort} onSort={onSort} align="center" />
           <div className="text-right">Stages</div>
         </div>
@@ -330,6 +399,9 @@ function FlowList({
                 <div className="ct-num flex min-w-0 items-center gap-1 text-[12px] font-bold text-foreground">
                   <span className="truncate" title={a.assembly}>{a.assembly}</span>
                   <CopyButton text={a.assembly} />
+                </div>
+                <div className={cn(NUM, 'text-right text-foreground')} title={a.smh == null ? 'No primary routing' : formatCycleHMS(a.smh)}>
+                  {a.smh == null ? '—' : formatBuildDuration(a.smh)}
                 </div>
                 <div className={cn(NUM, 'text-center text-muted-foreground')}>{a.revisions}</div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -425,6 +497,7 @@ function FlowDetail({
         hand: r.hand ?? null,
         pb: r.pb ?? null,
         hc: r.hc ?? null,
+        fpy: r.fpy ?? null,
       });
       rt.total += eff;
     }
@@ -580,8 +653,9 @@ function LineGroup({ index, group, variant, aliasMap }: {
         <div className="overflow-x-auto border-t border-border">
           {/* Transposed: process names across the top (already order-sorted
               left→right by RoutingFlow), one cycle-time value row beneath.
-              Same shape as BuildTable in CycleTimeAssembliesTable. */}
-          <table className="w-full border-collapse text-[11px]">
+              No w-full — the table sizes to content (each process cell holds
+              CT + UPH) and the wrapper scrolls horizontally. */}
+          <table className="border-collapse text-[11px]">
             <thead>
               <tr className="bg-muted/40 text-[9px] uppercase tracking-wider text-muted-foreground">
                 {group.steps.map((s) => {
@@ -591,9 +665,9 @@ function LineGroup({ index, group, variant, aliasMap }: {
                     <th
                       key={`${s.order}-${s.step}`}
                       title={tip}
-                      className="whitespace-nowrap border-r border-border px-2.5 py-1.5 text-right font-semibold last:border-r-0"
+                      className="whitespace-nowrap border-r border-border px-2.5 py-1.5 text-center font-semibold last:border-r-0"
                     >
-                      {s.step}
+                      {stepLabel(s.step)}
                     </th>
                   );
                 })}
@@ -601,19 +675,33 @@ function LineGroup({ index, group, variant, aliasMap }: {
             </thead>
             <tbody>
               <tr>
-                {group.steps.map((s, i) => (
-                  <td
-                    key={`${s.order}-${s.step}`}
-                    title={formatCycleHMS(s.seconds)}
-                    className={cn(
-                      NUM,
-                      'whitespace-nowrap border-r border-t border-border px-2.5 py-1.5 text-right text-foreground last:border-r-0',
-                      i % 2 ? 'bg-muted/10' : '',
-                    )}
-                  >
-                    {formatCycleSecondsLabel(s.seconds)}
-                  </td>
-                ))}
+                {group.steps.map((s, i) => {
+                  const uph = computeUph(s.seconds, s.fpy);
+                  return (
+                    <td
+                      key={`${s.order}-${s.step}`}
+                      className={cn(
+                        'whitespace-nowrap border-r border-t border-border px-2.5 py-1.5 last:border-r-0',
+                        i % 2 ? 'bg-muted/10' : '',
+                      )}
+                    >
+                      <div className="flex items-center justify-center gap-2.5">
+                        {/* left: cycle time (seconds) */}
+                        <span className={cn(NUM, 'w-16 text-center text-foreground')} title={formatCycleHMS(s.seconds)}>
+                          {formatCycleSecondsLabel(s.seconds)}
+                        </span>
+                        <span className="h-3.5 w-px flex-shrink-0 bg-border" />
+                        {/* right: UPH (pieces/hour) */}
+                        <span
+                          className={cn(NUM, 'w-20 text-center text-muted-foreground')}
+                          title={`UPH = 3600 / CT × ${Math.round(DEFAULT_EFFICIENCY * 100)}% efficiency × FPY${s.fpy != null ? ` (${s.fpy}%)` : ''}`}
+                        >
+                          {uph == null ? '—' : `${Math.round(uph).toLocaleString()} pcs`}
+                        </span>
+                      </div>
+                    </td>
+                  );
+                })}
               </tr>
             </tbody>
           </table>
@@ -647,7 +735,7 @@ function LineGroup({ index, group, variant, aliasMap }: {
                 return (
                   <tr key={`${s.order}-${s.step}`} className="border-t border-border text-base">
                     <td className={cn(NUM, 'px-2 py-1.5 text-right text-muted-foreground')}>{s.order}</td>
-                    <td className="px-2 py-1.5 text-foreground " title={tip}>{s.step}</td>
+                    <td className="px-2 py-1.5 text-foreground " title={tip}>{stepLabel(s.step)}</td>
                     <td className={cn(NUM, 'px-2 py-1.5 text-right text-muted-foreground')}>{fmtVal(s.grp)}</td>
                     <td className={cn(NUM, 'px-2 py-1.5 text-right text-muted-foreground')}>{fmtVal(s.lct)}</td>
                     <td className={cn(NUM, 'px-2 py-1.5 text-right text-muted-foreground')}>{fmtVal(s.mach)}</td>
@@ -669,6 +757,101 @@ function LineGroup({ index, group, variant, aliasMap }: {
         </div>
       )}
     </div>
+  );
+}
+
+/** Export picker — choose which metrics to pull from the current workcell's
+ *  data. For now this only collects the selection; the actual file build is
+ *  wired in a later step. */
+function ExportDialog({
+  open, onOpenChange, customer, assemblies,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  customer?: string;
+  assemblies: string[];
+}) {
+  // Default: everything selected.
+  const [selected, setSelected] = useState<Set<ExportMetric>>(
+    () => new Set(EXPORT_METRICS.map((m) => m.key)),
+  );
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  function toggle(key: ExportMetric) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  const allOn = selected.size === EXPORT_METRICS.length;
+  function toggleAll() {
+    setSelected(allOn ? new Set() : new Set(EXPORT_METRICS.map((m) => m.key)));
+  }
+
+  async function onExport() {
+    if (!customer || selected.size === 0 || busy) return;
+    setBusy(true);
+    setProgress({ done: 0, total: assemblies.length });
+    try {
+      await exportFlowMetricsXlsx({
+        customer,
+        assemblies,
+        metrics: [...selected],
+        onProgress: (done, total) => setProgress({ done, total }),
+      });
+      onOpenChange(false);
+    } catch (e) {
+      console.error('Cycle-time export failed', e);
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!busy) onOpenChange(v); }}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Export cycle-time data</DialogTitle>
+          <DialogDescription>
+            One row per process, for every assembly{customer ? ` in ${customer}` : ''}
+            {' '}({assemblies.length} assembl{assemblies.length === 1 ? 'y' : 'ies'}). Pick the metrics to include.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-1 py-1">
+          <label className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-muted/40 cursor-pointer border-b border-border mb-1">
+            <Checkbox checked={allOn} onCheckedChange={toggleAll} disabled={busy} />
+            <span className="text-xs font-semibold text-foreground">Select all</span>
+          </label>
+          {EXPORT_METRICS.map((m) => (
+            <label
+              key={m.key}
+              className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-muted/40 cursor-pointer"
+            >
+              <Checkbox checked={selected.has(m.key)} onCheckedChange={() => toggle(m.key)} disabled={busy} />
+              <span className="text-sm text-foreground">{m.label}</span>
+            </label>
+          ))}
+        </div>
+
+        <DialogFooter>
+          {busy && progress && (
+            <span className="mr-auto self-center text-[11px] text-muted-foreground">
+              Fetching {progress.done}/{progress.total}…
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
+          <Button size="sm" disabled={selected.size === 0 || busy || !assemblies.length} onClick={onExport} className="gap-1.5">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {busy ? 'Exporting…' : `Export ${selected.size > 0 ? `(${selected.size})` : ''}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
