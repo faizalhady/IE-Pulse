@@ -219,7 +219,7 @@ export default function CycleTimeFilters({ availableLines, rightSlot, lockedCust
             >
               <span className="flex min-w-0 items-center gap-1.5 truncate">
                 {stageSel.size === 0 ? (
-                  <span className="text-muted-foreground">Select stages</span>
+                  <span className="text-muted-foreground">Select workcenter</span>
                 ) : (
                   STAGES.filter((s) => stageSel.has(s)).map((s) => (
                     <span key={s} className="flex items-center gap-1">

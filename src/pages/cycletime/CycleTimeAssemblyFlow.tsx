@@ -16,7 +16,7 @@
  */
 
 import {
-  Check, ChevronDown, ChevronLeft, ChevronRight, Columns3, Copy, Download, Loader2, Rows3,
+  AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Columns3, Copy, Download, Loader2, Rows3,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -142,7 +142,7 @@ interface Routing {
  *  'matrix' — transposed: processes as columns (ordered left→right), one cycle-time value row. */
 export type FlowVariant = 'detail' | 'matrix';
 
-// chevron · # · Assembly · SMH · Revisions · Stages
+// chevron · # · Assembly · SMH · Revisions · Workcenter
 const GRID = '28px 44px minmax(220px,0.5fr) 96px 100px minmax(160px,1fr)';
 const HEADER_H = 34;
 const NUM = 'ct-num font-semibold text-[12px]';
@@ -176,6 +176,14 @@ const EXPORT_METRICS = [
   { key: 'uph',     label: 'UPH' },
 ] as const;
 type ExportMetric = typeof EXPORT_METRICS[number]['key'];
+
+/** Workcenters (build stages) the export can be scoped to. */
+const EXPORT_STAGES = [
+  { key: 'SMT', label: 'Surface Mount Technology (SMT)' },
+  { key: 'TH',  label: 'Through Hole (TH)' },
+  { key: 'BE',  label: 'Backend (BE)' },
+] as const;
+type ExportStage = typeof EXPORT_STAGES[number]['key'];
 
 export default function CycleTimeAssemblyFlow({ lockedCustomer }: Props) {
   const [filters] = useCycleTimeFilters();
@@ -368,7 +376,7 @@ function FlowList({
           <SortHead label="Assembly" k="assembly" sort={sort} onSort={onSort} />
           <div className="text-right" title="Standard Manufacturing Hour — operator content per unit: (IMT + Hand) × S%, summed over the primary routing">SMH</div>
           <SortHead label="Revisions" k="revisions" sort={sort} onSort={onSort} align="center" />
-          <div className="text-right">Stages</div>
+          <div className="text-right">Workcenter</div>
         </div>
 
         {rows.map((a, idx) => {
@@ -665,7 +673,7 @@ function LineGroup({ index, group, variant, aliasMap }: {
                     <th
                       key={`${s.order}-${s.step}`}
                       title={tip}
-                      className="whitespace-nowrap border-r border-border px-2.5 py-1.5 text-center font-semibold last:border-r-0"
+                      className="whitespace-nowrap border-r border-border px-2.5 py-1.5 text-center text-[12px] normal-case font-semibold text-foreground last:border-r-0"
                     >
                       {stepLabel(s.step)}
                     </th>
@@ -775,11 +783,21 @@ function ExportDialog({
   const [selected, setSelected] = useState<Set<ExportMetric>>(
     () => new Set(EXPORT_METRICS.map((m) => m.key)),
   );
+  const [stages, setStages] = useState<Set<ExportStage>>(
+    () => new Set(EXPORT_STAGES.map((s) => s.key)),
+  );
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   function toggle(key: ExportMetric) {
     setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+  function toggleStage(key: ExportStage) {
+    setStages((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
@@ -792,7 +810,7 @@ function ExportDialog({
   }
 
   async function onExport() {
-    if (!customer || selected.size === 0 || busy) return;
+    if (!customer || selected.size === 0 || stages.size === 0 || busy) return;
     setBusy(true);
     setProgress({ done: 0, total: assemblies.length });
     try {
@@ -800,6 +818,7 @@ function ExportDialog({
         customer,
         assemblies,
         metrics: [...selected],
+        stages: [...stages],
         onProgress: (done, total) => setProgress({ done, total }),
       });
       onOpenChange(false);
@@ -822,6 +841,16 @@ function ExportDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {assemblies.length >= 200 && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-500 mt-0.5" />
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              This workcell has a lot of data ({assemblies.length.toLocaleString()} assemblies) — the download
+              may take a while to prepare.
+            </p>
+          </div>
+        )}
+
         <div className="space-y-1 py-1">
           <label className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-muted/40 cursor-pointer border-b border-border mb-1">
             <Checkbox checked={allOn} onCheckedChange={toggleAll} disabled={busy} />
@@ -838,6 +867,21 @@ function ExportDialog({
           ))}
         </div>
 
+        <div className="space-y-1 py-1 border-t border-border">
+          <p className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Workcenter
+          </p>
+          {EXPORT_STAGES.map((s) => (
+            <label
+              key={s.key}
+              className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-muted/40 cursor-pointer"
+            >
+              <Checkbox checked={stages.has(s.key)} onCheckedChange={() => toggleStage(s.key)} disabled={busy} />
+              <span className="text-sm text-foreground">{s.label}</span>
+            </label>
+          ))}
+        </div>
+
         <DialogFooter>
           {busy && progress && (
             <span className="mr-auto self-center text-[11px] text-muted-foreground">
@@ -845,7 +889,7 @@ function ExportDialog({
             </span>
           )}
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
-          <Button size="sm" disabled={selected.size === 0 || busy || !assemblies.length} onClick={onExport} className="gap-1.5">
+          <Button size="sm" disabled={selected.size === 0 || stages.size === 0 || busy || !assemblies.length} onClick={onExport} className="gap-1.5">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             {busy ? 'Exporting…' : `Export ${selected.size > 0 ? `(${selected.size})` : ''}`}
           </Button>
