@@ -13,7 +13,11 @@
 
 const BASE = '/ietools/cycle-time/api';
 
-async function get<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+async function get<T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  signal?: AbortSignal,
+): Promise<T> {
   const qs = params
     ? '?' + new URLSearchParams(
         Object.entries(params)
@@ -21,7 +25,7 @@ async function get<T>(path: string, params?: Record<string, string | number | un
           .map(([k, v]) => [k, String(v)]),
       ).toString()
     : '';
-  const res = await fetch(`${BASE}${path}${qs}`);
+  const res = await fetch(`${BASE}${path}${qs}`, { signal });
   if (!res.ok) throw new Error(`CycleTime API ${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -161,6 +165,9 @@ export interface CycleTimeAssemblyListRow {
    *  Σ (IMT + Hand) × (S%/100) over the primary routing, averaged across the
    *  assembly's priority-1 revisions. Null when no priority-1 build exists. */
   smh: number | null;
+  /** Average line efficiency across the assembly's lines (from eff_by_line).
+   *  Null until the efficiency pull has run. */
+  eff: number | null;
 }
 
 /** One long row of per-build process detail (from /assembly-builds). The FE
@@ -192,6 +199,9 @@ export interface CycleTimeAssemblyBuildStep {
   hc: number | null;
   /** First Pass Yield (FPY, 0–100) for the step. Drives UPH. */
   fpy: number | null;
+  /** Line efficiency (from eff_by_line), used in UPH. Null until built →
+   *  the FE falls back to the 85% default. */
+  eff: number | null;
 }
 
 export interface CycleTimeRefreshResponse {
@@ -375,9 +385,9 @@ export const cycleTimeApi = {
   },
   assemblyBuilds: {
     /** Per-build process detail for ONE assembly (expanded row). Long rows the
-     *  FE groups into builds. */
-    list: (customer: string, assembly: string, sub_workcenter?: string) =>
-      get<CycleTimeAssemblyBuildStep[]>('/assembly-builds', { customer, assembly, sub_workcenter }),
+     *  FE groups into builds. Pass `signal` to abort an in-flight request. */
+    list: (customer: string, assembly: string, sub_workcenter?: string, signal?: AbortSignal) =>
+      get<CycleTimeAssemblyBuildStep[]>('/assembly-builds', { customer, assembly, sub_workcenter }, signal),
   },
   raw: {
     list: (filters: CycleTimeRawFilters = {}) =>

@@ -163,30 +163,105 @@ function metricValue(metric: FlowExportMetric, s: CycleTimeAssemblyBuildStep): n
     case 'uph': {
       const ct = ctSeconds(s);
       if (!(ct > 0)) return null;
+      const eff = s.eff != null && s.eff > 0 ? (s.eff > 1 ? s.eff / 100 : s.eff) : EXPORT_EFFICIENCY;
       const yieldRate = s.fpy != null && s.fpy > 0 ? s.fpy / 100 : 1;
-      return (3600 / ct) * EXPORT_EFFICIENCY * yieldRate;
+      return (3600 / ct) * eff * yieldRate;
     }
   }
 }
 
-/** Drop the alias suffix after " - " (e.g. "BIRTH 1 - LABELING" → "BIRTH 1"). */
+/**
+ * Combine a logical process — all steps sharing a display label (e.g. the four
+ * "SUB MA 1 - …" sub-ops) — into one value per metric:
+ *   manual/imt/machine/total_ct → summed across the steps
+ *   uph                         → 3600 / (Σ CT) × eff × (Π FPY)  (yield compounds)
+ */
+function combinedMetricValue(metric: FlowExportMetric, steps: CycleTimeAssemblyBuildStep[]): number | null {
+  if (metric === 'uph') {
+    let ct = 0;
+    let fpyRate = 1;
+    let eff: number | null = null;
+    for (const s of steps) {
+      ct += ctSeconds(s);
+      if (s.fpy != null && s.fpy > 0) fpyRate *= s.fpy / 100;
+      if (eff == null && s.eff != null) eff = s.eff;
+    }
+    if (!(ct > 0)) return null;
+    const effRate = eff != null && eff > 0 ? (eff > 1 ? eff / 100 : eff) : EXPORT_EFFICIENCY;
+    return (3600 / ct) * effRate * fpyRate;
+  }
+  // Linear metrics: sum the per-step values.
+  let sum = 0;
+  let any = false;
+  for (const s of steps) {
+    const v = metricValue(metric, s);
+    if (v != null) { sum += v; any = true; }
+  }
+  return any ? sum : null;
+}
+
+/** Keep only the part before a separator dash (hyphen "-", en-dash "–", or
+ *  em-dash "—") that has whitespace on at least one side — handles inconsistent
+ *  spacing ("HLA 1– X" / "HLA 2 –X" / "BIRTH 1 - X") while preserving genuine
+ *  hyphenated names like "HI-PORT". Mirrors stepLabel() in the Flow page. */
 function trimStep(step: string): string {
-  const i = step.indexOf(' - ');
+  const i = step.search(/\s+[-–—]|[-–—]\s+/);
   return i >= 0 ? step.slice(0, i).trim() : step;
 }
 
-/** Run `task` over `items` with bounded concurrency. */
-async function pooledMap<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
+// Worksheet tab colours per workcenter — match the FE WC_DOT palette
+// (SMT emerald-500, TH sky-500, BE violet-500).
+const WC_TAB_COLOR: Record<string, string> = {
+  SMT: 'FF10B981',
+  TH:  'FF0EA5E9',
+  BE:  'FF8B5CF6',
+};
+const WC_TAB_DEFAULT = 'FF6B7280';
+const STAGE_ORDER = ['SMT', 'TH', 'BE'];
+const stageRank = (wc: string) => {
+  const i = STAGE_ORDER.indexOf(wc);
+  return i < 0 ? STAGE_ORDER.length : i;
+};
+
+/** Excel-safe, unique worksheet name: strip illegal chars (\ / ? * [ ] :),
+ *  cap at 31, and disambiguate collisions with a numeric suffix. */
+function safeSheetName(base: string, used: Set<string>): string {
+  let name = base.replace(/[\\/?*[\]:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31) || 'Sheet';
+  if (used.has(name.toLowerCase())) {
+    let i = 2;
+    let candidate: string;
+    do {
+      const suffix = ` (${i})`;
+      candidate = name.slice(0, 31 - suffix.length) + suffix;
+      i++;
+    } while (used.has(candidate.toLowerCase()));
+    name = candidate;
+  }
+  used.add(name.toLowerCase());
+  return name;
+}
+
+/** Run `task` over `items` with bounded concurrency. Stops launching new tasks
+ *  once `signal` is aborted (cooperative cancellation). */
+async function pooledMap<T, R>(
+  items: T[], limit: number, task: (item: T) => Promise<R>, signal?: AbortSignal,
+): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
   async function worker() {
     while (next < items.length) {
+      if (signal?.aborted) return;
       const i = next++;
       out[i] = await task(items[i]);
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
+}
+
+/** True when an error is an abort (user cancelled). */
+function isAbort(e: unknown): boolean {
+  return e instanceof DOMException && e.name === 'AbortError';
 }
 
 interface FlowExportOpts {
@@ -199,6 +274,8 @@ interface FlowExportOpts {
   stages: string[];
   /** Optional progress callback (assemblies fetched / total). */
   onProgress?: (done: number, total: number) => void;
+  /** Abort signal — cancels in-flight fetches and skips the file build. */
+  signal?: AbortSignal;
 }
 
 /** Pick the representative routing for an assembly row: the latest revision of
@@ -226,7 +303,7 @@ function representativeSteps(steps: CycleTimeAssemblyBuildStep[]): CycleTimeAsse
  * Fetches /assembly-builds per assembly (bounded concurrency).
  */
 export async function exportFlowMetricsXlsx({
-  customer, assemblies, metrics, stages, onProgress,
+  customer, assemblies, metrics, stages, onProgress, signal,
 }: FlowExportOpts): Promise<void> {
   if (!assemblies.length || !metrics.length || !stages.length) {
     console.warn('exportFlowMetricsXlsx: nothing to export');
@@ -244,16 +321,20 @@ export async function exportFlowMetricsXlsx({
   let done = 0;
   const fetched = await pooledMap(assemblies, 8, async (assembly) => {
     try {
-      const repr = representativeSteps(await cycleTimeApi.assemblyBuilds.list(customer, assembly));
+      const repr = representativeSteps(await cycleTimeApi.assemblyBuilds.list(customer, assembly, undefined, signal));
       const steps = repr.filter((s) => stageSet.has(String(s.workcenter ?? '').toUpperCase()));
       return { assembly, steps };
     } catch (e) {
-      console.warn(`export: failed to fetch ${assembly}`, e);
+      if (!isAbort(e)) console.warn(`export: failed to fetch ${assembly}`, e);
       return { assembly, steps: [] as CycleTimeAssemblyBuildStep[] };
     } finally {
       onProgress?.(++done, assemblies.length);
     }
-  });
+  }, signal);
+
+  // Cancelled mid-fetch — don't build or download a partial file.
+  if (signal?.aborted) return;
+
   const perAssembly = fetched.filter((a) => a.steps.length > 0);
 
   const ExcelJS = (await import('exceljs')).default;
@@ -261,7 +342,7 @@ export async function exportFlowMetricsXlsx({
   wb.creator = 'IE Pulse';
   wb.created = new Date();
 
-  // Layout constants shared by every workcenter sheet.
+  // Layout constants shared by every sub-workcenter sheet.
   const leadCount = 1 + (showSmh ? 1 : 0);          // Assembly (+ SMH)
   const perProc = procMetrics.length;
   const HEAD1_SHADE = ['FF1F2937', 'FF2D3B4E'];
@@ -269,32 +350,44 @@ export async function exportFlowMetricsXlsx({
   const DATA_SHADE: (string | null)[] = [null, 'FFEAF1F8']; // plain / soft blue-grey
   const fillOf = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
 
-  /** Build one worksheet for a single workcenter from its scoped rows. */
-  function buildSheet(sheetName: string, rows: { assembly: string; steps: CycleTimeAssemblyBuildStep[] }[]) {
-    // Process column order = union of process labels in this workcenter.
-    const procOrder = new Map<string, number>();
+  /** Build one worksheet for a single sub-workcenter from its scoped rows.
+   *  Rows are already scoped to one line, so process names are unique and
+   *  ordering by step_order is the line's true flow (no cross-line scramble). */
+  function buildSheet(
+    sheetName: string,
+    rows: { assembly: string; steps: CycleTimeAssemblyBuildStep[] }[],
+    tabColor?: string,
+  ) {
+    // Column identity = process label: steps sharing a label (e.g. the four
+    // "SUB MA 1 - …" sub-ops) are ONE column — their metrics are summed and UPH
+    // recomputed from the total, matching the FE compact view. Columns ordered
+    // by each label's earliest step.
+    const colByLabel = new Map<string, number>();
     for (const { steps } of rows) {
       for (const s of steps) {
         const label = trimStep(s.step);
         const ord = s.step_order ?? Number.MAX_SAFE_INTEGER;
-        const cur = procOrder.get(label);
-        if (cur == null || ord < cur) procOrder.set(label, ord);
+        const cur = colByLabel.get(label);
+        if (cur == null || ord < cur) colByLabel.set(label, ord);
       }
     }
-    const processes = [...procOrder.entries()]
+    const processes = [...colByLabel.entries()]
       .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
       .map(([label]) => label);
 
     const ws = wb.addWorksheet(sheetName, {
       views: [{ state: 'frozen', xSplit: leadCount, ySplit: 2 }],
+      properties: tabColor ? { tabColor: { argb: tabColor } } : undefined,
     });
 
     const widths = [22, ...(showSmh ? [11] : [])];
     if (hasProcMetrics) for (let i = 0; i < processes.length * perProc; i++) widths.push(11);
     ws.columns = widths.map((w) => ({ width: w }));
 
-    // Header row 1: process group names (merged across their metric block).
-    const r1: (string | number)[] = ['', ...(showSmh ? [''] : [])];
+    // Header row 1: Assembly | SMH (these lead cells are merged down over both
+    // header rows, so the LABEL must live on row 1 — the merge keeps the
+    // top-left cell's value) + process group names (merged across metric blocks).
+    const r1: (string | number)[] = ['Assembly', ...(showSmh ? ['SMH'] : [])];
     if (hasProcMetrics) for (const p of processes) { r1.push(p); for (let i = 1; i < perProc; i++) r1.push(''); }
     const headerRow1 = ws.addRow(r1);
     headerRow1.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -302,8 +395,8 @@ export async function exportFlowMetricsXlsx({
     headerRow1.alignment = { vertical: 'middle', horizontal: 'center' };
     headerRow1.height = 20;
 
-    // Header row 2: Assembly | SMH | repeating metric labels.
-    const r2: (string | number)[] = ['Assembly', ...(showSmh ? ['SMH'] : [])];
+    // Header row 2: lead cells blank (covered by the merge) + metric labels.
+    const r2: (string | number)[] = ['', ...(showSmh ? [''] : [])];
     if (hasProcMetrics) for (let p = 0; p < processes.length; p++) for (const m of procMetrics) r2.push(m.header);
     const headerRow2 = ws.addRow(r2);
     headerRow2.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -325,8 +418,13 @@ export async function exportFlowMetricsXlsx({
 
     // Data rows: one per assembly.
     for (const { assembly, steps } of rows) {
-      const byProc = new Map<string, CycleTimeAssemblyBuildStep>();
-      for (const s of steps) byProc.set(trimStep(s.step), s); // last wins on collision
+      // Group the assembly's steps by label so same-name sub-ops combine.
+      const byLabel = new Map<string, CycleTimeAssemblyBuildStep[]>();
+      for (const s of steps) {
+        const label = trimStep(s.step);
+        const arr = byLabel.get(label);
+        if (arr) arr.push(s); else byLabel.set(label, [s]);
+      }
 
       const smhTotal = showSmh
         ? steps.reduce((sum, s) => sum + (metricValue('smh', s) ?? 0), 0)
@@ -335,11 +433,11 @@ export async function exportFlowMetricsXlsx({
       const cells: (string | number)[] = [assembly];
       if (showSmh) cells.push(smhTotal == null ? '' : Number(smhTotal.toFixed(2)));
       if (hasProcMetrics) {
-        for (const p of processes) {
-          const s = byProc.get(p);
+        for (const label of processes) {
+          const grp = byLabel.get(label);
           for (const m of procMetrics) {
-            if (!s) { cells.push(''); continue; }
-            const v = metricValue(m.key, s);
+            if (!grp) { cells.push(''); continue; }
+            const v = combinedMetricValue(m.key, grp);
             cells.push(v == null ? '' : Number(v.toFixed(m.key === 'uph' ? 0 : 2)));
           }
         }
@@ -348,7 +446,7 @@ export async function exportFlowMetricsXlsx({
       const r = ws.addRow(cells);
       r.font = { name: 'Calibri', size: 10 };
       r.alignment = { vertical: 'middle' };
-      if (showSmh) { const c = r.getCell(2); c.numFmt = '#,##0.00'; c.alignment = { horizontal: 'right' }; }
+      if (showSmh) { const c = r.getCell(2); c.numFmt = '#,##0.00'; c.alignment = { horizontal: 'center' }; }
       if (hasProcMetrics) {
         for (let p = 0; p < processes.length; p++) {
           const shade = DATA_SHADE[p % 2];
@@ -356,7 +454,7 @@ export async function exportFlowMetricsXlsx({
             const col = leadCount + p * perProc + mi + 1;
             const c = r.getCell(col);
             c.numFmt = m.key === 'uph' ? '#,##0' : '#,##0.00';
-            c.alignment = { horizontal: 'right' };
+            c.alignment = { horizontal: 'center' };
             if (shade) c.fill = fillOf(shade);
           });
         }
@@ -364,20 +462,40 @@ export async function exportFlowMetricsXlsx({
     }
   }
 
-  // One sheet per workcenter, in canonical SMT → TH → BE order.
-  const STAGE_ORDER = ['SMT', 'TH', 'BE'];
-  const orderedStages = [
-    ...STAGE_ORDER.filter((s) => stageSet.has(s)),
-    ...[...stageSet].filter((s) => !STAGE_ORDER.includes(s)),
-  ];
-  for (const st of orderedStages) {
+  // One sheet per SUB-WORKCENTER (line). Collect each line's workcenter +
+  // earliest step order, then emit sheets grouped SMT → TH → BE and within
+  // each stage by flow order. Sheet name = "<sub_workcenter> (<workcenter>)",
+  // tab coloured by workcenter.
+  const lines = new Map<string, { wc: string; minOrder: number }>();
+  for (const { steps } of perAssembly) {
+    for (const s of steps) {
+      const swc = s.sub_workcenter;
+      if (!swc) continue;
+      const wc = String(s.workcenter ?? '').toUpperCase();
+      const ord = s.step_order ?? Number.MAX_SAFE_INTEGER;
+      const cur = lines.get(swc);
+      if (!cur) lines.set(swc, { wc, minOrder: ord });
+      else if (ord < cur.minOrder) cur.minOrder = ord;
+    }
+  }
+  const orderedLines = [...lines.entries()].sort(
+    (a, b) =>
+      stageRank(a[1].wc) - stageRank(b[1].wc)
+      || a[1].minOrder - b[1].minOrder
+      || a[0].localeCompare(b[0]),
+  );
+
+  const usedNames = new Set<string>();
+  for (const [swc, { wc }] of orderedLines) {
     const scoped = perAssembly
       .map((a) => ({
         assembly: a.assembly,
-        steps: a.steps.filter((s) => String(s.workcenter ?? '').toUpperCase() === st),
+        steps: a.steps.filter((s) => s.sub_workcenter === swc),
       }))
       .filter((a) => a.steps.length > 0);
-    if (scoped.length) buildSheet(st, scoped);
+    if (!scoped.length) continue;
+    const name = safeSheetName(`${swc} (${wc})`, usedNames);
+    buildSheet(name, scoped, WC_TAB_COLOR[wc] ?? WC_TAB_DEFAULT);
   }
   if (wb.worksheets.length === 0) buildSheet('No data', []);
 
