@@ -13,6 +13,9 @@ import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import FloorMap from "@/pages/FloorMap";
 import BayManagement from "@/pages/fsms/BayManagement";
 import LayoutEditor from "@/pages/fsms/LayoutEditor";
+import FsmsDashboard from "@/pages/fsms/FsmsDashboard";
+import FsmsPlants from "@/pages/fsms/FsmsPlants";
+import FsmsSubmissions from "@/pages/fsms/FsmsSubmissions";
 import GlobalOverview from "@/pages/GlobalOverview";
 import IEBaseline from "@/pages/iebaseline/IEBaseline";
 import IEBaselineEdit from "@/pages/iebaseline/IEBaselineEdit";
@@ -120,8 +123,10 @@ function AppShell() {
             </>}
 
             {includesApp('fsms') && <>
-              <Route path="/fsms" element={<Navigate to="/fsms/plants" replace />} />
-              <Route path="/fsms/plants" element={<Plants />} />
+              <Route path="/fsms" element={<Navigate to="/fsms/dashboard" replace />} />
+              <Route path="/fsms/dashboard" element={<FsmsDashboard />} />
+              <Route path="/fsms/submissions" element={<FsmsSubmissions />} />
+              <Route path="/fsms/plants" element={<FsmsPlants />} />
               <Route path="/fsms/floor-map" element={<FloorMap />} />
               <Route path="/fsms/editor" element={<LayoutEditor />} />
               <Route path="/fsms/bays" element={<BayManagement />} />
