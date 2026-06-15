@@ -11,6 +11,9 @@ import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
 import Documents from "@/pages/Documents";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import FloorMap from "@/pages/FloorMap";
+import MachineMoverHome from "@/pages/machinemover/MachineMoverHome";
+import MachineMoverApprovals from "@/pages/machinemover/MachineMoverApprovals";
+import MachineMoverReports from "@/pages/machinemover/MachineMoverReports";
 import BayManagement from "@/pages/fsms/BayManagement";
 import LayoutEditor from "@/pages/fsms/LayoutEditor";
 import FsmsDashboard from "@/pages/fsms/FsmsDashboard";
@@ -173,6 +176,12 @@ function AppShell() {
 
             {includesApp('ebuild') && <>
               <Route path="/ebuild" element={<EBuildPlan />} />
+            </>}
+
+            {includesApp('machine-mover') && <>
+              <Route path="/machine-mover" element={<MachineMoverHome />} />
+              <Route path="/machine-mover/approvals" element={<MachineMoverApprovals />} />
+              <Route path="/machine-mover/reports" element={<MachineMoverReports />} />
             </>}
 
             {includesApp('iebaseline') && <>

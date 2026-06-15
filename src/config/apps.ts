@@ -23,13 +23,14 @@ import {
   Settings2,
   TableProperties,
   Timer,
+  Truck,
   UserCheck,
   Wrench
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'tools';
+export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'machine-mover' | 'tools';
 
 export interface NavItem {
   label: string;
@@ -186,6 +187,21 @@ export const APPS: AppConfig[] = [
       { label: 'Layout', to: '/fsms/floor-map', icon: ClipboardList },
       { label: 'Layout Editor', to: '/fsms/editor', icon: Pencil },
       { label: 'Bay Management', to: '/fsms/bays', icon: TableProperties },
+    ],
+  },
+  {
+    id: 'machine-mover',
+    label: 'Machine Mover',
+    description: 'Request, approve and track machine moves',
+    icon: Truck,
+    color: 'text-blue-500',
+    iconBg: 'bg-blue-500/15',
+    basename: '/ietools/machine-mover',
+    category: 'Operations',
+    navItems: [
+      { label: 'Requests', to: '/machine-mover', icon: ClipboardList },
+      { label: 'Approvals', to: '/machine-mover/approvals', icon: UserCheck },
+      { label: 'Reports', to: '/machine-mover/reports', icon: FileText },
     ],
   },
   {

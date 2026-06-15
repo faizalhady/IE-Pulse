@@ -17,6 +17,7 @@ const APP_BASENAMES: Record<string, string> = {
   ppqt: '/ietools/ppqt/',
   ipk: '/ietools/ipk/',
   lbr: '/ietools/lbr/',
+  'machine-mover': '/ietools/machine-mover/',
 };
 
 /**
