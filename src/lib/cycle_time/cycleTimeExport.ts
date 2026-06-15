@@ -368,20 +368,37 @@ export async function exportFlowMetricsXlsx({
   ) {
     // Column identity = process label: steps sharing a label (e.g. the four
     // "SUB MA 1 - …" sub-ops) are ONE column — their metrics are summed and UPH
-    // recomputed from the total, matching the FE compact view. Columns ordered
-    // by each label's earliest step.
-    const colByLabel = new Map<string, number>();
+    // recomputed from the total, matching the FE compact view.
+    //
+    // Column ORDER = each label's average position across the assemblies that
+    // use it. We rank by each assembly's OWN step sequence (its index after
+    // sorting by step_order), not by the raw step_order value: a process can sit
+    // at different absolute step_orders in different routings, so a global MIN
+    // would let one odd assembly (e.g. one that visits a process first) drag a
+    // late process to the front and scramble the flow. Averaging each label's
+    // per-assembly rank keeps the columns following the normal flow shown on the
+    // Assembly Flow page. Tie-break by label for deterministic output.
+    const rankSum = new Map<string, number>();
+    const rankCount = new Map<string, number>();
     for (const { steps } of rows) {
-      for (const s of steps) {
+      const ordered = [...steps].sort(
+        (a, b) => (a.step_order ?? Number.MAX_SAFE_INTEGER) - (b.step_order ?? Number.MAX_SAFE_INTEGER),
+      );
+      const seen = new Set<string>();
+      let idx = 0;
+      for (const s of ordered) {
         const label = trimStep(s.step);
-        const ord = s.step_order ?? Number.MAX_SAFE_INTEGER;
-        const cur = colByLabel.get(label);
-        if (cur == null || ord < cur) colByLabel.set(label, ord);
+        if (seen.has(label)) continue; // rank by the label's first appearance
+        seen.add(label);
+        rankSum.set(label, (rankSum.get(label) ?? 0) + idx);
+        rankCount.set(label, (rankCount.get(label) ?? 0) + 1);
+        idx++;
       }
     }
-    const processes = [...colByLabel.entries()]
-      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
-      .map(([label]) => label);
+    const avgRank = (label: string) => rankSum.get(label)! / rankCount.get(label)!;
+    const processes = [...rankSum.keys()].sort(
+      (a, b) => avgRank(a) - avgRank(b) || a.localeCompare(b),
+    );
 
     const ws = wb.addWorksheet(sheetName, {
       views: [{ state: 'frozen', xSplit: leadCount, ySplit: 2 }],
