@@ -316,7 +316,7 @@ export default function CycleTimeAssemblyFlow({ lockedCustomer }: Props) {
         stageMode
         rightSlot={
           <div className="flex items-center gap-2">
-            <ViewToggle variant={variant} onChange={setVariant} />
+            {/* <ViewToggle variant={variant} onChange={setVariant} /> */}
             <Button
               variant="outline"
               size="sm"
@@ -727,7 +727,7 @@ function LineGroup({ index, group, variant, aliasMap }: {
         <span className="min-w-0 truncate text-sm font-medium text-foreground" title={group.line}>{group.line}</span>
         <span className="ml-auto flex flex-shrink-0 items-center gap-3 text-[11px] text-muted-foreground">
           <span title={lineEff == null ? 'Line efficiency (default)' : 'Line efficiency'}>
-            Eff <span className="font-bold text-foreground">{lineEff == null ? `${Math.round(DEFAULT_EFFICIENCY * 100)}%*` : `${Math.round(lineEff)}%`}</span>
+            Efficiency <span className="font-bold text-foreground">{lineEff == null ? `${Math.round(DEFAULT_EFFICIENCY * 100)}%*` : `${Math.round(lineEff)}%`}</span>
           </span>
           <span><span className="font-bold text-foreground">{group.steps.length}</span> {group.steps.length === 1 ? 'Process' : 'Processes'}</span>
           <span className={cn(NUM, 'font-bold text-foreground')} title={formatCycleHMS(group.total)}>

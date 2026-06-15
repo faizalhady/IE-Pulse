@@ -10,10 +10,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // Logo filename map — matches files in /public/workcell logo/
 const WORKCELL_LOGOS: Record<string, string> = {
-  arista:   assetUrl('workcell logo/Arista.png'),
+  arista: assetUrl('workcell logo/Arista.png'),
   keysight: assetUrl('workcell logo/keyisght.png'),  // note: typo in filename preserved
-  aop:      assetUrl('workcell logo/aop.png'),
-  micron:   assetUrl('workcell logo/micron.png'),
+  aop: assetUrl('workcell logo/aop.png'),
+  micron: assetUrl('workcell logo/micron.png'),
 };
 
 // Workcell badge — real logo if available, fallback to styled initials

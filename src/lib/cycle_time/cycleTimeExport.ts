@@ -350,6 +350,14 @@ export async function exportFlowMetricsXlsx({
   const DATA_SHADE: (string | null)[] = [null, 'FFEAF1F8']; // plain / soft blue-grey
   const fillOf = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
 
+  // Thin grid border on every cell — Excel hides its default gridlines under a
+  // fill, so shaded blocks look borderless without this.
+  const thin = { style: 'thin' as const, color: { argb: 'FFCBD5E1' } };
+  const cellBorder = { top: thin, left: thin, bottom: thin, right: thin };
+  const borderRow = (row: import('exceljs').Row, nCols: number) => {
+    for (let c = 1; c <= nCols; c++) row.getCell(c).border = cellBorder;
+  };
+
   /** Build one worksheet for a single sub-workcenter from its scoped rows.
    *  Rows are already scoped to one line, so process names are unique and
    *  ordering by step_order is the line's true flow (no cross-line scramble). */
@@ -416,6 +424,10 @@ export async function exportFlowMetricsXlsx({
     ws.mergeCells(1, 1, 2, 1);
     if (showSmh) ws.mergeCells(1, 2, 2, 2);
 
+    const totalCols = leadCount + (hasProcMetrics ? processes.length * perProc : 0);
+    borderRow(headerRow1, totalCols);
+    borderRow(headerRow2, totalCols);
+
     // Data rows: one per assembly.
     for (const { assembly, steps } of rows) {
       // Group the assembly's steps by label so same-name sub-ops combine.
@@ -459,6 +471,7 @@ export async function exportFlowMetricsXlsx({
           });
         }
       }
+      borderRow(r, totalCols);
     }
   }
 
