@@ -7,7 +7,7 @@ export default function Header() {
   const location = useLocation();
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem('pulse-theme');
-    return stored ? stored === 'dark' : true; // default dark
+    return stored ? stored === 'dark' : false; // default light
   });
 
   useEffect(() => {

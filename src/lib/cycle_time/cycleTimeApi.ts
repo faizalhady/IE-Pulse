@@ -70,6 +70,13 @@ export interface CycleTimeCustomer {
 export interface CycleTimeCoverageRow {
   customer: string;
   assemblies: number;
+  /** Distinct (assembly, revision) pairs — an assembly with 3 revisions counts as 3. */
+  revisions: number;
+  /** Active assembly count from IEDB /api/Assemblies/active. Null until the
+   *  backend assembly-status step runs (see CYCLE_TIME_ASSEMBLY_STATUS_PLAN.md). */
+  active?: number | null;
+  /** Inactive assembly count from IEDB /api/Assemblies/inactive. Null until wired. */
+  inactive?: number | null;
   updated_on: string | null;
 }
 

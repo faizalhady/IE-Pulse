@@ -45,6 +45,7 @@ export const WORKCELL_LOGOS: Record<string, string> = {
   fortive: `${_base}workcell logo/fortive.png`,
   imed: `${_base}workcell logo/imed.png`,
   infinera: `${_base}workcell logo/infinera.jpg`,
+  kctec: `${_base}workcell logo/kctec.png`,
   keyisght: `${_base}workcell logo/keysight.png`,
   keysight: `${_base}workcell logo/keysight.png`,
   lamresearch: `${_base}workcell logo/lam_research.png`,
@@ -79,6 +80,7 @@ export const WORKCELL_LOGOS: Record<string, string> = {
   life: `${_base}workcell logo/life360.png`,        // LIFE360
   elenion: `${_base}workcell logo/elenion.png`,
   endurance: `${_base}workcell logo/endurance.png`, // Elenion → acquired by Nokia
+  fortaleza: `${_base}workcell logo/fortaleza.png`,
 };
 
 /**

@@ -129,7 +129,7 @@ interface CombinedProcess {
   fpyPct: number | null;  // (Π fpy_i/100) × 100, null if no step had fpy
   eff: number | null;     // line efficiency
   count: number;          // how many steps were combined
-  fullSteps: string[];    // the underlying full aliases (for the tooltip)
+  fullSteps: { order: number; step: string }[];  // underlying steps + order (for the tooltip)
 }
 
 /** Group steps by display label, summing CT and compounding FPY. Order preserved
@@ -151,7 +151,7 @@ function combineSteps(steps: FlowStep[]): CombinedProcess[] {
       c.fpyPct = prev * (s.fpy / 100) * 100;   // compound yield
     }
     c.count++;
-    c.fullSteps.push(s.step);
+    c.fullSteps.push({ order: s.order, step: s.step });
   }
   return [...m.values()].sort((a, b) => a.minOrder - b.minOrder || a.label.localeCompare(b.label));
 }
@@ -316,7 +316,7 @@ export default function CycleTimeAssemblyFlow({ lockedCustomer }: Props) {
         stageMode
         rightSlot={
           <div className="flex items-center gap-2">
-            {/* <ViewToggle variant={variant} onChange={setVariant} /> */}
+            <ViewToggle variant={variant} onChange={setVariant} />
             <Button
               variant="outline"
               size="sm"
@@ -748,7 +748,9 @@ function LineGroup({ index, group, variant, aliasMap }: {
                 {combinedSteps.map((c) => (
                   <th
                     key={c.label}
-                    title={c.count > 1 ? `${c.label} — ${c.count} steps combined:\n${c.fullSteps.join('\n')}` : c.fullSteps[0]}
+                    title={c.count > 1
+                      ? `${c.label} — ${c.count} steps combined:\n${[...c.fullSteps].sort((a, b) => a.order - b.order).map((f) => `Ord ${f.order}: ${f.step}`).join('\n')}`
+                      : c.fullSteps[0] && `Ord ${c.fullSteps[0].order}: ${c.fullSteps[0].step}`}
                     className="whitespace-nowrap border-r border-border px-2.5 py-1.5 text-center text-[12px] normal-case font-semibold text-foreground last:border-r-0"
                   >
                     {c.label}

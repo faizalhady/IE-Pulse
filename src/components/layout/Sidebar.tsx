@@ -24,7 +24,7 @@ export default function Sidebar() {
 
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem('pulse-theme');
-    return stored ? stored === 'dark' : true;
+    return stored ? stored === 'dark' : false;
   });
 
   useEffect(() => {

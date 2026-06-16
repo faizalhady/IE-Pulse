@@ -18,12 +18,14 @@
 import { useCycleTimeCoverage, useCycleTimeCustomers } from '@/hooks/cycle_time/useCycleTimeData';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const GRID = '2.5rem minmax(15rem,1fr) 22rem 8rem 1.5rem';
-const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Updated', ''];
+const GRID = '2.5rem minmax(15rem,1fr) 20rem';
+const HEADERS = ['#', 'Workcell', 'Assemblies with data (revisions)',
+  // 'Active', 'Inactive',
+];
 
 /** Data-coverage % (assemblies with cycle-time data ÷ catalogue total). */
 function coverageColor(pct: number | null): string {
@@ -44,6 +46,9 @@ interface Row {
   division: string;
   total: number;
   withData: number;
+  revisions: number;
+  active: number | null;
+  inactive: number | null;
   missing: number;
   cov: number | null;
   updated: string | null;
@@ -55,13 +60,13 @@ export default function CycleTimeWorkcells() {
   const { data: coverage = [], isFetching: covFetching } = useCycleTimeCoverage();
 
   const covByCustomer = useMemo(() => {
-    const m = new Map<string, { assemblies: number; updated_on: string | null }>();
-    for (const c of coverage) m.set(c.customer, { assemblies: c.assemblies, updated_on: c.updated_on });
+    const m = new Map<string, { assemblies: number; revisions: number; active: number | null; inactive: number | null; updated_on: string | null }>();
+    for (const c of coverage) m.set(c.customer, { assemblies: c.assemblies, revisions: c.revisions, active: c.active ?? null, inactive: c.inactive ?? null, updated_on: c.updated_on });
     return m;
   }, [coverage]);
 
   // Build rows, then keep only those that actually have data, sorted A–Z.
-  const { visible } = useMemo(() => {
+  const { visible, totals } = useMemo(() => {
     const rows: Row[] = customers.map((c) => {
       const cov = covByCustomer.get(c.customer);
       const withData = cov?.assemblies ?? 0;
@@ -71,6 +76,9 @@ export default function CycleTimeWorkcells() {
         division: c.division,
         total,
         withData,
+        revisions: cov?.revisions ?? 0,
+        active: cov?.active ?? null,
+        inactive: cov?.inactive ?? null,
         missing: Math.max(0, total - withData),
         cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
         updated: cov?.updated_on ?? null,
@@ -83,105 +91,146 @@ export default function CycleTimeWorkcells() {
       .filter((r) => r.withData === 0)
       .map((r) => r.customer)
       .sort((a, b) => a.localeCompare(b));
-    return { visible, hiddenNames };
+    const total = rows.reduce((s, r) => s + r.total, 0);
+    const withData = rows.reduce((s, r) => s + r.withData, 0);
+    const totals = {
+      total,
+      withData,
+      missing: Math.max(0, total - withData),
+      cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
+    };
+    return { visible, hiddenNames, totals };
   }, [customers, covByCustomer]);
 
   const loading = (custFetching && customers.length === 0) || (covFetching && coverage.length === 0);
 
   return (
     <div className="p-5">
-        {/* league table */}
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div
-            className="grid bg-muted/50 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
-            style={{ gridTemplateColumns: GRID }}
-          >
-            {HEADERS.map((h, i) => (
-              <div key={i} className={cn('px-2 py-2.5', (i === 2 || i === 3) && 'text-right')}>{h}</div>
-            ))}
+      {/* overall summary — assemblies with data vs without */}
+      {/* <div className="mb-4 rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-6">
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-mono font-bold tabular-nums text-foreground">{totals.total.toLocaleString()}</span>
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">assemblies</span>
+        </div>
+        <div className="h-8 w-px bg-border" />
+        <div className="flex items-baseline gap-2">
+          <span className={cn('text-2xl font-mono font-bold tabular-nums', coverageColor(totals.cov))}>{totals.withData.toLocaleString()}</span>
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">with data</span>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-mono font-bold tabular-nums text-muted-foreground">{totals.missing.toLocaleString()}</span>
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">without data</span>
+        </div>
+        <div className="ml-auto flex items-center gap-3 min-w-[12rem]">
+          <div className="flex-1 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+            <div className={cn('h-full rounded-full transition-all', coverageBar(totals.cov))} style={{ width: `${totals.cov ?? 0}%` }} />
           </div>
+          <span className={cn('text-sm font-mono font-bold tabular-nums', coverageColor(totals.cov))}>
+            {totals.cov == null ? '—' : `${totals.cov}%`}
+          </span>
+        </div>
+      </div> */}
 
-          {loading ? (
-            <div className="py-16 flex items-center justify-center text-muted-foreground text-sm gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading workcells…
-            </div>
-          ) : visible.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground text-sm">No workcells with cycle-time data.</div>
-          ) : (
-            visible.map((r, idx) => {
-              const logo = getWorkcellLogo(r.customer);
-              const updated = r.updated
-                ? new Date(r.updated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-                : '—';
-              return (
-                <button
-                  key={r.customer}
-                  onClick={() => navigate(`/cycle-time/wc/${encodeURIComponent(r.customer)}`)}
-                  className="group grid items-center w-full text-left border-b border-border last:border-0 hover:bg-muted/30 transition-colors relative"
-                  style={{ gridTemplateColumns: GRID, height: 60 }}
-                >
-                  {/* position */}
-                  <div className="px-2">
-                    <span className="text-sm font-mono font-bold text-muted-foreground tabular-nums">{idx + 1}</span>
-                  </div>
-
-                  {/* logo + name */}
-                  <div className="px-2 flex items-center gap-3 min-w-0">
-                    {logo ? (
-                      <div
-                        className="w-24 h-9 rounded border border-border flex items-center justify-center overflow-hidden flex-shrink-0"
-                        style={{ backgroundColor: getWorkcellLogoBg(r.customer) ?? '#ffffff' }}
-                      >
-                        <img src={logo} alt={r.customer} className="w-full h-full object-contain p-0.5" />
-                      </div>
-                    ) : (
-                      <div className="w-24 h-9 rounded border border-border bg-muted flex items-center justify-center flex-shrink-0">
-                        <span className="text-[9px] font-bold text-muted-foreground">{r.customer.slice(0, 3).toUpperCase()}</span>
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-base font-semibold text-foreground truncate">{r.customer}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{r.division}</p>
-                    </div>
-                  </div>
-
-                  {/* assemblies — coverage: with data / missing / total + bar */}
-                  <div className="px-3">
-                    <div className="flex items-baseline gap-3 leading-none">
-                      <NumLabel n={r.withData} label="with data" tone={coverageColor(r.cov)} bold />
-                      <span className="text-border">/</span>
-                      <NumLabel n={r.total} label="total" tone="text-foreground" />
-                      <span className="text-[10px] text-muted-foreground">({r.missing.toLocaleString()} missing)</span>
-                      <span className={cn('ml-auto text-xs font-mono font-semibold tabular-nums', coverageColor(r.cov))}>
-                        {r.cov == null ? '—' : `${r.cov}%`}
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                      <div className={cn('h-full rounded-full transition-all', coverageBar(r.cov))} style={{ width: `${r.cov ?? 0}%` }} />
-                    </div>
-                  </div>
-
-                  {/* updated */}
-                  <div className="px-2 text-right text-[11px] font-mono text-muted-foreground tabular-nums">
-                    {updated}
-                  </div>
-
-                  {/* chevron */}
-                  <div className="px-1 flex justify-center">
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </button>
-              );
-            })
-          )}
+      {/* league table */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div
+          className="grid bg-muted/50 text-[12px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
+          style={{ gridTemplateColumns: GRID }}
+        >
+          {HEADERS.map((h, i) => (
+            <div key={i} className={cn('px-2 py-2.5', i >= 3 && i <= 5 && 'text-center')}>{h}</div>
+          ))}
         </div>
 
-        <p className="text-[10px] text-muted-foreground mt-3">
-          Sorted alphabetically. <span className="font-medium text-foreground/80">Assemblies</span> shows how many
-          have cycle-time data vs the customer's total catalogue — the bar and % are that coverage (red &lt;50%, amber
-          &lt;90%, green ≥90%). Workcells with no data yet are hidden. Click a workcell to open its
-          full profile.
-        </p>
+        {loading ? (
+          <div className="py-16 flex items-center justify-center text-muted-foreground text-sm gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading workcells…
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="py-16 text-center text-muted-foreground text-sm">No workcells with cycle-time data.</div>
+        ) : (
+          visible.map((r, idx) => {
+            const logo = getWorkcellLogo(r.customer);
+            const updated = r.updated
+              ? new Date(r.updated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+              : '—';
+            return (
+              <button
+                key={r.customer}
+                onClick={() => navigate(`/cycle-time/wc/${encodeURIComponent(r.customer)}`)}
+                className="group grid items-center w-full text-left border-b border-border last:border-0 hover:bg-muted/30 transition-colors relative"
+                style={{ gridTemplateColumns: GRID, height: 60 }}
+              >
+                {/* position */}
+                <div className="px-2">
+                  <span className="text-sm font-mono font-bold text-muted-foreground tabular-nums">{idx + 1}</span>
+                </div>
+
+                {/* logo + name */}
+                <div className="px-2 flex items-center gap-3 min-w-0">
+                  {logo ? (
+                    <div
+                      className="w-24 h-9 rounded border border-border flex items-center justify-center overflow-hidden flex-shrink-0"
+                      style={{ backgroundColor: getWorkcellLogoBg(r.customer) ?? '#ffffff' }}
+                    >
+                      <img src={logo} alt={r.customer} className="w-full h-full object-contain p-0.5" />
+                    </div>
+                  ) : (
+                    <div className="w-24 h-9 rounded border border-border bg-muted flex items-center justify-center flex-shrink-0">
+                      <span className="text-[9px] font-bold text-muted-foreground">{r.customer.slice(0, 3).toUpperCase()}</span>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold text-foreground truncate">{r.customer}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{r.division}</p>
+                  </div>
+                </div>
+
+                {/* assemblies with data (revisions) — no comparison/percentage */}
+                <div className="px-3 flex flex-col justify-center leading-none">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-base font-mono font-bold text-foreground tabular-nums">{r.withData.toLocaleString()}</span>
+                    <span className="text-[10px] text-muted-foreground">with data</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground mt-1">{r.revisions.toLocaleString()} revisions</span>
+                </div>
+
+                {/* revisions — distinct (assembly, revision) pairs */}
+                {/* <div className="px-2 flex flex-col items-center justify-center leading-none">
+                  <span className="text-base font-mono font-bold text-foreground tabular-nums">{r.revisions.toLocaleString()}</span>
+                  <span className="text-[9px] text-muted-foreground mt-0.5">revisions</span>
+                </div> */}
+
+                {/* active — from IEDB /api/Assemblies/active (— until backend wired) */}
+                {/* <div className="px-2 flex items-center justify-center">
+                  <span className="text-sm font-mono font-semibold text-foreground tabular-nums">
+                    {r.active == null ? '—' : r.active.toLocaleString()}
+                  </span>
+                </div> */}
+
+                {/* inactive — from IEDB /api/Assemblies/inactive (— until backend wired) */}
+                {/* <div className="px-2 flex items-center justify-center">
+                  <span className="text-sm font-mono font-semibold text-muted-foreground tabular-nums">
+                    {r.inactive == null ? '—' : r.inactive.toLocaleString()}
+                  </span>
+                </div>
+
+                {/* updated */}
+                {/* <div className="px-2 text-right text-[11px] font-mono text-muted-foreground tabular-nums">
+                    {updated}
+                  </div> */}
+
+                {/* chevron */}
+                {/* <div className="px-1 flex justify-center">
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all" />
+                </div> */}
+              </button>
+            );
+          })
+        )}
+      </div>
+
+
     </div>
   );
 }
