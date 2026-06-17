@@ -16,7 +16,7 @@
  */
 
 import { useCycleTimeCoverage, useCycleTimeCustomers, useCycleTimeCustomerStatus } from '@/hooks/cycle_time/useCycleTimeData';
-import type { CycleTimeCustomerStatus } from '@/lib/cycle_time/cycleTimeApi';
+import { matchCustomerStatus, type CycleTimeCustomerStatus } from '@/lib/cycle_time/cycleTimeApi';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
@@ -25,9 +25,6 @@ import { useNavigate } from 'react-router-dom';
 
 const GRID = '2.5rem minmax(14rem,1fr) 23rem 16rem';
 const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Measurement method'];
-
-/** Normalize a name for matching across sources (lowercase, alnum only). */
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** Data-coverage % (assemblies with cycle-time data ÷ catalogue total). */
 function coverageColor(pct: number | null): string {
@@ -62,28 +59,7 @@ export default function CycleTimeWorkcells() {
   const navigate = useNavigate();
   const { data: customers = [], isFetching: custFetching } = useCycleTimeCustomers();
   const { data: coverage = [], isFetching: covFetching } = useCycleTimeCoverage();
-  const { data: customerStatus = [] } = useCycleTimeCustomerStatus();
-
-  // Map IEDB CustomerStatus rows by their leading "Customer" segment (the
-  // "CustomerDivision" field is "CUSTOMER / DIVISION*"), normalized for matching.
-  const statusByCustomer = useMemo(() => {
-    const m = new Map<string, CycleTimeCustomerStatus>();
-    for (const s of customerStatus) {
-      const key = norm(s.CustomerDivision.split('/')[0] ?? '');
-      if (key && !m.has(key)) m.set(key, s);
-    }
-    return m;
-  }, [customerStatus]);
-
-  const findStatus = (customer: string): CycleTimeCustomerStatus | null => {
-    const k = norm(customer);
-    if (!k) return null;
-    if (statusByCustomer.has(k)) return statusByCustomer.get(k)!;
-    for (const [key, v] of statusByCustomer) {
-      if (k.startsWith(key) || key.startsWith(k)) return v;
-    }
-    return null;
-  };
+  const { data: customerStatus = [], isLoading: statusLoading, isError: statusError } = useCycleTimeCustomerStatus();
 
   const covByCustomer = useMemo(() => {
     const m = new Map<string, { assemblies: number; revisions: number; active: number | null; inactive: number | null; updated_on: string | null }>();
@@ -108,7 +84,7 @@ export default function CycleTimeWorkcells() {
         missing: Math.max(0, total - withData),
         cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
         updated: cov?.updated_on ?? null,
-        status: findStatus(c.customer),
+        status: matchCustomerStatus(customerStatus, c.customer),
       };
     });
     const visible = rows
@@ -127,7 +103,7 @@ export default function CycleTimeWorkcells() {
       cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
     };
     return { visible, hiddenNames, totals };
-  }, [customers, covByCustomer, statusByCustomer]);
+  }, [customers, covByCustomer, customerStatus]);
 
   const loading = (custFetching && customers.length === 0) || (covFetching && coverage.length === 0);
 
@@ -214,13 +190,17 @@ export default function CycleTimeWorkcells() {
                 </div>
 
                 {/* assemblies — coverage: with data / missing / total + bar.
-                    Numbers come from the IEDB CustomerStatus report; falls back
-                    to the /coverage aggregation when the report has no match. */}
-                {(() => {
+                    Numbers come straight from the IEDB CustomerStatus report (no
+                    fallback) — loader while fetching, notice if it can't load. */}
+                {statusLoading ? (
+                  <CellLoader />
+                ) : statusError || !r.status ? (
+                  <CellEmpty />
+                ) : (() => {
                   const st = r.status;
-                  const cWith = st ? st.NoOfAssembliesWithData : r.withData;
-                  const cTotal = st ? st.NoOfAssemblies : r.total;
-                  const cPct = st ? st.Complete : r.cov;
+                  const cWith = st.NoOfAssembliesWithData;
+                  const cTotal = st.NoOfAssemblies;
+                  const cPct = st.Complete;
                   const cMissing = Math.max(0, cTotal - cWith);
                   return (
                     <div className="px-3">
@@ -241,7 +221,13 @@ export default function CycleTimeWorkcells() {
                 })()}
 
                 {/* measurement method — StopWatch / MOST / Estimate breakdown */}
-                <MethodCell status={r.status} />
+                {statusLoading ? (
+                  <CellLoader />
+                ) : statusError || !r.status ? (
+                  <CellEmpty />
+                ) : (
+                  <MethodCell status={r.status} />
+                )}
 
                 {/* revisions — distinct (assembly, revision) pairs */}
                 {/* <div className="px-2 flex flex-col items-center justify-center leading-none">
@@ -281,6 +267,20 @@ export default function CycleTimeWorkcells() {
 
     </div>
   );
+}
+
+// ─── Per-column states (shared by Coverage + Measurement method) ──────────────
+/** Inline spinner shown in a single column cell while its data is fetching. */
+function CellLoader() {
+  return (
+    <div className="px-3 flex items-center text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" />
+    </div>
+  );
+}
+/** Shown when a column's data can't be fetched (request failed or no match). */
+function CellEmpty() {
+  return <div className="px-3 flex items-center text-[11px] text-muted-foreground italic">Can't fetch data</div>;
 }
 
 // ─── Measurement-method breakdown (StopWatch / MOST / Estimate) ───────────────

@@ -10,13 +10,14 @@
  * flow view, locked to this customer — no customer Select in the filter bar.
  */
 
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
+import { matchCustomerStatus } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import {
-  useCycleTimeCustomers,
+  useCycleTimeCustomerStatus,
   useCycleTimeProfile,
   useInvalidateOnRefreshComplete,
 } from '@/hooks/cycle_time/useCycleTimeData';
@@ -29,7 +30,7 @@ export default function CycleTimeWorkcell() {
   const navigate = useNavigate();
   const { customer = '' } = useParams();
   const { data } = useCycleTimeProfile(customer);
-  const { data: customers } = useCycleTimeCustomers();
+  const { data: statusRows = [], isLoading: statusLoading, isError: statusError } = useCycleTimeCustomerStatus();
 
   const logo = getWorkcellLogo(customer);
   const summary = data?.summary;
@@ -37,10 +38,9 @@ export default function CycleTimeWorkcell() {
     ? `${summary.lines} lines · ${summary.processes} processes`
     : 'Cycle-time profile';
 
-  // Two different counts (see header card): catalog total vs assemblies that
-  // actually have cycle-time data in the local mart.
-  const totalAssemblies = customers?.find((c) => c.customer === customer)?.assembly_count ?? null;
-  const withData = summary?.assemblies ?? null;
+  // Coverage figures come straight from the IEDB CustomerStatus report (same
+  // source as the league table) — total / with-data / Complete %.
+  const status = matchCustomerStatus(statusRows, customer);
 
   return (
     <div className="flex h-full flex-col">
@@ -77,7 +77,13 @@ export default function CycleTimeWorkcell() {
           </div>
         </div>
 
-        <AssemblyCoverageCard total={totalAssemblies} withData={withData} />
+        <AssemblyCoverageCard
+          total={status?.NoOfAssemblies ?? null}
+          withData={status?.NoOfAssembliesWithData ?? null}
+          pct={status?.Complete ?? null}
+          loading={statusLoading}
+          unavailable={!statusLoading && (statusError || !status)}
+        />
       </div>
 
       {/* ─── Assemblies flow (filters + Detail|Compact toggle inside) ──── */}
@@ -89,16 +95,43 @@ export default function CycleTimeWorkcell() {
 }
 
 /**
- * Compact header card contrasting the two assembly counts:
- *   • total    — every assembly the customer has in IEDB (catalog figure)
- *   • withData — assemblies that actually have cycle-time data locally
- * The gap signals how complete the pulled cycle-time data is.
+ * Compact header card contrasting the two assembly counts, from the IEDB
+ * CustomerStatus report:
+ *   • total    — every assembly the customer has (NoOfAssemblies)
+ *   • withData — assemblies that have cycle-time data (NoOfAssembliesWithData)
+ *   • pct      — Complete %
+ * The gap signals how complete the cycle-time data is. Shows a loader while the
+ * report is fetching and a notice when it can't be loaded.
  */
-function AssemblyCoverageCard({ total, withData }: { total: number | null; withData: number | null }) {
-  const pct =
-    total && total > 0 && withData != null
-      ? Math.min(100, Math.round((withData / total) * 100))
-      : null;
+function AssemblyCoverageCard({
+  total,
+  withData,
+  pct,
+  loading,
+  unavailable,
+}: {
+  total: number | null;
+  withData: number | null;
+  pct: number | null;
+  loading?: boolean;
+  unavailable?: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-[11px]">Loading coverage…</span>
+      </div>
+    );
+  }
+
+  if (unavailable) {
+    return (
+      <div className="flex items-center rounded-lg border border-border bg-card px-3.5 py-2">
+        <span className="text-[11px] italic text-muted-foreground">Can't fetch coverage data</span>
+      </div>
+    );
+  }
 
   const tone =
     pct == null ? 'text-muted-foreground'

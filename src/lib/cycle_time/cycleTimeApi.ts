@@ -450,6 +450,30 @@ export const cycleTimeApi = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Match a workcell/customer name to its IEDB CustomerStatus row. The report keys
+ * rows by "CUSTOMER / DIVISION*" — we compare the leading customer segment,
+ * normalized (lowercase, alnum only). Prefers an exact match, else a prefix
+ * match either way. Returns null when nothing matches. Shared by the league
+ * table and the dedicated workcell page so both resolve identically.
+ */
+export function matchCustomerStatus(
+  rows: CycleTimeCustomerStatus[],
+  customer: string,
+): CycleTimeCustomerStatus | null {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const k = norm(customer);
+  if (!k) return null;
+  let prefix: CycleTimeCustomerStatus | null = null;
+  for (const r of rows) {
+    const key = norm((r.CustomerDivision ?? '').split('/')[0] ?? '');
+    if (!key) continue;
+    if (key === k) return r;
+    if (!prefix && (k.startsWith(key) || key.startsWith(k))) prefix = r;
+  }
+  return prefix;
+}
+
 /** Identify which fields on a pivoted row are process columns (not metadata). */
 const PIVOT_META_COLS = new Set([
   'customer', 'division', 'family', 'assembly', 'revision',
