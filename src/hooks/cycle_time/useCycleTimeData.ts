@@ -33,6 +33,7 @@ export const ctKeys = {
   health:     () => [...ctKeys.all, 'health'] as const,
   customers:  () => [...ctKeys.all, 'customers'] as const,
   coverage:   () => [...ctKeys.all, 'coverage'] as const,
+  customerStatus: (site: string) => [...ctKeys.all, 'customerStatus', site] as const,
   aliases:    (customer?: string) => [...ctKeys.all, 'aliases', customer ?? ''] as const,
   assemblies: (customer?: string, line?: string, assembly?: string) =>
                 [...ctKeys.all, 'assemblies', customer ?? '', line ?? '', assembly ?? ''] as const,
@@ -74,6 +75,18 @@ export function useCycleTimeCoverage() {
     queryKey: ctKeys.coverage(),
     queryFn:  cycleTimeApi.coverage.list,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** Per-customer assembly coverage + measurement-method breakdown from the IEDB
+ *  CustomerStatus report. Failures are non-fatal — the league table degrades to
+ *  its /coverage figures when this is unavailable. */
+export function useCycleTimeCustomerStatus(site = 'pen') {
+  return useQuery({
+    queryKey: ctKeys.customerStatus(site),
+    queryFn:  () => cycleTimeApi.customerStatus.list(site),
+    staleTime: 5 * 60_000,
+    retry: 1,
   });
 }
 

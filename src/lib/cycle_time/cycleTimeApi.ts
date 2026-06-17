@@ -81,6 +81,30 @@ export interface CycleTimeCoverageRow {
 }
 
 /**
+ * Per-customer status from the IEDB CustomerStatus report. Counts are at the
+ * assembly level (NoOfAssemblies / NoOfAssembliesWithData / Complete %) plus a
+ * breakdown of how the underlying cycle-time steps were measured —
+ * StopWatch (timed), Most (predetermined MOST standard) or Estimate (engineer
+ * estimate). Called directly against the IEDB API, keyed by "Customer / Division".
+ */
+export interface CycleTimeCustomerStatus {
+  CustomerDivision: string;
+  NoOfAssemblies: number;
+  NoOfAssembliesWithData: number;
+  /** Coverage percentage (assemblies with data ÷ total), 0–100. */
+  Complete: number;
+  /** # steps measured by stopwatch. */
+  StopWatch: number;
+  /** # steps from a MOST predetermined-time standard. */
+  Most: number;
+  /** # steps from an engineer estimate. */
+  Estimate: number;
+  /** Estimate share of measured steps, 0–100. */
+  EstimatePercentage: number;
+  Site: string;
+}
+
+/**
  * Pivoted row. Metadata columns are typed; process-step columns are dynamic
  * (vary per customer) and reachable via index access `row['Hi-Pot 1']`.
  */
@@ -364,6 +388,13 @@ export const cycleTimeApi = {
   coverage: {
     /** Per-customer with-data assembly counts + freshness, in one request. */
     list: () => get<CycleTimeCoverageRow[]>('/coverage'),
+  },
+  customerStatus: {
+    /** Per-customer assembly coverage + measurement-method breakdown. Proxied
+     *  through the CT backend (/customer-status), which holds the IEDB OAuth
+     *  credentials — the browser can't call IEDB directly (401 + CORS). */
+    list: (site = 'pen') =>
+      get<CycleTimeCustomerStatus[]>('/customer-status', { site }),
   },
   aliases: {
     /** Map of column-header alias → underlying Process code(s) + lines. */

@@ -15,17 +15,19 @@
  * forgotten. Sorted A–Z.
  */
 
-import { useCycleTimeCoverage, useCycleTimeCustomers } from '@/hooks/cycle_time/useCycleTimeData';
+import { useCycleTimeCoverage, useCycleTimeCustomers, useCycleTimeCustomerStatus } from '@/hooks/cycle_time/useCycleTimeData';
+import type { CycleTimeCustomerStatus } from '@/lib/cycle_time/cycleTimeApi';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const GRID = '2.5rem minmax(15rem,1fr) 20rem';
-const HEADERS = ['#', 'Workcell', 'Assemblies with data (revisions)',
-  // 'Active', 'Inactive',
-];
+const GRID = '2.5rem minmax(14rem,1fr) 23rem 16rem';
+const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Measurement method'];
+
+/** Normalize a name for matching across sources (lowercase, alnum only). */
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** Data-coverage % (assemblies with cycle-time data ÷ catalogue total). */
 function coverageColor(pct: number | null): string {
@@ -52,12 +54,36 @@ interface Row {
   missing: number;
   cov: number | null;
   updated: string | null;
+  /** Matched IEDB CustomerStatus row (coverage + measurement-method counts). */
+  status: CycleTimeCustomerStatus | null;
 }
 
 export default function CycleTimeWorkcells() {
   const navigate = useNavigate();
   const { data: customers = [], isFetching: custFetching } = useCycleTimeCustomers();
   const { data: coverage = [], isFetching: covFetching } = useCycleTimeCoverage();
+  const { data: customerStatus = [] } = useCycleTimeCustomerStatus();
+
+  // Map IEDB CustomerStatus rows by their leading "Customer" segment (the
+  // "CustomerDivision" field is "CUSTOMER / DIVISION*"), normalized for matching.
+  const statusByCustomer = useMemo(() => {
+    const m = new Map<string, CycleTimeCustomerStatus>();
+    for (const s of customerStatus) {
+      const key = norm(s.CustomerDivision.split('/')[0] ?? '');
+      if (key && !m.has(key)) m.set(key, s);
+    }
+    return m;
+  }, [customerStatus]);
+
+  const findStatus = (customer: string): CycleTimeCustomerStatus | null => {
+    const k = norm(customer);
+    if (!k) return null;
+    if (statusByCustomer.has(k)) return statusByCustomer.get(k)!;
+    for (const [key, v] of statusByCustomer) {
+      if (k.startsWith(key) || key.startsWith(k)) return v;
+    }
+    return null;
+  };
 
   const covByCustomer = useMemo(() => {
     const m = new Map<string, { assemblies: number; revisions: number; active: number | null; inactive: number | null; updated_on: string | null }>();
@@ -82,6 +108,7 @@ export default function CycleTimeWorkcells() {
         missing: Math.max(0, total - withData),
         cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
         updated: cov?.updated_on ?? null,
+        status: findStatus(c.customer),
       };
     });
     const visible = rows
@@ -100,7 +127,7 @@ export default function CycleTimeWorkcells() {
       cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
     };
     return { visible, hiddenNames, totals };
-  }, [customers, covByCustomer]);
+  }, [customers, covByCustomer, statusByCustomer]);
 
   const loading = (custFetching && customers.length === 0) || (covFetching && coverage.length === 0);
 
@@ -138,7 +165,7 @@ export default function CycleTimeWorkcells() {
           style={{ gridTemplateColumns: GRID }}
         >
           {HEADERS.map((h, i) => (
-            <div key={i} className={cn('px-2 py-2.5', i >= 3 && i <= 5 && 'text-center')}>{h}</div>
+            <div key={i} className="px-2 py-2.5">{h}</div>
           ))}
         </div>
 
@@ -186,14 +213,35 @@ export default function CycleTimeWorkcells() {
                   </div>
                 </div>
 
-                {/* assemblies with data (revisions) — no comparison/percentage */}
-                <div className="px-3 flex flex-col justify-center leading-none">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-base font-mono font-bold text-foreground tabular-nums">{r.withData.toLocaleString()}</span>
-                    <span className="text-[10px] text-muted-foreground">with data</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground mt-1">{r.revisions.toLocaleString()} revisions</span>
-                </div>
+                {/* assemblies — coverage: with data / missing / total + bar.
+                    Numbers come from the IEDB CustomerStatus report; falls back
+                    to the /coverage aggregation when the report has no match. */}
+                {(() => {
+                  const st = r.status;
+                  const cWith = st ? st.NoOfAssembliesWithData : r.withData;
+                  const cTotal = st ? st.NoOfAssemblies : r.total;
+                  const cPct = st ? st.Complete : r.cov;
+                  const cMissing = Math.max(0, cTotal - cWith);
+                  return (
+                    <div className="px-3">
+                      <div className="flex items-baseline gap-3 leading-none">
+                        <NumLabel n={cWith} label="with data" tone={coverageColor(cPct)} bold />
+                        <span className="text-border">/</span>
+                        <NumLabel n={cTotal} label="total" tone="text-foreground" />
+                        <span className="text-[10px] text-muted-foreground">({cMissing.toLocaleString()} missing)</span>
+                        <span className={cn('ml-auto text-xs font-mono font-semibold tabular-nums', coverageColor(cPct))}>
+                          {cPct == null ? '—' : `${cPct}%`}
+                        </span>
+                      </div>
+                      <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                        <div className={cn('h-full rounded-full transition-all', coverageBar(cPct))} style={{ width: `${cPct ?? 0}%` }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* measurement method — StopWatch / MOST / Estimate breakdown */}
+                <MethodCell status={r.status} />
 
                 {/* revisions — distinct (assembly, revision) pairs */}
                 {/* <div className="px-2 flex flex-col items-center justify-center leading-none">
@@ -231,6 +279,48 @@ export default function CycleTimeWorkcells() {
       </div>
 
 
+    </div>
+  );
+}
+
+// ─── Measurement-method breakdown (StopWatch / MOST / Estimate) ───────────────
+const METHODS = [
+  { key: 'StopWatch', label: 'SW', bar: 'bg-emerald-500', dot: 'bg-emerald-500' },
+  { key: 'Most', label: 'MOST', bar: 'bg-sky-500', dot: 'bg-sky-500' },
+  { key: 'Estimate', label: 'Est', bar: 'bg-amber-400', dot: 'bg-amber-400' },
+] as const;
+
+function MethodCell({ status }: { status: CycleTimeCustomerStatus | null }) {
+  const sw = status?.StopWatch ?? 0;
+  const most = status?.Most ?? 0;
+  const est = status?.Estimate ?? 0;
+  const total = sw + most + est;
+  const counts: Record<string, number> = { StopWatch: sw, Most: most, Estimate: est };
+
+  if (!status || total === 0) {
+    return <div className="px-3 text-[11px] text-muted-foreground">—</div>;
+  }
+
+  return (
+    <div className="px-3 flex flex-col justify-center gap-1.5 leading-none">
+      {/* proportional bar */}
+      <div className="flex h-2 rounded-full overflow-hidden bg-muted/40">
+        {METHODS.map((m) =>
+          counts[m.key] > 0 ? (
+            <div key={m.key} className={cn('h-full', m.bar)} style={{ width: `${(counts[m.key] / total) * 100}%` }} />
+          ) : null,
+        )}
+      </div>
+      {/* legend + counts */}
+      <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground">
+        {METHODS.map((m) => (
+          <span key={m.key} className="flex items-center gap-1">
+            <span className={cn('w-1.5 h-1.5 rounded-full', m.dot)} />
+            {m.label}
+            <span className="font-mono font-semibold text-foreground tabular-nums">{counts[m.key].toLocaleString()}</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
