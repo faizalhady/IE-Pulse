@@ -33,7 +33,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [activeAppId, setActiveAppId] = useState<AppId>(() => {
     if (IS_SINGLE_APP && BUILD_APP) return BUILD_APP.id;
     return detectAppFromPath(window.location.pathname, (localStorage.getItem('pulse-active-app') as AppId) || undefined);

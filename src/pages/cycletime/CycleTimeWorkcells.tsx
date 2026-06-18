@@ -23,7 +23,7 @@ import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const GRID = '2.5rem minmax(12rem,1fr) 18rem 9rem 18rem 9rem';
+const GRID = '2.5rem minmax(11rem,1fr) 16rem 8.5rem 16rem 8.5rem';
 const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Completion %', 'Measurement method', 'Estimate %'];
 
 /** Estimate share above this (%) is treated as a data-quality risk → red. */
@@ -34,13 +34,13 @@ const estimateIsHigh = (pct: number | null | undefined) => pct != null && pct > 
 function coverageColor(pct: number | null): string {
   if (pct == null) return 'text-muted-foreground';
   if (pct >= 90) return 'text-emerald-400';
-  if (pct >= 50) return 'text-amber-400';
+  if (pct >= 80) return 'text-amber-400';
   return 'text-red-400';
 }
 function coverageBar(pct: number | null): string {
   if (pct == null) return 'bg-muted-foreground/30';
   if (pct >= 90) return 'bg-emerald-500';
-  if (pct >= 50) return 'bg-amber-400';
+  if (pct >= 80) return 'bg-amber-400';
   return 'bg-red-500';
 }
 
@@ -116,23 +116,23 @@ export default function CycleTimeWorkcells() {
       {/* overall summary — assemblies with data vs without */}
       {/* <div className="mb-4 rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-6">
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-mono font-bold tabular-nums text-foreground">{totals.total.toLocaleString()}</span>
+          <span className="text-2xl ct-num font-bold tabular-nums text-foreground">{totals.total.toLocaleString()}</span>
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">assemblies</span>
         </div>
         <div className="h-8 w-px bg-border" />
         <div className="flex items-baseline gap-2">
-          <span className={cn('text-2xl font-mono font-bold tabular-nums', coverageColor(totals.cov))}>{totals.withData.toLocaleString()}</span>
+          <span className={cn('text-2xl ct-num font-bold tabular-nums', coverageColor(totals.cov))}>{totals.withData.toLocaleString()}</span>
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">with data</span>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-mono font-bold tabular-nums text-muted-foreground">{totals.missing.toLocaleString()}</span>
+          <span className="text-2xl ct-num font-bold tabular-nums text-muted-foreground">{totals.missing.toLocaleString()}</span>
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">without data</span>
         </div>
         <div className="ml-auto flex items-center gap-3 min-w-[12rem]">
           <div className="flex-1 h-1.5 rounded-full bg-muted/40 overflow-hidden">
             <div className={cn('h-full rounded-full transition-all', coverageBar(totals.cov))} style={{ width: `${totals.cov ?? 0}%` }} />
           </div>
-          <span className={cn('text-sm font-mono font-bold tabular-nums', coverageColor(totals.cov))}>
+          <span className={cn('text-sm ct-num font-bold tabular-nums', coverageColor(totals.cov))}>
             {totals.cov == null ? '—' : `${totals.cov}%`}
           </span>
         </div>
@@ -145,7 +145,7 @@ export default function CycleTimeWorkcells() {
           style={{ gridTemplateColumns: GRID }}
         >
           {HEADERS.map((h, i) => (
-            <div key={i} className="px-2 py-2.5">{h}</div>
+            <div key={i} className="px-2 py-2.5 whitespace-nowrap">{h}</div>
           ))}
         </div>
 
@@ -170,7 +170,7 @@ export default function CycleTimeWorkcells() {
               >
                 {/* position */}
                 <div className="px-2">
-                  <span className="text-sm font-mono font-bold text-muted-foreground tabular-nums">{idx + 1}</span>
+                  <span className="text-xs ct-num font-bold text-muted-foreground tabular-nums">{idx + 1}</span>
                 </div>
 
                 {/* logo + name */}
@@ -188,8 +188,8 @@ export default function CycleTimeWorkcells() {
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="text-base font-semibold text-foreground truncate">{r.customer}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{r.division}</p>
+                    <p className="text-[13px] xl:text-sm font-semibold text-foreground truncate">{r.customer}</p>
+                    <p className="text-[10px] xl:text-[11px] text-muted-foreground truncate">{r.division}</p>
                   </div>
                 </div>
 
@@ -210,7 +210,7 @@ export default function CycleTimeWorkcells() {
                         <NumLabel n={cWith} label="with data" tone={coverageColor(st.Complete)} bold />
                         <span className="text-border">/</span>
                         <NumLabel n={cTotal} label="total" tone="text-foreground" />
-                        <span className="text-[10px] text-muted-foreground">({cMissing.toLocaleString()} missing)</span>
+                        <span className="text-[9px] xl:text-[10px] text-muted-foreground whitespace-nowrap">({cMissing.toLocaleString()} missing)</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
                         <div className={cn('h-full rounded-full transition-all', coverageBar(st.Complete))} style={{ width: `${st.Complete ?? 0}%` }} />
@@ -226,7 +226,7 @@ export default function CycleTimeWorkcells() {
                   <CellEmpty />
                 ) : (
                   <div className="px-3 flex items-center">
-                    <span className={cn('text-base font-mono font-bold tabular-nums', coverageColor(r.status.Complete))}>
+                    <span className={cn('text-xs xl:text-sm ct-num font-bold tabular-nums', coverageColor(r.status.Complete))}>
                       {r.status.Complete == null ? '—' : `${r.status.Complete}%`}
                     </span>
                   </div>
@@ -249,7 +249,7 @@ export default function CycleTimeWorkcells() {
                 ) : (
                   <div className="px-3 flex items-center">
                     <span className={cn(
-                      'text-base font-mono font-bold tabular-nums',
+                      'text-xs xl:text-sm ct-num font-bold tabular-nums',
                       estimateIsHigh(r.status.EstimatePercentage) ? 'text-red-400' : 'text-foreground',
                     )}>
                       {r.status.EstimatePercentage}%
@@ -259,26 +259,26 @@ export default function CycleTimeWorkcells() {
 
                 {/* revisions — distinct (assembly, revision) pairs */}
                 {/* <div className="px-2 flex flex-col items-center justify-center leading-none">
-                  <span className="text-base font-mono font-bold text-foreground tabular-nums">{r.revisions.toLocaleString()}</span>
+                  <span className="text-base ct-num font-bold text-foreground tabular-nums">{r.revisions.toLocaleString()}</span>
                   <span className="text-[9px] text-muted-foreground mt-0.5">revisions</span>
                 </div> */}
 
                 {/* active — from IEDB /api/Assemblies/active (— until backend wired) */}
                 {/* <div className="px-2 flex items-center justify-center">
-                  <span className="text-sm font-mono font-semibold text-foreground tabular-nums">
+                  <span className="text-sm ct-num font-semibold text-foreground tabular-nums">
                     {r.active == null ? '—' : r.active.toLocaleString()}
                   </span>
                 </div> */}
 
                 {/* inactive — from IEDB /api/Assemblies/inactive (— until backend wired) */}
                 {/* <div className="px-2 flex items-center justify-center">
-                  <span className="text-sm font-mono font-semibold text-muted-foreground tabular-nums">
+                  <span className="text-sm ct-num font-semibold text-muted-foreground tabular-nums">
                     {r.inactive == null ? '—' : r.inactive.toLocaleString()}
                   </span>
                 </div>
 
                 {/* updated */}
-                {/* <div className="px-2 text-right text-[11px] font-mono text-muted-foreground tabular-nums">
+                {/* <div className="px-2 text-right text-[11px] ct-num text-muted-foreground tabular-nums">
                     {updated}
                   </div> */}
 
@@ -337,12 +337,12 @@ function MethodCell({ status }: { status: CycleTimeCustomerStatus | null }) {
   return (
     <div className="px-3 flex flex-col justify-center gap-1.5 leading-none">
       {/* legend + counts (label on top) */}
-      <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 xl:gap-2.5 text-[10px] xl:text-xs text-muted-foreground">
         {METHODS.map((m) => (
           <span key={m.key} className="flex items-center gap-1">
-            <span className={cn('w-2 h-2 rounded-full', dotClass(m.key))} />
+            <span className={cn('w-1.5 h-1.5 xl:w-2 xl:h-2 rounded-full', dotClass(m.key))} />
             {m.label}
-            <span className="text-sm font-mono font-bold text-foreground tabular-nums">{counts[m.key].toLocaleString()}</span>
+            <span className="text-[11px] xl:text-xs ct-num font-bold text-foreground tabular-nums">{counts[m.key].toLocaleString()}</span>
           </span>
         ))}
       </div>
@@ -362,10 +362,10 @@ function MethodCell({ status }: { status: CycleTimeCustomerStatus | null }) {
 function NumLabel({ n, label, tone, bold }: { n: number; label: string; tone: string; bold?: boolean }) {
   return (
     <span className="flex items-baseline gap-1">
-      <span className={cn('font-mono tabular-nums', bold ? 'text-sm font-bold' : 'text-sm font-semibold', tone)}>
+      <span className={cn('ct-num tabular-nums', bold ? 'text-[11px] xl:text-xs font-bold' : 'text-[11px] xl:text-xs font-semibold', tone)}>
         {n.toLocaleString()}
       </span>
-      <span className="text-[9px] text-muted-foreground">{label}</span>
+      <span className="text-[9px] text-muted-foreground whitespace-nowrap">{label}</span>
     </span>
   );
 }
