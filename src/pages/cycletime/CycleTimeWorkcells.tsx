@@ -23,8 +23,12 @@ import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const GRID = '2.5rem minmax(14rem,1fr) 23rem 16rem';
-const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Measurement method'];
+const GRID = '2.5rem minmax(12rem,1fr) 18rem 9rem 18rem 9rem';
+const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Completion %', 'Measurement method', 'Estimate %'];
+
+/** Estimate share above this (%) is treated as a data-quality risk → red. */
+const ESTIMATE_RED_THRESHOLD = 30;
+const estimateIsHigh = (pct: number | null | undefined) => pct != null && pct > ESTIMATE_RED_THRESHOLD;
 
 /** Data-coverage % (assemblies with cycle-time data ÷ catalogue total). */
 function coverageColor(pct: number | null): string {
@@ -189,9 +193,8 @@ export default function CycleTimeWorkcells() {
                   </div>
                 </div>
 
-                {/* assemblies — coverage: with data / missing / total + bar.
-                    Numbers come straight from the IEDB CustomerStatus report (no
-                    fallback) — loader while fetching, notice if it can't load. */}
+                {/* assemblies — with data / missing / total. Numbers come straight
+                    from the IEDB CustomerStatus report (no fallback). */}
                 {statusLoading ? (
                   <CellLoader />
                 ) : statusError || !r.status ? (
@@ -200,25 +203,34 @@ export default function CycleTimeWorkcells() {
                   const st = r.status;
                   const cWith = st.NoOfAssembliesWithData;
                   const cTotal = st.NoOfAssemblies;
-                  const cPct = st.Complete;
                   const cMissing = Math.max(0, cTotal - cWith);
                   return (
-                    <div className="px-3">
-                      <div className="flex items-baseline gap-3 leading-none">
-                        <NumLabel n={cWith} label="with data" tone={coverageColor(cPct)} bold />
+                    <div className="px-3 flex flex-col justify-center gap-2 leading-none">
+                      <div className="flex items-baseline gap-3">
+                        <NumLabel n={cWith} label="with data" tone={coverageColor(st.Complete)} bold />
                         <span className="text-border">/</span>
                         <NumLabel n={cTotal} label="total" tone="text-foreground" />
                         <span className="text-[10px] text-muted-foreground">({cMissing.toLocaleString()} missing)</span>
-                        <span className={cn('ml-auto text-xs font-mono font-semibold tabular-nums', coverageColor(cPct))}>
-                          {cPct == null ? '—' : `${cPct}%`}
-                        </span>
                       </div>
-                      <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                        <div className={cn('h-full rounded-full transition-all', coverageBar(cPct))} style={{ width: `${cPct ?? 0}%` }} />
+                      <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                        <div className={cn('h-full rounded-full transition-all', coverageBar(st.Complete))} style={{ width: `${st.Complete ?? 0}%` }} />
                       </div>
                     </div>
                   );
                 })()}
+
+                {/* completion % — assemblies-with-data share (number only) */}
+                {statusLoading ? (
+                  <CellLoader />
+                ) : statusError || !r.status ? (
+                  <CellEmpty />
+                ) : (
+                  <div className="px-3 flex items-center">
+                    <span className={cn('text-base font-mono font-bold tabular-nums', coverageColor(r.status.Complete))}>
+                      {r.status.Complete == null ? '—' : `${r.status.Complete}%`}
+                    </span>
+                  </div>
+                )}
 
                 {/* measurement method — StopWatch / MOST / Estimate breakdown */}
                 {statusLoading ? (
@@ -227,6 +239,22 @@ export default function CycleTimeWorkcells() {
                   <CellEmpty />
                 ) : (
                   <MethodCell status={r.status} />
+                )}
+
+                {/* estimate percentage — red when above the risk threshold */}
+                {statusLoading ? (
+                  <CellLoader />
+                ) : statusError || !r.status ? (
+                  <CellEmpty />
+                ) : (
+                  <div className="px-3 flex items-center">
+                    <span className={cn(
+                      'text-base font-mono font-bold tabular-nums',
+                      estimateIsHigh(r.status.EstimatePercentage) ? 'text-red-400' : 'text-foreground',
+                    )}>
+                      {r.status.EstimatePercentage}%
+                    </span>
+                  </div>
                 )}
 
                 {/* revisions — distinct (assembly, revision) pairs */}
@@ -301,25 +329,30 @@ function MethodCell({ status }: { status: CycleTimeCustomerStatus | null }) {
     return <div className="px-3 text-[11px] text-muted-foreground">—</div>;
   }
 
+  // The Estimate segment turns red when its share is above the risk threshold.
+  const estHigh = estimateIsHigh(status.EstimatePercentage);
+  const barClass = (key: string) => (key === 'Estimate' && estHigh ? 'bg-red-500' : METHODS.find((m) => m.key === key)!.bar);
+  const dotClass = (key: string) => (key === 'Estimate' && estHigh ? 'bg-red-500' : METHODS.find((m) => m.key === key)!.dot);
+
   return (
     <div className="px-3 flex flex-col justify-center gap-1.5 leading-none">
-      {/* proportional bar */}
+      {/* legend + counts (label on top) */}
+      <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
+        {METHODS.map((m) => (
+          <span key={m.key} className="flex items-center gap-1">
+            <span className={cn('w-2 h-2 rounded-full', dotClass(m.key))} />
+            {m.label}
+            <span className="text-sm font-mono font-bold text-foreground tabular-nums">{counts[m.key].toLocaleString()}</span>
+          </span>
+        ))}
+      </div>
+      {/* proportional bar (below the label) */}
       <div className="flex h-2 rounded-full overflow-hidden bg-muted/40">
         {METHODS.map((m) =>
           counts[m.key] > 0 ? (
-            <div key={m.key} className={cn('h-full', m.bar)} style={{ width: `${(counts[m.key] / total) * 100}%` }} />
+            <div key={m.key} className={cn('h-full', barClass(m.key))} style={{ width: `${(counts[m.key] / total) * 100}%` }} />
           ) : null,
         )}
-      </div>
-      {/* legend + counts */}
-      <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground">
-        {METHODS.map((m) => (
-          <span key={m.key} className="flex items-center gap-1">
-            <span className={cn('w-1.5 h-1.5 rounded-full', m.dot)} />
-            {m.label}
-            <span className="font-mono font-semibold text-foreground tabular-nums">{counts[m.key].toLocaleString()}</span>
-          </span>
-        ))}
       </div>
     </div>
   );
