@@ -15,7 +15,9 @@
  * forgotten. Sorted A–Z.
  */
 
-import { useCycleTimeCoverage, useCycleTimeCustomers, useCycleTimeCustomerStatus } from '@/hooks/cycle_time/useCycleTimeData';
+import { SortHeader } from '@/components/shared/SortHeader';
+import { useCycleTimeCoverage, useCycleTimeCustomerPlants, useCycleTimeCustomers, useCycleTimeCustomerStatus } from '@/hooks/cycle_time/useCycleTimeData';
+import { useSortable } from '@/hooks/shared/useSortable';
 import { matchCustomerStatus, type CycleTimeCustomerStatus } from '@/lib/cycle_time/cycleTimeApi';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';
@@ -23,8 +25,22 @@ import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const GRID = '2.5rem minmax(11rem,1fr) 16rem 8.5rem 16rem 8.5rem';
-const HEADERS = ['#', 'Workcell', 'Assemblies (with data / total)', 'Completion %', 'Measurement method', 'Estimate %'];
+const GRID = '2.5rem minmax(11rem,1fr) 6.5rem 16rem 8.5rem 16rem 8.5rem';
+
+/** MES plant codes → friendly display names (unmapped plants shown as-is). */
+const PLANT_LABELS: Record<string, string> = { JPE: 'Plant 2', JBK: 'Batu Kawan' };
+const plantLabel = (p: string | null) => (p == null ? null : PLANT_LABELS[p] ?? p);
+
+type WcSortKey = 'customer' | 'plant' | 'withData' | 'complete' | 'method' | 'estimate';
+const WC_COLUMNS: { label: string; key?: WcSortKey }[] = [
+  { label: '#' },
+  { label: 'Workcell', key: 'customer' },
+  { label: 'Plant', key: 'plant' },
+  { label: 'Assemblies (with data / total)', key: 'withData' },
+  { label: 'Completion %', key: 'complete' },
+  { label: 'Measurement method', key: 'method' },
+  { label: 'Estimate %', key: 'estimate' },
+];
 
 /** Estimate share above this (%) is treated as a data-quality risk → red. */
 const ESTIMATE_RED_THRESHOLD = 30;
@@ -57,19 +73,41 @@ interface Row {
   updated: string | null;
   /** Matched IEDB CustomerStatus row (coverage + measurement-method counts). */
   status: CycleTimeCustomerStatus | null;
+  /** Dominant plant from the MES buildplan (null if never built / unmatched). */
+  plant: string | null;
 }
+
+const WC_ACCESSORS: Record<WcSortKey, (r: Row) => string | number | null> = {
+  customer: (r) => r.customer,
+  plant: (r) => r.plant,
+  withData: (r) => r.status?.NoOfAssembliesWithData ?? null,
+  complete: (r) => r.status?.Complete ?? null,
+  // Measurement method has no single scalar — sort by total measured steps.
+  method:   (r) => (r.status ? r.status.StopWatch + r.status.Most + r.status.Estimate : null),
+  estimate: (r) => r.status?.EstimatePercentage ?? null,
+};
 
 export default function CycleTimeWorkcells() {
   const navigate = useNavigate();
   const { data: customers = [], isFetching: custFetching } = useCycleTimeCustomers();
   const { data: coverage = [], isFetching: covFetching } = useCycleTimeCoverage();
   const { data: customerStatus = [], isLoading: statusLoading, isError: statusError } = useCycleTimeCustomerStatus();
+  const { data: customerPlants } = useCycleTimeCustomerPlants();
 
   const covByCustomer = useMemo(() => {
     const m = new Map<string, { assemblies: number; revisions: number; active: number | null; inactive: number | null; updated_on: string | null }>();
     for (const c of coverage) m.set(c.customer, { assemblies: c.assemblies, revisions: c.revisions, active: c.active ?? null, inactive: c.inactive ?? null, updated_on: c.updated_on });
     return m;
   }, [coverage]);
+
+  // Dominant plant per customer, matched by normalised name (MES vs config
+  // differ by case / underscore / spacing).
+  const norm = (s: string) => s.trim().toUpperCase().replace(/_/g, ' ');
+  const plantByCustomer = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const p of customerPlants?.plants ?? []) m.set(norm(p.customer), p.plant);
+    return m;
+  }, [customerPlants]);
 
   // Build rows, then keep only those that actually have data, sorted A–Z.
   const { visible, totals } = useMemo(() => {
@@ -89,6 +127,7 @@ export default function CycleTimeWorkcells() {
         cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
         updated: cov?.updated_on ?? null,
         status: matchCustomerStatus(customerStatus, c.customer),
+        plant: plantLabel(plantByCustomer.get(norm(c.customer)) ?? null),
       };
     });
     const visible = rows
@@ -107,7 +146,9 @@ export default function CycleTimeWorkcells() {
       cov: total > 0 ? Math.min(100, Math.round((withData / total) * 100)) : null,
     };
     return { visible, hiddenNames, totals };
-  }, [customers, covByCustomer, customerStatus]);
+  }, [customers, covByCustomer, customerStatus, plantByCustomer]);
+
+  const { sorted, sort, toggle } = useSortable(visible, WC_ACCESSORS, { key: 'customer', dir: 'asc' });
 
   const loading = (custFetching && customers.length === 0) || (covFetching && coverage.length === 0);
 
@@ -144,9 +185,20 @@ export default function CycleTimeWorkcells() {
           className="grid bg-muted/50 text-[12px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
           style={{ gridTemplateColumns: GRID }}
         >
-          {HEADERS.map((h, i) => (
-            <div key={i} className="px-2 py-2.5 whitespace-nowrap">{h}</div>
-          ))}
+          {WC_COLUMNS.map((col, i) =>
+            col.key ? (
+              <SortHeader
+                key={i}
+                label={col.label}
+                active={sort?.key === col.key}
+                dir={sort?.dir}
+                onClick={() => toggle(col.key!)}
+                className="px-2 whitespace-nowrap"
+              />
+            ) : (
+              <div key={i} className="px-2 py-2.5 whitespace-nowrap">{col.label}</div>
+            ),
+          )}
         </div>
 
         {loading ? (
@@ -156,7 +208,7 @@ export default function CycleTimeWorkcells() {
         ) : visible.length === 0 ? (
           <div className="py-16 text-center text-muted-foreground text-sm">No workcells with cycle-time data.</div>
         ) : (
-          visible.map((r, idx) => {
+          sorted.map((r, idx) => {
             const logo = getWorkcellLogo(r.customer);
             const updated = r.updated
               ? new Date(r.updated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -191,6 +243,11 @@ export default function CycleTimeWorkcells() {
                     <p className="text-[13px] xl:text-sm font-semibold text-foreground truncate">{r.customer}</p>
                     <p className="text-[10px] xl:text-[11px] text-muted-foreground truncate">{r.division}</p>
                   </div>
+                </div>
+
+                {/* plant — dominant plant from the MES buildplan */}
+                <div className="px-2 flex items-center">
+                  <span className="text-xs xl:text-[13px] text-foreground tabular-nums truncate">{r.plant ?? '—'}</span>
                 </div>
 
                 {/* assemblies — with data / missing / total. Numbers come straight
