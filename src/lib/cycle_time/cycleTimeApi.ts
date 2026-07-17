@@ -104,6 +104,97 @@ export interface CycleTimeCustomerStatus {
   Site: string;
 }
 
+/** One assembly in a customer's catalogue that has no cycle-time data yet. */
+export interface CycleTimeNoDataAssembly {
+  Assembly: string;
+  AssemblyName: string;
+  AssemblyRevision: string | null;
+  AssemblyDescription: string | null;
+  CustomerFamily: string | null;
+  UpdatedOn: string | null;
+}
+
+/** Response of /no-data-assemblies — counts + the list of no-data assemblies. */
+export interface CycleTimeNoDataAssemblies {
+  customer: string;
+  total: number;
+  with_data: number;
+  no_data: number;
+  assemblies: CycleTimeNoDataAssembly[];
+}
+
+/** One runner: units built (historical) or demand (projection/planner). */
+export interface CycleTimeRunner {
+  rank: number;
+  customer: string;
+  assembly: string;
+  units: number;
+  jobs: number;
+  last_completed: string | null;
+  /** Demand modes only: earliest job start / latest planned finish. */
+  first_start?: string | null;
+  planned_finish?: string | null;
+}
+export interface CycleTimeRunners {
+  /** When the runners mart was last built (parquet mtime). */
+  as_of: string | null;
+  count: number;
+  runners: CycleTimeRunner[];
+}
+
+/** Per-customer set of assemblies that have cycle-time data (from assembly_summary
+ *  — the same source the Cycle Time tab renders). Used for the Has-data/No-data badge. */
+export interface CycleTimeAssemblyCatalog {
+  customer: string;
+  with_data: string[];
+}
+
+/** One runner within a plant (plant dashboard). */
+export interface CycleTimePlantRunner {
+  rank: number;
+  customer: string;
+  assembly: string;
+  /** Dominant plant for this assembly (present in the Overall section). */
+  plant: string | null;
+  units: number;
+  jobs: number;
+  /** Historical: most-recent build date. */
+  last_completed: string | null;
+  /** Projection: earliest job start (when the demand begins). */
+  first_start?: string | null;
+  /** Projection: latest job end (when the demand is all due done). */
+  planned_finish?: string | null;
+  has_data: boolean;
+}
+/** A plant column: KPI totals + its top runners. */
+export interface CycleTimePlant {
+  plant: string;
+  total_units: number;
+  runner_count: number;
+  with_data: number;
+  no_data: number;
+  runners: CycleTimePlantRunner[];
+}
+export interface CycleTimePlantRunners {
+  as_of: string | null;
+  /** All plants combined (Overall Penang). */
+  overall: CycleTimePlant;
+  /** Region rollups (Batu Kawan, Penang Island) — `plant` field holds the region name. */
+  regions: CycleTimePlant[];
+  plants: CycleTimePlant[];
+}
+
+/** Dominant plant per customer (from the MES buildplan). */
+export interface CycleTimeCustomerPlant {
+  customer: string;
+  plant: string | null;
+  units: number;
+}
+export interface CycleTimeCustomerPlants {
+  count: number;
+  plants: CycleTimeCustomerPlant[];
+}
+
 /**
  * Pivoted row. Metadata columns are typed; process-step columns are dynamic
  * (vary per customer) and reachable via index access `row['Hi-Pot 1']`.
@@ -395,6 +486,32 @@ export const cycleTimeApi = {
      *  credentials — the browser can't call IEDB directly (401 + CORS). */
     list: (site = 'pen') =>
       get<CycleTimeCustomerStatus[]>('/customer-status', { site }),
+  },
+  noDataAssemblies: {
+    /** Assemblies for one customer that have NO cycle-time data yet. Computed
+     *  live from IEDB /api/Assemblies (fast — not the heavy raw ingest). */
+    list: (customer: string, signal?: AbortSignal) =>
+      get<CycleTimeNoDataAssemblies>('/no-data-assemblies', { customer }, signal),
+  },
+  runners: {
+    /** Runner ranking for one workcell. mode: historical (units built, 24mo) |
+     *  projection (MES demand, ~4wk) | planner (Excel demand, ~13wk). */
+    list: (customer: string, order: 'top' | 'bottom' = 'top', limit?: number,
+           mode: 'historical' | 'projection' | 'planner' = 'historical') =>
+      get<CycleTimeRunners>('/runners', { customer, order, limit, mode }),
+  },
+  customerPlants: {
+    /** Dominant plant per customer, from the MES buildplan. */
+    list: () => get<CycleTimeCustomerPlants>('/customer-plants'),
+  },
+  plantRunners: {
+    /** Top runners per plant. mode: historical (units built, 24mo) | projection (MES demand, ~4wk) | planner (Excel demand, ~13wk). */
+    list: (top = 50, plants = 3, mode: 'historical' | 'projection' | 'planner' = 'historical') =>
+      get<CycleTimePlantRunners>('/plant-runners', { top, plants, mode }),
+  },
+  assemblyCatalog: {
+    /** IEDB with-data / no-data assembly name sets for one customer (3-badge). */
+    list: (customer: string) => get<CycleTimeAssemblyCatalog>('/assembly-catalog', { customer }),
   },
   aliases: {
     /** Map of column-header alias → underlying Process code(s) + lines. */
