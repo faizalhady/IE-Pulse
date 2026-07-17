@@ -12,6 +12,8 @@ import {
   CycleTimeAliasMap,
   CycleTimeAssemblyBuildStep,
   CycleTimePivotedRow,
+  CycleTimePlant,
+  CycleTimePlantRunners,
   cycleTimeApi,
   processColumnsOf,
 } from './cycleTimeApi';
@@ -538,6 +540,160 @@ export async function exportFlowMetricsXlsx({
   link.href = url;
   const ts = new Date().toISOString().slice(0, 10);
   link.download = `cycle-time-metrics_${customer}_${ts}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+
+// ─── Incompletion Report export ───────────────────────────────────────────────
+// One sheet per layer (Overall / By Region / By Plant). Each sheet stacks TWO
+// styled tables of NO-data-only runners: Historical (units built, 24mo) and
+// Projection (planned demand, next 4wk) — each keeping its own ranking.
+
+const PLANT_LABELS: Record<string, string> = { JPE: 'Plant 2', JBK: 'Batu Kawan' };
+const plantLabel = (p: string | null | undefined) => (p == null ? '' : PLANT_LABELS[p] ?? p);
+
+// Palette (ARGB) — soft, easy on the eye.
+const C = {
+  histFill:  'FF334155', // slate — Historical section header
+  projFill:  'FF047857', // emerald — Projection section header
+  headFill:  'FFEEF2F7', // light grey — table header row
+  zebraFill: 'FFF7FAFC', // near-white — alternating data row
+  headText:  'FF0F172A',
+  hair:      'FFE2E8F0',
+  rule:      'FFCBD5E1',
+  muted:     'FF64748B',
+};
+
+interface Col { key: string; header: string; width: number; right?: boolean; num?: boolean; bold?: boolean }
+type XRow = Record<string, string | number | null>;
+
+// Same column keys/positions/widths for both tables so widths stay aligned on the
+// shared sheet; only the two date headers + value header differ per mode.
+const buildCols = (groupHeader: string | null, dateA: string, dateB: string, valueHeader: string): Col[] => [
+  ...(groupHeader ? [{ key: 'group', header: groupHeader, width: 16 }] : []),
+  { key: 'rank', header: '#', width: 5, right: true },
+  { key: 'assembly', header: 'Assembly', width: 28 },
+  { key: 'customer', header: 'Workcell', width: 20 },
+  { key: 'plant', header: 'Plant', width: 12 },
+  { key: 'jobs', header: 'Jobs', width: 8, right: true, num: true },
+  { key: 'dateA', header: dateA, width: 13 },
+  { key: 'dateB', header: dateB, width: 13 },
+  { key: 'value', header: valueHeader, width: 14, right: true, num: true, bold: true },
+];
+
+const toRows = (s: CycleTimePlant | undefined, group: string, mode: 'historical' | 'projection'): XRow[] =>
+  (s?.runners ?? []).filter((r) => !r.has_data).map((r) => ({
+    group, rank: r.rank, assembly: r.assembly, customer: r.customer, plant: plantLabel(r.plant), jobs: r.jobs,
+    // Historical: one date (last built). Projection: first start → planned finish.
+    dateA: mode === 'projection' ? (r.first_start ?? '').slice(0, 10) : (r.last_completed ?? '').slice(0, 10),
+    dateB: mode === 'projection' ? (r.planned_finish ?? '').slice(0, 10) : '',
+    value: r.units,
+  }));
+
+/** Export the Incompletion Report: 3 layer sheets, each with a Historical and a
+ *  Projection table (no-data runners only), lightly styled. */
+export async function exportPlantRunnersXlsx(
+  historical: CycleTimePlantRunners,
+  projection?: CycleTimePlantRunners,
+): Promise<void> {
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'IE Pulse';
+  wb.created = new Date();
+
+  /** Write one titled + styled table at `startRow`; return the next free row. */
+  function writeTable(
+    ws: import('exceljs').Worksheet, startRow: number,
+    opts: { title: string; accent: string; columns: Col[]; rows: XRow[]; emptyMsg: string },
+  ): number {
+    const n = opts.columns.length;
+    let row = startRow;
+
+    // Section title — merged, coloured band, white bold text.
+    ws.mergeCells(row, 1, row, n);
+    const title = ws.getCell(row, 1);
+    title.value = opts.title;
+    title.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opts.accent } };
+    title.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws.getRow(row).height = 20;
+    row++;
+
+    // Header row.
+    opts.columns.forEach((c, i) => {
+      const cell = ws.getCell(row, i + 1);
+      cell.value = c.header;
+      cell.font = { bold: true, color: { argb: C.headText } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.headFill } };
+      cell.border = { bottom: { style: 'thin', color: { argb: C.rule } } };
+      cell.alignment = { horizontal: c.right ? 'right' : 'left' };
+    });
+    row++;
+
+    if (opts.rows.length === 0) {
+      ws.mergeCells(row, 1, row, n);
+      const cell = ws.getCell(row, 1);
+      cell.value = opts.emptyMsg;
+      cell.font = { italic: true, color: { argb: C.muted } };
+      cell.alignment = { indent: 1 };
+      return row + 2; // one blank gap
+    }
+
+    opts.rows.forEach((r, idx) => {
+      opts.columns.forEach((c, i) => {
+        const cell = ws.getCell(row, i + 1);
+        const v = r[c.key];
+        cell.value = v === '' || v == null ? null : v;
+        if (idx % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.zebraFill } };
+        cell.alignment = { horizontal: c.right ? 'right' : 'left' };
+        cell.border = { bottom: { style: 'hair', color: { argb: C.hair } } };
+        if (c.num) cell.numFmt = '#,##0';
+        if (c.bold) cell.font = { bold: true };
+      });
+      row++;
+    });
+    return row + 1; // blank gap after the table
+  }
+
+  function addLayerSheet(name: string, groupHeader: string | null, histRows: XRow[], projRows: XRow[]) {
+    const ws = wb.addWorksheet(name.slice(0, 31));
+    const histCols = buildCols(groupHeader, 'Last built', '', 'Units (24 mo)');
+    const projCols = buildCols(groupHeader, 'First start', 'Planned finish', 'Demand (4 wk)');
+    histCols.forEach((c, i) => { ws.getColumn(i + 1).width = c.width; }); // both share widths
+
+    let row = 1;
+    row = writeTable(ws, row, {
+      title: 'HISTORICAL · no-data models by units built (24 mo)', accent: C.histFill,
+      columns: histCols, rows: histRows, emptyMsg: 'No missing-data models. 🎉',
+    });
+    writeTable(ws, row, {
+      title: 'PROJECTION · no-data models by planned demand (next 4 wk)', accent: C.projFill,
+      columns: projCols, rows: projRows,
+      emptyMsg: projection ? 'No missing-data models. 🎉' : 'Projection data unavailable — build the mart.',
+    });
+  }
+
+  // Sheet 1 — Overall Penang (no group column)
+  addLayerSheet('Overall Penang', null,
+    toRows(historical.overall, '', 'historical'), toRows(projection?.overall, '', 'projection'));
+
+  // Sheet 2 — By Region (Batu Kawan + Penang Island)
+  addLayerSheet('By Region', 'Region',
+    (historical.regions ?? []).flatMap((reg) => toRows(reg, reg.plant, 'historical')),
+    (projection?.regions ?? []).flatMap((reg) => toRows(reg, reg.plant, 'projection')));
+
+  // Sheet 3 — By Plant
+  addLayerSheet('By Plant', 'Plant',
+    (historical.plants ?? []).flatMap((p) => toRows(p, plantLabel(p.plant), 'historical')),
+    (projection?.plants ?? []).flatMap((p) => toRows(p, plantLabel(p.plant), 'projection')));
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `incompletion-report_${new Date().toISOString().slice(0, 10)}.xlsx`;
   link.click();
   URL.revokeObjectURL(url);
 }
