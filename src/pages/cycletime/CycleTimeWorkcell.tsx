@@ -10,25 +10,45 @@
  * flow view, locked to this customer — no customer Select in the filter bar.
  */
 
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ClipboardList, Loader2, Timer } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
+import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { matchCustomerStatus } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import {
+  useCycleTimeCustomers,
   useCycleTimeCustomerStatus,
   useCycleTimeProfile,
   useInvalidateOnRefreshComplete,
 } from '@/hooks/cycle_time/useCycleTimeData';
 
 import CycleTimeAssemblyFlow from './CycleTimeAssemblyFlow';
+import WorkcellIncompletionPanel from './WorkcellIncompletionPanel';
+
+const TABS = [
+  { key: 'cycle',  label: 'Cycle Time', icon: Timer },
+  { key: 'report', label: 'Report',     icon: ClipboardList },
+] as const;
+type TabKey = (typeof TABS)[number]['key'];
 
 export default function CycleTimeWorkcell() {
   useInvalidateOnRefreshComplete();
 
   const navigate = useNavigate();
-  const { customer = '' } = useParams();
+  const { customer: rawCustomer = '' } = useParams();
+  // The URL customer may arrive in the MES spelling (e.g. "RESMED" from a Plant
+  // Runner row) which the cycle-time endpoints match case-sensitively. Resolve
+  // it to the configured spelling ("ResMed") so BOTH tabs' queries hit data.
+  const { data: customerList } = useCycleTimeCustomers();
+  const customer = useMemo(() => {
+    const match = (customerList ?? []).find((c) => c.customer.toLowerCase() === rawCustomer.toLowerCase());
+    return match?.customer ?? rawCustomer;
+  }, [customerList, rawCustomer]);
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<TabKey>(searchParams.get('tab') === 'report' ? 'report' : 'cycle');
   const { data } = useCycleTimeProfile(customer);
   const { data: statusRows = [], isLoading: statusLoading, isError: statusError } = useCycleTimeCustomerStatus();
 
@@ -44,8 +64,9 @@ export default function CycleTimeWorkcell() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* ─── Branded header (coverage card pinned far right) ───────────── */}
-      <div className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+      {/* ─── Branded header (coverage card pinned far right) + tabs ────── */}
+      <div className="border-b border-border">
+      <div className="flex items-center justify-between gap-4 px-6 pt-4 pb-3">
         <div className="flex items-center gap-3 min-w-0">
           {/* Back to league table */}
           <button
@@ -86,9 +107,21 @@ export default function CycleTimeWorkcell() {
         />
       </div>
 
-      {/* ─── Assemblies flow (filters + Detail|Compact toggle inside) ──── */}
+        {/* Tabs — last element of the bordered header (underline overlaps border) */}
+        <div className="px-6">
+          <UnderlineTabs tabs={TABS} active={tab} onChange={setTab} />
+        </div>
+      </div>
+
+      {/* ─── Tab content ──────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0">
-        <CycleTimeAssemblyFlow lockedCustomer={customer} />
+        {tab === 'cycle' ? (
+          <CycleTimeAssemblyFlow lockedCustomer={customer} />
+        ) : (
+          <div className="h-full overflow-auto p-5">
+            <WorkcellIncompletionPanel customer={customer} />
+          </div>
+        )}
       </div>
     </div>
   );
