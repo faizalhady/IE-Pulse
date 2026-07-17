@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   FileText,
   FlaskConical,
+  Gauge,
   GitFork,
   Home,
   Inbox,
@@ -75,6 +76,7 @@ export const APPS: AppConfig[] = [
       { label: 'Plants / Layouts', to: '/pulse/plants', icon: MapPin },
       { label: 'Workcells', to: '/pulse/workcells', icon: Factory },
       { label: 'Reports', to: '/pulse/reports', icon: LineChart },
+      { label: 'Report A', to: '/pulse/report-a', icon: Gauge },
       { label: 'Documents', to: '/pulse/documents', icon: FileText },
     ],
   },
@@ -114,6 +116,8 @@ export const APPS: AppConfig[] = [
     category: 'Analytics',
     navItems: [
       { label: 'Home', to: '/cycle-time/workcells', icon: Home },
+      // { label: 'Incompletion Report', to: '/cycle-time/incompletion', icon: ClipboardList },
+      { label: 'Incompletion Report', to: '/cycle-time/plant-runners', icon: Building2 },
       // Hidden from the sidebar (routes still work):
       //  • Assemblies → now lives in the workcell Breakdown→Assemblies tab
       //  • Data → still reachable directly at /cycle-time/data
