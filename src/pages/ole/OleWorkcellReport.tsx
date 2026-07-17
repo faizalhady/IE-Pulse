@@ -34,6 +34,7 @@ import {
   X
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useWeekScroll } from '@/hooks/shared/useWeekScroll';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Bar,
@@ -361,6 +362,8 @@ export default function OleWorkcellReport() {
 
   const siteOle = kpiOle;
   const siteColor = oleColor(siteOle);
+  const { ref: weekScrollRef, chartWidth: weekChartWidth } = useWeekScroll(wcWeekly.length);
+
   const oles = wcWeekly.map(d => d.ole).filter(Boolean);
   const yMin = oles.length ? Math.max(0, Math.floor(Math.min(...oles) / 10) * 10 - 10) : 0;
   const yMax = oles.length ? Math.ceil(Math.max(...oles) / 10) * 10 + 10 : 100;
@@ -595,8 +598,8 @@ export default function OleWorkcellReport() {
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" /> &lt;45%</span>
               </div>
             </div>
-            <div style={{ height: 160 }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <div ref={weekScrollRef} className="overflow-x-auto" style={{ height: 160 }}>
+              <ResponsiveContainer width={weekChartWidth} height="100%">
                 <ComposedChart data={wcWeekly} margin={{ top: 24, right: 4, left: -24, bottom: 0 }}
                   onClick={(d) => {
                     if (!d?.activePayload) return;
