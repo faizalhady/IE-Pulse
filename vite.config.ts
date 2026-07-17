@@ -15,7 +15,7 @@ const APP_BASENAMES: Record<string, string> = {
   iebaseline: '/ietools/iebaseline/',
   'cycle-time': '/ietools/cycle-time/',
   ppqt: '/ietools/ppqt/',
-  ipk: '/ietools/ipk/',
+  ipk: '/ietools/ipkk/',
   lbr: '/ietools/lbr/',
   'machine-mover': '/ietools/machine-mover/',
 };
@@ -28,15 +28,15 @@ const APP_BASENAMES: Record<string, string> = {
  */
 const COMMON_PUBLIC = ['favicon.ico', 'favicon.svg', 'robots.txt', 'placeholder.svg'];
 const APP_PUBLIC: Record<string, string[]> = {
-  ole:          ['workcell logo'],
+  ole: ['workcell logo'],
   'cycle-time': ['workcell logo'],
-  ppqt:         ['workcell logo'],
-  ipk:          ['workcell logo'],
-  lbr:          ['workcell logo'],
-  pulse:        ['workcell logo', 'floor-maps', 'layouts', 'world-countries.json', 'malaysia-peninsular.json', 'pdf.worker.min.mjs'],
-  fsms:         ['floor-maps', 'layouts', 'world-countries.json', 'pdf.worker.min.mjs'],
-  ebuild:       ['pdf.worker.min.mjs'],
-  iebaseline:   ['pdf.worker.min.mjs'],
+  ppqt: ['workcell logo'],
+  ipk: ['workcell logo'],
+  lbr: ['workcell logo'],
+  pulse: ['workcell logo', 'floor-maps', 'layouts', 'world-countries.json', 'malaysia-peninsular.json', 'pdf.worker.min.mjs'],
+  fsms: ['floor-maps', 'layouts', 'world-countries.json', 'pdf.worker.min.mjs'],
+  ebuild: ['pdf.worker.min.mjs'],
+  iebaseline: ['pdf.worker.min.mjs'],
 };
 
 /** After a per-module build, remove public/ entries the module doesn't use.
