@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { AlertTriangle, Info } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useWeekScroll } from '@/hooks/shared/useWeekScroll';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Bar,
@@ -249,6 +250,8 @@ export default function OlePlantReport() {
   const siteOle = site.ole_pct;
   const siteStatus = getOleStatus(siteOle);
   const siteColor = oleColor(siteOle);
+  const { ref: weekScrollRef, chartWidth: weekChartWidth } = useWeekScroll(siteWeekly.length);
+
   const oles = siteWeekly.map(d => d.ole).filter(Boolean);
   const yMin = 0;
   const yMax = oles.length ? Math.max(OLE_TARGET + 5, Math.ceil(Math.max(...oles) / 10) * 10 + 10) : 100;
@@ -601,8 +604,8 @@ export default function OlePlantReport() {
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" /> &lt;45%</span>
                   </div>
                 </div>
-                <div style={{ height: 180 }}>
-                  <ResponsiveContainer width="100%" height="100%">
+                <div ref={weekScrollRef} className="overflow-x-auto" style={{ height: 180 }}>
+                  <ResponsiveContainer width={weekChartWidth} height="100%">
                     <ComposedChart
                       data={siteWeekly}
                       margin={{ top: 24, right: 4, left: -24, bottom: 0 }}
