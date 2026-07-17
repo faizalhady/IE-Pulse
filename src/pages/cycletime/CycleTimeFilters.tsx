@@ -81,9 +81,11 @@ export function useCycleTimeFilters(): [
   };
   const setValue = (next: Partial<CycleTimeFiltersValue>) => {
     const merged = { ...value, ...next };
-    const out = new URLSearchParams();
-    for (const [k, v] of Object.entries(merged)) {
-      if (v) out.set(k, v);
+    // Preserve non-filter params already in the URL (e.g. ?tab=report) instead
+    // of rebuilding from scratch — clearing a filter must not drop the tab.
+    const out = new URLSearchParams(params);
+    for (const k of ['customer', 'sub_workcenter', 'assembly', 'stages'] as const) {
+      if (merged[k]) out.set(k, merged[k]); else out.delete(k);
     }
     setParams(out, { replace: true });
   };
