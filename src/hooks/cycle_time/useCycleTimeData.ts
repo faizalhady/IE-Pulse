@@ -90,6 +90,57 @@ export function useCycleTimeCustomerStatus(site = 'pen') {
   });
 }
 
+/** Assemblies for one customer that have NO cycle-time data. Fetched live from
+ *  IEDB via the backend (fast — two lightweight /api/Assemblies calls). */
+export function useCycleTimeNoDataAssemblies(customer: string | undefined) {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'noDataAssemblies', customer ?? ''] as const,
+    queryFn:  ({ signal }) => cycleTimeApi.noDataAssemblies.list(customer!, signal),
+    enabled:  Boolean(customer),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Top runners per plant (plant dashboard). One request.
+ *  mode: 'historical' = units built (24mo) | 'projection' = MES demand (~4wk) | 'planner' = Excel demand (~13wk). */
+export function useCycleTimePlantRunners(top = 50, plants = 3, mode: 'historical' | 'projection' | 'planner' = 'historical') {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'plantRunners', top, plants, mode] as const,
+    queryFn:  () => cycleTimeApi.plantRunners.list(top, plants, mode),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** IEDB with-data / no-data assembly name sets for one customer (3-way badge). */
+export function useCycleTimeAssemblyCatalog(customer: string | undefined) {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'assemblyCatalog', customer ?? ''] as const,
+    queryFn:  () => cycleTimeApi.assemblyCatalog.list(customer!),
+    enabled:  Boolean(customer),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** Dominant plant per customer (from the MES buildplan). One request for the league table. */
+export function useCycleTimeCustomerPlants() {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'customerPlants'] as const,
+    queryFn:  () => cycleTimeApi.customerPlants.list(),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** Runner ranking (units built per assembly, 24-mo) for one workcell, from the
+ *  eBuild/MES mart. Used to prioritise no-data assemblies on the Incompletion Report. */
+export function useCycleTimeRunners(customer: string | undefined, mode: 'historical' | 'projection' | 'planner' = 'historical') {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'runners', customer ?? '', mode] as const,
+    queryFn:  () => cycleTimeApi.runners.list(customer!, 'top', undefined, mode),
+    enabled:  Boolean(customer),
+    staleTime: 30 * 60_000,
+  });
+}
+
 /** alias → process code + lines, scoped to a customer (so tooltips can show
  *  "the friendly column header 'MA 1' maps to API process 'Assembly 1'"). */
 export function useCycleTimeAliases(customer: string | undefined) {
