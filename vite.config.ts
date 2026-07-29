@@ -116,6 +116,40 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/ietools\/cycle-time\/api/, '/api/cycle-time'),
         },
+        // PPQT module — same backend, mounted at /api/ppqt/*.
+        '/ietools/ppqt/api': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/ietools\/ppqt\/api/, '/api/ppqt'),
+        },
+        // Who-am-I service (IIS, Windows Integrated Auth).
+        //
+        // ⚠️ This proxy returns 401 in dev and that is EXPECTED — do not "fix" it.
+        //
+        // The hop is NOT the problem: production nginx proxies the identical
+        // route (`location /userinfo/ -> http://127.0.0.1:5110/User/` in
+        // ie-pulse.conf) and it works, because the auth is `Negotiate`
+        // (Kerberos), which is stateless per-request and proxies fine.
+        //
+        // The problem is WHICH HOSTNAME the browser authenticates against. To
+        // get a Kerberos ticket it uses the host in the URL — in dev that is
+        // `localhost`, so it would need an SPN of HTTP/localhost (doesn't
+        // exist), and it won't volunteer Windows credentials to localhost
+        // anyway since that isn't in the Local Intranet zone. In production the
+        // host is mypenm0iesvr02.corp.jabil.org, a real domain host with a real
+        // SPN → the ticket is issued and nginx forwards it to IIS. Verified
+        // 2026-07-29: `curl --negotiate -u :` → 200 on both :5110 and :443.
+        //
+        // So PRODUCTION IS FULLY AUTOMATIC — no prompt. Dev falls back to a
+        // one-time NTID prompt (see savedReportsApi.fetchUserInfo). To make dev
+        // automatic too, serve the dev app through that nginx so the browser
+        // talks to the real hostname; a proxy tweak here cannot fix it.
+        '/userinfo': {
+          target: 'http://mypenm0iesvr02.corp.jabil.org:5110',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (p) => p.replace(/^\/userinfo/, '/User'),
+        },
         '/ole-api': {
           target: 'http://localhost:8000',
           changeOrigin: true,

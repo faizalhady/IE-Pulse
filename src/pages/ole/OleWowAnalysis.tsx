@@ -1,7 +1,6 @@
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  DL_WEEKLY_DATA,
   PLANT_OLE_GOAL,
   useAnalysisData,
   useAnalysisDerived,
@@ -26,10 +25,13 @@ import {
   XAxis, YAxis,
 } from 'recharts';
 
-const MOCK_TREND_WEEKS = ['WW05', 'WW06', 'WW07', 'WW08', 'WW09', 'WW10', 'WW11', 'WW12', 'WW13', 'WW14', 'WW15', 'WW16', 'WW17', 'WW18'];
-const MOCK_BUILD_UNIT = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, units: [246205, 250980, 279903, 230100, 306014, 306940, 374289, 195906, 329074, 363706, 390703, 394433, 351715, 403557][i] }));
-const MOCK_INPUT_HRS = MOCK_TREND_WEEKS.map((w, i) => ({ week: w, hrs: [144710, 133057, 155484, 114545, 142020, 150222, 151427, 93413, 141783, 170450, 176851, 171134, 194193, 204081][i] }));
-const MOCK_DL = DL_WEEKLY_DATA;
+// ponytail: the three site trend charts used to render hardcoded WW05-WW18
+// arrays, so they froze at WW18 no matter how fresh the mart was. They now take
+// the live series useAnalysisDerived already computed (buildUnitSeries /
+// inputHrsSeries / dlSeries) — the data was there all along, just never wired up.
+// DL is the exception: it has no API source (see DL_WEEKLY_DATA), so dlSeries
+// yields null past the last manual week and the line simply stops there. That
+// gap is deliberate — better a visibly missing tail than a stale flat line.
 
 const TT = {
   contentStyle: {
@@ -78,14 +80,14 @@ const GapBarLabel = (props: any) => {
 
 const IMPACT_COLORS = ['#1e3a8a', '#1e40af', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#a5b4fc', '#818cf8', '#6366f1', '#4f46e5'];
 
-function BuildUnitRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_BUILD_UNIT} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="buGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6b7280" stopOpacity={0.35} /><stop offset="95%" stopColor="#6b7280" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(0)}K`, 'Units']} /><Area type="monotone" dataKey="units" stroke="#9ca3af" strokeWidth={2} fill="url(#buGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+function BuildUnitRecharts({ data }: { data: { week: string; units: number }[] }) {
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="buGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6b7280" stopOpacity={0.35} /><stop offset="95%" stopColor="#6b7280" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(0)}K`, 'Units']} /><Area type="monotone" dataKey="units" stroke="#9ca3af" strokeWidth={2} fill="url(#buGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
-function DLWeeklyRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_DL} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [v?.toLocaleString() ?? '—', 'DL']} /><Area type="monotone" dataKey="dl" stroke="#3b82f6" strokeWidth={2} fill="url(#dlGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+function DLWeeklyRecharts({ data }: { data: { week: string; dl: number | null }[] }) {
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [v?.toLocaleString() ?? '—', 'DL']} /><Area type="monotone" dataKey="dl" stroke="#3b82f6" strokeWidth={2} fill="url(#dlGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
-function InputHrsRecharts() {
-  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={MOCK_INPUT_HRS} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(1)}K`, 'Hrs']} /><Area type="monotone" dataKey="hrs" stroke="#10b981" strokeWidth={2} fill="url(#hrGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
+function InputHrsRecharts({ data }: { data: { week: string; hrs: number }[] }) {
+  return <ResponsiveContainer width="100%" height="100%"><AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: -10 }}><defs><linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="week" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} /><YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={28} /><Tooltip {...TT} formatter={(v: number) => [`${(v / 1000).toFixed(1)}K`, 'Hrs']} /><Area type="monotone" dataKey="hrs" stroke="#10b981" strokeWidth={2} fill="url(#hrGrad)" dot={false} /></AreaChart></ResponsiveContainer>;
 }
 
 function OLECompareRecharts({ data, prevWeek, currWeek }: { data: { name: string; prev: number; curr: number }[]; prevWeek: string; currWeek: string }) {
@@ -232,9 +234,9 @@ export default function OleWowAnalysis() {
       {!loading && !error && derived && (
         <div className="flex gap-3 flex-1 min-h-0">
           <div className="flex flex-col gap-3 w-[22%] shrink-0">
-            <ChartCard title="Pen Island Build Unit" className="flex-1 min-h-0" expandContent={<BuildUnitRecharts />}><div className="flex-1 min-h-0"><BuildUnitRecharts /></div></ChartCard>
-            <ChartCard title="Pen Island DL Weekly Data" className="flex-1 min-h-0" expandContent={<DLWeeklyRecharts />}><div className="flex-1 min-h-0"><DLWeeklyRecharts /></div></ChartCard>
-            <ChartCard title="Pen Island Input Working Hrs" className="flex-1 min-h-0" expandContent={<InputHrsRecharts />}><div className="flex-1 min-h-0"><InputHrsRecharts /></div></ChartCard>
+            <ChartCard title="Pen Island Build Unit" className="flex-1 min-h-0" expandContent={<BuildUnitRecharts data={derived.buildUnitSeries} />}><div className="flex-1 min-h-0"><BuildUnitRecharts data={derived.buildUnitSeries} /></div></ChartCard>
+            <ChartCard title="Pen Island DL Weekly Data" className="flex-1 min-h-0" expandContent={<DLWeeklyRecharts data={derived.dlSeries} />}><div className="flex-1 min-h-0"><DLWeeklyRecharts data={derived.dlSeries} /></div></ChartCard>
+            <ChartCard title="Pen Island Input Working Hrs" className="flex-1 min-h-0" expandContent={<InputHrsRecharts data={derived.inputHrsSeries} />}><div className="flex-1 min-h-0"><InputHrsRecharts data={derived.inputHrsSeries} /></div></ChartCard>
           </div>
           <div className="flex flex-col gap-3 flex-1 min-h-0 min-w-0">
             <div className="flex-1 min-h-0 flex flex-col"><OLECompareSection data={derived.oleCompareSeries} prevWeek={pair.prev} currWeek={pair.curr} /></div>

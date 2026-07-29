@@ -8,10 +8,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MhDistributionRow, OleWeeklyResult, OleWorkcellConfig } from '@/lib/ole/oleApi';
 import { oleApi } from '@/lib/ole/oleApi';
+import type { SavedReportMeta, UserInfo } from '@/lib/ole/savedReportsApi';
+import { fetchUserInfo, savedReportsApi, setLocalUser } from '@/lib/ole/savedReportsApi';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { CalendarIcon, ChevronLeft, ChevronRight, Download, Eye, EyeOff, GripVertical, Info, Plus, Settings, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarIcon, ChevronLeft, ChevronRight, Download, Eye, EyeOff, FolderOpen, GripVertical, Info, Plus, Save, Settings, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line,
@@ -22,6 +24,8 @@ import {
 
 type SetupMode = 'plant' | 'workcell';
 type ActionItem = { id: string; issue: string; problemDescription: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; commitDate: string; status: string; };
+type ReportScope = { mode: SetupMode; selectedPlants: string[]; selectedWorkcells: string[] };
+type SavedPlan = { actions: ActionItem[]; scope?: ReportScope };
 type TrendPoint = { id: string; label: string; ole: number; target: number; projected?: boolean; hidden?: boolean };
 
 const genId = () => Math.random().toString(36).substr(2, 9);
@@ -160,11 +164,13 @@ function buildPareto(data: { name: string; value: number; color: string }[]): Pa
 
 // ─── Setup Step ───────────────────────────────────────────────────────────────
 
-function SetupStep({ workcellConfigs, mode, setMode, selectedPlants, setSelectedPlants, selectedWorkcells, setSelectedWorkcells, onGenerate, generating, plants, byPlant }: {
+function SetupStep({ workcellConfigs, mode, setMode, selectedPlants, setSelectedPlants, selectedWorkcells, setSelectedWorkcells, onGenerate, generating, plants, byPlant, user, savedList, onLoad, onDeleteSave }: {
   workcellConfigs: OleWorkcellConfig[]; mode: SetupMode; setMode: (m: SetupMode) => void;
   selectedPlants: string[]; setSelectedPlants: (p: string[]) => void;
   selectedWorkcells: string[]; setSelectedWorkcells: (w: string[]) => void;
   onGenerate: () => void; generating: boolean; plants: string[]; byPlant: Record<string, string[]>;
+  user: UserInfo | null; savedList: SavedReportMeta[];
+  onLoad: (id: number) => void; onDeleteSave: (id: number) => void;
 }) {
   const canGen = (mode === 'plant' && selectedPlants.length > 0) || (mode === 'workcell' && selectedWorkcells.length > 0);
   const togglePlant = (p: string) => setSelectedPlants(selectedPlants.includes(p) ? selectedPlants.filter(x => x !== p) : [...selectedPlants, p]);
@@ -234,8 +240,42 @@ function SetupStep({ workcellConfigs, mode, setMode, selectedPlants, setSelected
           <span>Trend uses latest <strong className="text-foreground">13 weeks</strong>. Q2 Paretos use last <strong className="text-foreground">4 actual weeks</strong> averaged.</span>
         </div>
         <button onClick={onGenerate} disabled={!canGen || generating} className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-          {generating ? 'Loading data...' : 'Generate 4Q Report ->'}
+          {generating ? 'Loading data...' : 'New 4Q Report ->'}
         </button>
+
+        {/* Saved Q3 plans. Only the Q3 improvement plan is stored — loading one
+            re-pulls Q1/Q2/Q4 from the CURRENT mart, so an old plan lands on this
+            week's numbers instead of resurrecting a stale snapshot. */}
+        {savedList.length > 0 && (
+          <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-1.5">
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              <FolderOpen className="h-3.5 w-3.5" />
+              Load saved improvement plan
+            </div>
+            {savedList.map(s => (
+              <div key={s.id} className="flex items-center gap-2">
+                <button
+                  onClick={() => onLoad(s.id)}
+                  disabled={generating}
+                  title={`Load "${s.name}" — restores its scope and rebuilds Q1/Q2/Q4 from current data`}
+                  className="flex-1 text-left px-2.5 py-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <div className="text-xs font-medium truncate">{s.name}</div>
+                  <div className="text-[10px] text-muted-foreground">saved {s.updated_at?.slice(0, 16).replace('T', ' ')}</div>
+                </button>
+                <button onClick={() => onDeleteSave(s.id)} title="Delete this save"
+                  className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {!user && (
+          <p className="text-[11px] text-muted-foreground text-center">
+            Not identified yet — you'll be asked for your NTID on first save.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -384,18 +424,26 @@ function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsC
     const totalPaid = scoped.reduce((s, r) => s + (r.total_paid_hours || 0), 0);
     if (totalPaid <= 0) return { pareto1: [], pareto2: [], pareto3: [], top1Cat: '', top2Cat: '' };
 
-    // Chart 1: absolute hours per bucket across the 4-week window.
+    // Divide by the number of weeks actually in the window, NOT a literal 4 —
+    // last4 is .slice(-4), so it holds 1-3 weeks early in a year or under a
+    // narrow filter, and a hardcoded /4 would understate those by up to 4x.
+    const weekCount = last4.length;
+
+    // Chart 1: AVERAGE hours per week per bucket over the window.
     // (Bars are in hours, Pareto line shows cumulative % — chart unit consistency.)
     const catTotals = MH_CATS.map(cat => ({
       name: cat.label,
       color: cat.color,
-      value: parseFloat(scoped.reduce((s, r) => s + ((r[cat.key] as number) || 0), 0).toFixed(1)),
+      value: parseFloat(
+        (scoped.reduce((s, r) => s + ((r[cat.key] as number) || 0), 0) / weekCount).toFixed(1)
+      ),
     }));
     const p1 = buildPareto(catTotals);
     const top1 = p1[0]?.name ?? '';
     const top2 = p1[1]?.name ?? '';
 
-    // Charts 2 & 3: top 3 workcells by absolute hours of the #1 / #2 bucket.
+    // Charts 2 & 3: top 3 workcells by AVERAGE hours per week of the #1 / #2
+    // bucket. Same per-week basis as chart 1 so the three charts are comparable.
     const findCat = (label: string) => MH_CATS.find(c => c.label === label);
     const shortName = (wc: string) => wc.length > 12 ? wc.slice(0, 12) + '...' : wc;
 
@@ -414,7 +462,7 @@ function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsC
           .slice(0, 3)
           .map(([wc, hrs]) => ({
             name: shortName(wc),
-            value: parseFloat(hrs.toFixed(1)),
+            value: parseFloat((hrs / weekCount).toFixed(1)),
             color: cat.color,
           }))
       );
@@ -429,7 +477,7 @@ function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsC
     return (
       <div className="flex gap-2 h-full min-h-0">
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          <SmallPareto title="Man-hrs Loss Distribution" data={pareto1} loading={false} fillHeight />
+          <SmallPareto title="Man-hrs Loss Distribution (avg hrs/week)" data={pareto1} loading={false} fillHeight />
         </div>
         <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
           <SmallPareto title={`Top 3 Workcells - ${top1Cat || '#1 Loss'}`} data={pareto2} loading={false} fillHeight />
@@ -441,7 +489,7 @@ function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsC
 
   return (
     <div className="space-y-2">
-      <SmallPareto title="Man-hrs Loss Distribution" data={pareto1} loading={false} height={200} />
+      <SmallPareto title="Man-hrs Loss Distribution (avg hrs/week)" data={pareto1} loading={false} height={200} />
       <div className="grid grid-cols-2 gap-3">
         <SmallPareto title={`Top 3 Workcells - ${top1Cat || '#1 Loss'}`} data={pareto2} loading={false} height={180} />
         <SmallPareto title={`Top 3 Workcells - ${top2Cat || '#2 Loss'}`} data={pareto3} loading={false} height={180} />
@@ -679,6 +727,117 @@ export default function OLE4QReport() {
   const [top2Cat, setTop2Cat] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
 
+  // ── Saved Q3 plans ─────────────────────────────────────────────────────────
+  // Only the Q3 improvement plan is persisted. Q1/Q2/Q4 always rebuild from the
+  // live mart, so loading last month's plan shows it against THIS week's data.
+  const [user, setUser] = useState<UserInfo | null>(null);
+  const [savedList, setSavedList] = useState<SavedReportMeta[]>([]);
+  const [loadedName, setLoadedName] = useState('');
+  const [saveMsg, setSaveMsg] = useState('');
+  // Snapshot of the plan as last saved/loaded. Anything else means unsaved work.
+  // Compared as JSON because ActionItem is flat data — no need for a deep-equal
+  // helper, and field ORDER is stable since every row is built from one literal.
+  const [savedSnapshot, setSavedSnapshot] = useState('[]');
+  const dirty = useMemo(() => JSON.stringify(actions) !== savedSnapshot, [actions, savedSnapshot]);
+
+  const refreshSaves = useCallback(async (u: UserInfo | null) => {
+    if (!u) return;
+    try {
+      setSavedList(await savedReportsApi.list('ole', '4q', u.userNtid));
+    } catch (e) {
+      console.error('saved reports list failed', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Null user is normal in dev (/userinfo lives on the server) — the report
+    // stays fully usable, only save/load is hidden.
+    fetchUserInfo().then(u => { setUser(u); refreshSaves(u); });
+  }, [refreshSaves]);
+
+  async function handleLoadSaved(id: number) {
+    const u = user ?? (await ensureUser());
+    if (!u) return;
+    try {
+      const rec = await savedReportsApi.load<SavedPlan>(id, u.userNtid);
+      const loadedActions = rec.payload?.actions ?? [];
+      setActions(loadedActions);
+      setSavedSnapshot(JSON.stringify(loadedActions));
+      setLoadedName(rec.name);
+
+      // Restore the scope the plan was written against, so loading is ONE click
+      // — no "pick a plant first". Only the scope is restored; Q1/Q2/Q4 are
+      // always re-pulled from the live mart below.
+      const scope = rec.payload?.scope;
+      if (scope) {
+        setMode(scope.mode);
+        setSelectedPlants(scope.selectedPlants ?? []);
+        setSelectedWorkcells(scope.selectedWorkcells ?? []);
+      }
+      const effective = scope ?? { mode, selectedPlants, selectedWorkcells };
+      if (effective.mode === 'plant' ? effective.selectedPlants.length === 0 : effective.selectedWorkcells.length === 0) {
+        setSaveMsg('Plan loaded — pick a plant or workcell, then Generate.');
+        return;                        // older save with no scope stored
+      }
+      await handleGenerate(effective);  // Q1/Q2/Q4 from CURRENT data
+    } catch (e) {
+      console.error(e);
+      setSaveMsg(e instanceof Error ? e.message : 'Load failed');
+    }
+  }
+
+  /** Identity, asking for it once if the server couldn't tell us (dev). */
+  async function ensureUser(): Promise<UserInfo | null> {
+    if (user) return user;
+    const ntid = window.prompt(
+      'Could not identify you automatically (normal on a dev machine).\nEnter your NTID to save:',
+      '',
+    );
+    if (!ntid?.trim()) return null;
+    const u: UserInfo = { userNtid: ntid.trim(), userName: ntid.trim(), userEmail: '' };
+    setLocalUser(u);
+    setUser(u);
+    await refreshSaves(u);
+    return u;
+  }
+
+  async function handleSavePlan() {
+    const u = await ensureUser();
+    if (!u) return;
+    const name = window.prompt('Save improvement plan as:', loadedName || `4Q plan ${new Date().toISOString().slice(0, 10)}`);
+    if (!name?.trim()) return;
+    try {
+      await savedReportsApi.save({
+        module: 'ole', reportType: '4q', name: name.trim(), user: u,
+        payload: { actions, scope: { mode, selectedPlants, selectedWorkcells } } satisfies SavedPlan,
+      });
+      // Renaming = save under the new name, then drop the old row. Saving with
+      // an unchanged name just overwrites (UNIQUE on module+type+owner+name).
+      const old = savedList.find(s => s.name === loadedName);
+      if (old && loadedName && name.trim() !== loadedName) {
+        await savedReportsApi.remove(old.id, u.userNtid).catch(() => { /* keep both rather than lose one */ });
+      }
+      setLoadedName(name.trim());
+      setSavedSnapshot(JSON.stringify(actions));
+      setSaveMsg(`Saved "${name.trim()}"`);
+      await refreshSaves(u);
+    } catch (e) {
+      console.error(e);
+      setSaveMsg(e instanceof Error ? e.message : 'Save failed');
+    }
+    setTimeout(() => setSaveMsg(''), 4000);
+  }
+
+  async function handleDeleteSave(id: number) {
+    if (!user) return;
+    const rec = savedList.find(s => s.id === id);
+    if (!window.confirm(`Delete saved plan "${rec?.name ?? id}"?`)) return;
+    try {
+      await savedReportsApi.remove(id, user.userNtid);
+      await refreshSaves(user);
+    } catch (e) { console.error(e); }
+  }
+
   const scrollToSection = (t: string) => {
     const ids: Record<string, string> = { q1: 'q1-section', q2: 'q2-section', q3: 'q3-section', q4: 'q4-section' };
     const id = ids[t]; if (!id) return;
@@ -710,19 +869,26 @@ export default function OLE4QReport() {
     } as OleWeeklyResult));
   }, [weeklyRows]);
 
-  async function handleGenerate() {
+  // `scope` overrides the state values. Needed when loading a saved plan:
+  // setMode/setSelectedPlants are async, so reading state here would use the
+  // PREVIOUS scope on the very run that matters.
+  async function handleGenerate(scope?: ReportScope) {
+    const useMode    = scope?.mode ?? mode;
+    const usePlants  = scope?.selectedPlants ?? selectedPlants;
+    const useWcs     = scope?.selectedWorkcells ?? selectedWorkcells;
+    if (useMode === 'plant' ? usePlants.length === 0 : useWcs.length === 0) return;
     setGenerating(true);
     try {
       let rows: OleWeeklyResult[] = []; let label = '';
       let mh: MhDistributionRow[] = [];
-      if (mode === 'plant') {
-        const res   = await Promise.all(selectedPlants.map(p => oleApi.ole.weekly({ plant: p })));
-        const mhRes = await Promise.all(selectedPlants.map(p => oleApi.mhDistribution.list({ plant: p })));
-        rows = res.flat(); mh = mhRes.flat(); label = selectedPlants.join(' + ');
+      if (useMode === 'plant') {
+        const res   = await Promise.all(usePlants.map(p => oleApi.ole.weekly({ plant: p })));
+        const mhRes = await Promise.all(usePlants.map(p => oleApi.mhDistribution.list({ plant: p })));
+        rows = res.flat(); mh = mhRes.flat(); label = usePlants.join(' + ');
       } else {
-        const res   = await Promise.all(selectedWorkcells.map(wc => oleApi.ole.weekly({ workcell: wc })));
-        const mhRes = await Promise.all(selectedWorkcells.map(wc => oleApi.mhDistribution.list({ workcell: wc })));
-        rows = res.flat(); mh = mhRes.flat(); label = selectedWorkcells.join(', ');
+        const res   = await Promise.all(useWcs.map(wc => oleApi.ole.weekly({ workcell: wc })));
+        const mhRes = await Promise.all(useWcs.map(wc => oleApi.mhDistribution.list({ workcell: wc })));
+        rows = res.flat(); mh = mhRes.flat(); label = useWcs.join(', ');
       }
       setWeeklyRows(rows); setMhRows(mh); setTrendScope(label);
       const byWeek: Record<string, { smh: number; hrs: number; label: string; year: number; week: number; ws: string; we: string }> = {};
@@ -808,14 +974,36 @@ export default function OLE4QReport() {
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden relative">
       <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0 bg-card">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {tab === 'editor' && (
+            <button onClick={() => setTab('setup')} title="Change scope"
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors flex-shrink-0">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
           <div>
             <h1 className="text-xl font-semibold text-foreground">4Q Generator</h1>
             <p className="text-xs text-muted-foreground mt-0.5">{tab === 'setup' ? 'Set up scope to generate trend data' : `Scope: ${trendScope} · ${trendData.filter(p => !p.hidden).length} weeks visible`}</p>
           </div>
-          {tab === 'editor' && <button onClick={() => setTab('setup')} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg px-3 py-1.5 transition-colors">&larr; Change Scope</button>}
         </div>
-        {tab === 'editor' && <PreviewModal />}
+        {tab === 'editor' && (
+          <div className="flex items-center gap-2">
+            {saveMsg && <span className="text-[11px] text-muted-foreground">{saveMsg}</span>}
+            {dirty && (
+              <span title="The improvement plan has changes that are not saved yet"
+                className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/15 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Unsaved changes
+              </span>
+            )}
+            <Button onClick={handleSavePlan} variant={dirty ? 'default' : 'outline'} size="sm" className="gap-2"
+              title="Save the Q3 improvement plan (Q1/Q2/Q4 always rebuild from live data)">
+              <Save className="w-4 h-4" />
+              {loadedName ? `Save "${loadedName}"` : 'Save Plan'}
+            </Button>
+            <PreviewModal />
+          </div>
+        )}
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
@@ -823,7 +1011,9 @@ export default function OLE4QReport() {
           <SetupStep workcellConfigs={workcellConfigs} mode={mode} setMode={setMode}
             selectedPlants={selectedPlants} setSelectedPlants={setSelectedPlants}
             selectedWorkcells={selectedWorkcells} setSelectedWorkcells={setSelectedWorkcells}
-            onGenerate={handleGenerate} generating={generating} plants={plants} byPlant={byPlant} />
+            onGenerate={() => { setActions([]); setSavedSnapshot('[]'); setLoadedName(''); handleGenerate(); }}
+            generating={generating} plants={plants} byPlant={byPlant}
+            user={user} savedList={savedList} onLoad={handleLoadSaved} onDeleteSave={handleDeleteSave} />
         )}
 
         {tab === 'editor' && (
@@ -917,7 +1107,7 @@ export default function OLE4QReport() {
                       </TabsContent>
 
                       <TabsContent value="q2" className="m-0 space-y-2">
-                        <p className="text-[11px] text-muted-foreground">Derived from Paynter categories - same data as Q4. Chart 1 shows avg of last 4 weeks. Charts 2 and 3 show top 3 workcells for the top 2 loss categories.</p>
+                        <p className="text-[11px] text-muted-foreground">Same mart as Q4 (mh_distribution). All three charts are average hours per week over the last 4 weeks. Chart 1 = loss buckets; charts 2 and 3 = top 3 workcells for the top 2 buckets.</p>
                         <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
                           {PAYNTER_CATS.map(c => (
                             <div key={c.key} className="flex items-center gap-2 text-xs">
