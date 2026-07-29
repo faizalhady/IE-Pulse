@@ -12,7 +12,7 @@ import type { SavedReportMeta, UserInfo } from '@/lib/ole/savedReportsApi';
 import { fetchUserInfo, savedReportsApi, setLocalUser } from '@/lib/ole/savedReportsApi';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { CalendarIcon, ChevronLeft, ChevronRight, Download, Eye, EyeOff, FolderOpen, GripVertical, Info, Plus, Save, Settings, Trash2 } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight, Download, Check, Eye, EyeOff, FileSpreadsheet, FolderOpen, GripVertical, Info, Pencil, Plus, Save, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
@@ -25,10 +25,17 @@ import {
 type SetupMode = 'plant' | 'workcell';
 type ActionItem = { id: string; issue: string; problemDescription: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; commitDate: string; status: string; };
 type ReportScope = { mode: SetupMode; selectedPlants: string[]; selectedWorkcells: string[] };
-type SavedPlan = { actions: ActionItem[]; scope?: ReportScope };
+type SavedPlan = { actions: ActionItem[]; scope?: ReportScope; title?: string };
 type TrendPoint = { id: string; label: string; ole: number; target: number; projected?: boolean; hidden?: boolean };
 
 const genId = () => Math.random().toString(36).substr(2, 9);
+
+/** "4Q Report 07-29-26" — MM-DD-YY, matching how the reports are named by hand. */
+function defaultReportTitle(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `4Q Report ${p(d.getMonth() + 1)}-${p(d.getDate())}-${String(d.getFullYear()).slice(-2)}`;
+}
 
 const TT_PROPS = {
   contentStyle: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, padding: '8px 12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
@@ -164,120 +171,214 @@ function buildPareto(data: { name: string; value: number; color: string }[]): Pa
 
 // ─── Setup Step ───────────────────────────────────────────────────────────────
 
-function SetupStep({ workcellConfigs, mode, setMode, selectedPlants, setSelectedPlants, selectedWorkcells, setSelectedWorkcells, onGenerate, generating, plants, byPlant, user, savedList, onLoad, onDeleteSave }: {
-  workcellConfigs: OleWorkcellConfig[]; mode: SetupMode; setMode: (m: SetupMode) => void;
-  selectedPlants: string[]; setSelectedPlants: (p: string[]) => void;
-  selectedWorkcells: string[]; setSelectedWorkcells: (w: string[]) => void;
-  onGenerate: () => void; generating: boolean; plants: string[]; byPlant: Record<string, string[]>;
-  user: UserInfo | null; savedList: SavedReportMeta[];
-  onLoad: (id: number) => void; onDeleteSave: (id: number) => void;
+// ─── Start screen ─────────────────────────────────────────────────────────────
+// Deliberately two choices and nothing else. Scope pickers, week counts and the
+// saved list all used to compete for attention here; they're one click away now.
+
+function StartScreen({ savedList, onNew, onLoad, onDeleteSave, loading }: {
+  savedList: SavedReportMeta[];
+  onNew: () => void;
+  onLoad: (id: number) => void;
+  onDeleteSave: (id: number) => void;
+  loading: boolean;
 }) {
-  const canGen = (mode === 'plant' && selectedPlants.length > 0) || (mode === 'workcell' && selectedWorkcells.length > 0);
-  const togglePlant = (p: string) => setSelectedPlants(selectedPlants.includes(p) ? selectedPlants.filter(x => x !== p) : [...selectedPlants, p]);
-  const toggleWC = (wc: string) => setSelectedWorkcells(selectedWorkcells.includes(wc) ? selectedWorkcells.filter(x => x !== wc) : [...selectedWorkcells, wc]);
-  const [zoom, setZoom] = useState(1);
-  useEffect(() => {
-    const calc = () => setZoom(Math.min(1, Math.max(0.8, (window.innerHeight - 72) / 720)));
-    calc(); window.addEventListener('resize', calc); return () => window.removeEventListener('resize', calc);
-  }, []);
+  const [picking, setPicking] = useState(false);
+  const hasSaves = savedList.length > 0;
+
   return (
-    <div className="flex-1 flex items-center justify-center p-4 lg:p-8 overflow-y-auto min-h-0">
-      <div className="w-full max-w-lg space-y-4 lg:space-y-6" style={{ zoom }}>
-        <div className="text-center">
-          <div className="h-9 w-9 lg:h-12 lg:w-12 rounded-2xl bg-primary/15 flex items-center justify-center mx-auto mb-2 lg:mb-4"><Settings className="h-5 w-5 lg:h-6 lg:w-6 text-primary" /></div>
-          <h2 className="text-lg lg:text-xl font-bold text-foreground">Setup 4Q Report</h2>
-          <p className="text-sm text-muted-foreground mt-1">Choose the scope for your trend data</p>
-        </div>
-        <div className="flex rounded-xl border border-border overflow-hidden">
-          {(['plant', 'workcell'] as SetupMode[]).map(m => (
-            <button key={m} onClick={() => setMode(m)} className={cn('flex-1 py-2 text-sm font-medium transition-colors', mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50')}>{m === 'plant' ? 'By Plant' : 'By Workcell'}</button>
-          ))}
-        </div>
-        {mode === 'plant' && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Select Plants <span className="text-primary">({selectedPlants.length} selected)</span></Label>
-            <div className="flex gap-3">
-              {plants.map(p => (
-                <button key={p} onClick={() => togglePlant(p)} className={cn('flex-1 py-2 px-3 rounded-xl border text-sm font-semibold transition-all', selectedPlants.includes(p) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>
-                  {p}<p className="text-[10px] font-normal mt-0.5 opacity-70">{byPlant[p]?.length ?? 0} workcells</p>
-                </button>
-              ))}
-            </div>
-            {selectedPlants.length > 0 && (
-              <div className="rounded-xl border border-border bg-muted/20 p-3">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-3">Included Workcells</p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {selectedPlants.flatMap(p => byPlant[p] ?? []).map((wc, i) => (
-                    <div key={wc} className="flex gap-2 text-[11px] text-foreground/80 tabular-nums">
-                      <span className="text-muted-foreground font-medium w-4 shrink-0">{i + 1}.</span>
-                      <span className="truncate">{wc}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {mode === 'workcell' && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Select Workcells <span className="text-primary">({selectedWorkcells.length} selected)</span></Label>
-            <div className="space-y-3">
-              {plants.map(p => (
-                <div key={p}>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">{p}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {byPlant[p]?.map(wc => (
-                      <button key={wc} onClick={() => toggleWC(wc)} className={cn('px-3 py-1.5 rounded-lg border text-xs font-medium transition-all', selectedWorkcells.includes(wc) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>{wc}</button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground flex items-start gap-2">
-          <Info className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
-          <span>Trend uses latest <strong className="text-foreground">13 weeks</strong>. Q2 Paretos use last <strong className="text-foreground">4 actual weeks</strong> averaged.</span>
-        </div>
-        <button onClick={onGenerate} disabled={!canGen || generating} className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-          {generating ? 'Loading data...' : 'New 4Q Report ->'}
+    <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-8">
+      <FileSpreadsheet className="h-20 w-20 text-primary mb-7" strokeWidth={1.25} />
+
+      <h2 className="text-5xl font-semibold tracking-tight text-foreground">4Q Report</h2>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Weekly OLE performance review — trend, loss Paretos, improvement plan.
+      </p>
+
+      {/* No card chrome: the icons ARE the affordance. Two choices, nothing else. */}
+      <div className="mt-12 flex items-start gap-12">
+        <button onClick={onNew} disabled={loading}
+          className="group flex flex-col items-center gap-2.5 disabled:opacity-50 transition-opacity">
+          <Plus className="h-11 w-11 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={2} />
+          <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">Create new</span>
         </button>
 
-        {/* Saved Q3 plans. Only the Q3 improvement plan is stored — loading one
-            re-pulls Q1/Q2/Q4 from the CURRENT mart, so an old plan lands on this
-            week's numbers instead of resurrecting a stale snapshot. */}
-        {savedList.length > 0 && (
-          <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-              <FolderOpen className="h-3.5 w-3.5" />
-              Load saved improvement plan
-            </div>
+        <button onClick={() => setPicking(true)} disabled={loading || !hasSaves}
+          title={hasSaves ? 'Open a saved report' : 'No saved reports yet'}
+          className="group flex flex-col items-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">
+          <FolderOpen className="h-11 w-11 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={2} />
+          <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+            Load saved
+            {hasSaves && (
+              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary/15 px-1.5 text-[11px] font-semibold text-primary">
+                {savedList.length}
+              </span>
+            )}
+          </span>
+        </button>
+      </div>
+
+      <Dialog open={picking} onOpenChange={setPicking}>
+        <DialogContent className="max-w-md">
+          <h3 className="text-base font-semibold mb-4">Saved reports</h3>
+          <div className="space-y-1.5 max-h-80 overflow-y-auto">
             {savedList.map(s => (
               <div key={s.id} className="flex items-center gap-2">
-                <button
-                  onClick={() => onLoad(s.id)}
-                  disabled={generating}
-                  title={`Load "${s.name}" — restores its scope and rebuilds Q1/Q2/Q4 from current data`}
-                  className="flex-1 text-left px-2.5 py-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <div className="text-xs font-medium truncate">{s.name}</div>
-                  <div className="text-[10px] text-muted-foreground">saved {s.updated_at?.slice(0, 16).replace('T', ' ')}</div>
+                <button onClick={() => { setPicking(false); onLoad(s.id); }}
+                  className="flex-1 text-left px-3 py-2 rounded-lg border border-border hover:border-primary/60 hover:bg-primary/5 transition-colors">
+                  <div className="text-sm font-medium truncate">{s.name}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    saved {s.updated_at?.slice(0, 16).replace('T', ' ')}
+                  </div>
                 </button>
-                <button onClick={() => onDeleteSave(s.id)} title="Delete this save"
-                  className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors">
-                  <Trash2 className="h-3.5 w-3.5" />
+                <button onClick={() => onDeleteSave(s.id)} title="Delete"
+                  className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors">
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             ))}
           </div>
-        )}
-        {!user && (
-          <p className="text-[11px] text-muted-foreground text-center">
-            Not identified yet — you'll be asked for your NTID on first save.
-          </p>
-        )}
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+// ─── Scope dialog ─────────────────────────────────────────────────────────────
+// Replaces the old full-page setup step: picking a scope is a decision, not a
+// destination, so it belongs in a modal.
+//
+// Selection model: a plant button is "selected" purely because the chosen
+// workcells happen to equal that plant's full set — it is DERIVED, not a
+// separate flag. So ticking or unticking any single workcell makes the plant
+// highlight fall away on its own (a custom report) with no extra bookkeeping,
+// and no way for the two to disagree.
+
+function ScopeDialog({ open, onOpenChange, plants, byPlant, generating, onConfirm }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  plants: string[];
+  byPlant: Record<string, string[]>;
+  generating: boolean;
+  onConfirm: (scope: ReportScope, title: string) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const [name, setName] = useState(defaultReportTitle);
+
+  // Default: first plant fully ticked — the common case is one plant.
+  // The name resets each time so a new report never inherits the last one's.
+  useEffect(() => {
+    if (!open) return;
+    setName(defaultReportTitle());
+    if (!picked.length && plants.length) setPicked(byPlant[plants[0]] ?? []);
+  }, [open, plants]);           // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A plant's checkbox state is DERIVED from its workcells, never stored. So
+  // ticking a workcell can't leave the plant box disagreeing with the list,
+  // and un-ticking one silently turns a whole-plant pick into a custom one.
+  const plantState = (p: string): 'all' | 'some' | 'none' => {
+    const list = byPlant[p] ?? [];
+    const n = list.filter(w => picked.includes(w)).length;
+    return n === 0 ? 'none' : n === list.length ? 'all' : 'some';
+  };
+  const togglePlant = (p: string) => {
+    const list = byPlant[p] ?? [];
+    setPicked(plantState(p) === 'all'
+      ? picked.filter(w => !list.includes(w))
+      : [...new Set([...picked, ...list])]);
+  };
+  const toggleWc = (w: string) =>
+    setPicked(picked.includes(w) ? picked.filter(x => x !== w) : [...picked, w]);
+
+  const fullPlants = plants.filter(p => plantState(p) === 'all');
+  const coveredByPlants = fullPlants.flatMap(p => byPlant[p] ?? []);
+  const isWholePlants = picked.length > 0 && picked.length === coveredByPlants.length;
+
+  function confirm() {
+    // Whole plants → one query per plant. Anything else → per-workcell.
+    onConfirm(
+      isWholePlants
+        ? { mode: 'plant', selectedPlants: fullPlants, selectedWorkcells: [] }
+        : { mode: 'workcell', selectedPlants: [], selectedWorkcells: picked },
+      name.trim() || defaultReportTitle(),
+    );
+  }
+
+  const Box = ({ on, partial = false }: { on: boolean; partial?: boolean }) => (
+    <span className={cn(
+      'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
+      on || partial ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40',
+    )}>
+      {on && <Check className="h-3 w-3" strokeWidth={3} />}
+      {partial && !on && <span className="h-0.5 w-2 rounded bg-primary-foreground" />}
+    </span>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <h3 className="text-base font-semibold mb-4">New report</h3>
+
+        <div className="space-y-1.5 mb-5">
+          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Report name
+          </Label>
+          <Input value={name} onChange={e => setName(e.target.value)}
+            placeholder={defaultReportTitle()} className="h-9 text-sm" />
+        </div>
+
+        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Report scope
+        </Label>
+
+        <div className="mt-1.5 space-y-4 max-h-[26rem] overflow-y-auto pr-1">
+          {plants.map(p => {
+            const st = plantState(p);
+            return (
+              <div key={p}>
+                <button onClick={() => togglePlant(p)}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-1 py-1.5 text-left hover:bg-muted/50 transition-colors">
+                  <Box on={st === 'all'} partial={st === 'some'} />
+                  <span className="text-sm font-semibold">{p}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {(byPlant[p] ?? []).filter(w => picked.includes(w)).length}/{(byPlant[p] ?? []).length}
+                  </span>
+                </button>
+
+                <div className="mt-1.5 ml-6 grid grid-cols-2 gap-1.5 lg:grid-cols-3">
+                  {(byPlant[p] ?? []).map(w => {
+                    const on = picked.includes(w);
+                    return (
+                      <button key={w} onClick={() => toggleWc(w)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors',
+                          on ? 'border-primary/50 bg-primary/5' : 'border-border hover:bg-muted/50',
+                        )}>
+                        <Box on={on} />
+                        <span className="truncate">{w}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {picked.length} workcell{picked.length === 1 ? '' : 's'} selected
+          </span>
+          <button onClick={() => setPicked([])} disabled={!picked.length}
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors">
+            Clear
+          </button>
+        </div>
+
+        <Button onClick={confirm} disabled={!picked.length || generating} className="mt-3 w-full">
+          {generating ? 'Loading data...' : 'Generate Report'}
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -703,14 +804,15 @@ function ImprovementTable({ actions, isPrint = false, top1Cat = '', top2Cat = ''
 
 export default function OLE4QReport() {
   const location = useLocation();
-  const [title, setTitle] = useState('Weekly OLE Performance Review');
-  const [tab, setTab] = useState<'setup' | 'editor'>('setup');
+  const [title, setTitle] = useState(defaultReportTitle);
+  const [tab, setTab] = useState<'start' | 'editor'>('start');
+  const [scopeOpen, setScopeOpen] = useState(false);
 
   // Reset to setup whenever the user re-navigates here (e.g. clicks the sidebar
   // 4Q nav while already in editor). location.key changes on every navigate(),
   // including same-route replace from the sidebar's "click-when-active" handler.
   useEffect(() => {
-    setTab('setup');
+    setTab('start');
   }, [location.key]);
   const [rightOpen, setRightOpen] = useState(true);
   const [workcellConfigs, setWorkcellConfigs] = useState<OleWorkcellConfig[]>([]);
@@ -732,13 +834,18 @@ export default function OLE4QReport() {
   // live mart, so loading last month's plan shows it against THIS week's data.
   const [user, setUser] = useState<UserInfo | null>(null);
   const [savedList, setSavedList] = useState<SavedReportMeta[]>([]);
-  const [loadedName, setLoadedName] = useState('');
+  // The saved row's id — the identity. null = this report has never been saved.
+  const [loadedId, setLoadedId] = useState<number | null>(null);
   const [saveMsg, setSaveMsg] = useState('');
   // Snapshot of the plan as last saved/loaded. Anything else means unsaved work.
   // Compared as JSON because ActionItem is flat data — no need for a deep-equal
   // helper, and field ORDER is stable since every row is built from one literal.
-  const [savedSnapshot, setSavedSnapshot] = useState('[]');
-  const dirty = useMemo(() => JSON.stringify(actions) !== savedSnapshot, [actions, savedSnapshot]);
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleBeforeEdit, setTitleBeforeEdit] = useState('');
+  // Baseline for the dirty check: the plan as it was at the last save/load.
+  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify({ actions: [], title: defaultReportTitle() }));
+  const planFingerprint = useMemo(() => JSON.stringify({ actions, title }), [actions, title]);
+  const dirty = planFingerprint !== savedSnapshot;
 
   const refreshSaves = useCallback(async (u: UserInfo | null) => {
     if (!u) return;
@@ -762,8 +869,10 @@ export default function OLE4QReport() {
       const rec = await savedReportsApi.load<SavedPlan>(id, u.userNtid);
       const loadedActions = rec.payload?.actions ?? [];
       setActions(loadedActions);
-      setSavedSnapshot(JSON.stringify(loadedActions));
-      setLoadedName(rec.name);
+      const loadedTitle = rec.payload?.title ?? title;
+      if (rec.payload?.title) setTitle(rec.payload.title);
+      setSavedSnapshot(JSON.stringify({ actions: loadedActions, title: loadedTitle }));
+      setLoadedId(rec.id);
 
       // Restore the scope the plan was written against, so loading is ONE click
       // — no "pick a plant first". Only the scope is restored; Q1/Q2/Q4 are
@@ -776,8 +885,11 @@ export default function OLE4QReport() {
       }
       const effective = scope ?? { mode, selectedPlants, selectedWorkcells };
       if (effective.mode === 'plant' ? effective.selectedPlants.length === 0 : effective.selectedWorkcells.length === 0) {
-        setSaveMsg('Plan loaded — pick a plant or workcell, then Generate.');
-        return;                        // older save with no scope stored
+        // Older save with no scope stored — send them to the scope picker
+        // rather than leaving them staring at the start screen.
+        setSaveMsg('Plan loaded — choose a scope to generate.');
+        setScopeOpen(true);
+        return;
       }
       await handleGenerate(effective);  // Q1/Q2/Q4 from CURRENT data
     } catch (e) {
@@ -801,31 +913,42 @@ export default function OLE4QReport() {
     return u;
   }
 
+  /** Single write path — used by the Save button AND the create-time autosave,
+   *  so "Saved" can never be shown for a report that was never persisted. */
+  async function persistPlan(u: UserInfo, opts: {
+    id: number | null; title: string; actions: ActionItem[]; scope: ReportScope; announce: boolean;
+  }) {
+    const name = opts.title.trim() || defaultReportTitle();
+    const res = await savedReportsApi.save({
+      id: opts.id, module: 'ole', reportType: '4q', name, user: u,
+      payload: { actions: opts.actions, scope: opts.scope, title: opts.title } satisfies SavedPlan,
+    });
+    setLoadedId(res.id);
+    setSavedSnapshot(JSON.stringify({ actions: opts.actions, title: opts.title }));
+    if (opts.announce) {
+      setSaveMsg(`Saved "${name}"`);
+      setTimeout(() => setSaveMsg(''), 4000);
+    }
+    await refreshSaves(u);
+    return res;
+  }
+
   async function handleSavePlan() {
     const u = await ensureUser();
     if (!u) return;
-    const name = window.prompt('Save improvement plan as:', loadedName || `4Q plan ${new Date().toISOString().slice(0, 10)}`);
-    if (!name?.trim()) return;
+    // The title is the save's label, not its identity — `loadedId` is. So a
+    // rename just updates that row: it cannot duplicate, and it cannot clobber
+    // a different save that happens to share the title. null id = first save.
     try {
-      await savedReportsApi.save({
-        module: 'ole', reportType: '4q', name: name.trim(), user: u,
-        payload: { actions, scope: { mode, selectedPlants, selectedWorkcells } } satisfies SavedPlan,
+      await persistPlan(u, {
+        id: loadedId, title, actions,
+        scope: { mode, selectedPlants, selectedWorkcells }, announce: true,
       });
-      // Renaming = save under the new name, then drop the old row. Saving with
-      // an unchanged name just overwrites (UNIQUE on module+type+owner+name).
-      const old = savedList.find(s => s.name === loadedName);
-      if (old && loadedName && name.trim() !== loadedName) {
-        await savedReportsApi.remove(old.id, u.userNtid).catch(() => { /* keep both rather than lose one */ });
-      }
-      setLoadedName(name.trim());
-      setSavedSnapshot(JSON.stringify(actions));
-      setSaveMsg(`Saved "${name.trim()}"`);
-      await refreshSaves(u);
     } catch (e) {
       console.error(e);
       setSaveMsg(e instanceof Error ? e.message : 'Save failed');
+      setTimeout(() => setSaveMsg(''), 4000);
     }
-    setTimeout(() => setSaveMsg(''), 4000);
   }
 
   async function handleDeleteSave(id: number) {
@@ -973,48 +1096,98 @@ export default function OLE4QReport() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden relative">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0 bg-card">
+      <div className="relative flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0 bg-card">
         <div className="flex items-center gap-3">
           {tab === 'editor' && (
-            <button onClick={() => setTab('setup')} title="Change scope"
+            <button onClick={() => setTab('start')} title="Back to start"
               className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors flex-shrink-0">
               <ChevronLeft className="w-4 h-4" />
             </button>
           )}
           <div>
             <h1 className="text-xl font-semibold text-foreground">4Q Generator</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">{tab === 'setup' ? 'Set up scope to generate trend data' : `Scope: ${trendScope} · ${trendData.filter(p => !p.hidden).length} weeks visible`}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{tab === 'start' ? 'Create a new report or open a saved one' : `Scope: ${trendScope} · ${trendData.filter(p => !p.hidden).length} weeks visible`}</p>
           </div>
         </div>
+
+        {/* Report title — click to edit in place (Google Docs style). Absolutely
+            positioned so it stays centred on the HEADER, not on whatever space
+            is left between the two button groups. */}
+        {tab === 'editor' && (
+          <div className="absolute left-1/2 -translate-x-1/2 max-w-[38%]">
+            {titleEditing ? (
+              <input
+                autoFocus
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                onBlur={() => { if (!title.trim()) setTitle(defaultReportTitle()); setTitleEditing(false); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') { setTitle(titleBeforeEdit); setTitleEditing(false); }
+                }}
+                className="w-full min-w-[20rem] bg-transparent text-center text-lg font-semibold text-foreground border-b-2 border-primary outline-none px-2 py-1"
+              />
+            ) : (
+              <button
+                onClick={() => { setTitleBeforeEdit(title); setTitleEditing(true); }}
+                title="Click to rename this report"
+                className="group flex items-center gap-2 max-w-full rounded-md px-2 py-1 text-lg font-semibold text-foreground hover:bg-muted/60 transition-colors"
+              >
+                <span className="truncate">{title}</span>
+                <Pencil className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+              </button>
+            )}
+          </div>
+        )}
+
         {tab === 'editor' && (
           <div className="flex items-center gap-2">
             {saveMsg && <span className="text-[11px] text-muted-foreground">{saveMsg}</span>}
-            {dirty && (
-              <span title="The improvement plan has changes that are not saved yet"
-                className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/15 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Unsaved changes
-              </span>
-            )}
-            <Button onClick={handleSavePlan} variant={dirty ? 'default' : 'outline'} size="sm" className="gap-2"
-              title="Save the Q3 improvement plan (Q1/Q2/Q4 always rebuild from live data)">
-              <Save className="w-4 h-4" />
-              {loadedName ? `Save "${loadedName}"` : 'Save Plan'}
-            </Button>
+            <div className="relative">
+              <Button onClick={handleSavePlan} variant={dirty ? 'default' : 'outline'} size="sm" className="gap-2"
+                title={dirty ? 'Unsaved changes — click to save the improvement plan' : 'Improvement plan is saved'}>
+                <Save className="w-4 h-4" />
+                {dirty ? 'Save' : 'Saved'}
+              </Button>
+              {dirty && (
+                <span aria-label="Unsaved changes"
+                  className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-card" />
+              )}
+            </div>
             <PreviewModal />
           </div>
         )}
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {tab === 'setup' && (
-          <SetupStep workcellConfigs={workcellConfigs} mode={mode} setMode={setMode}
-            selectedPlants={selectedPlants} setSelectedPlants={setSelectedPlants}
-            selectedWorkcells={selectedWorkcells} setSelectedWorkcells={setSelectedWorkcells}
-            onGenerate={() => { setActions([]); setSavedSnapshot('[]'); setLoadedName(''); handleGenerate(); }}
-            generating={generating} plants={plants} byPlant={byPlant}
-            user={user} savedList={savedList} onLoad={handleLoadSaved} onDeleteSave={handleDeleteSave} />
+        {tab === 'start' && (
+          <StartScreen savedList={savedList} loading={generating}
+            onNew={() => { const t = defaultReportTitle(); setActions([]); setTitle(t); setSavedSnapshot(JSON.stringify({ actions: [], title: t })); setLoadedId(null); setScopeOpen(true); }}
+            onLoad={handleLoadSaved} onDeleteSave={handleDeleteSave} />
         )}
+
+        <ScopeDialog
+          open={scopeOpen} onOpenChange={setScopeOpen}
+          plants={plants} byPlant={byPlant} generating={generating}
+          onConfirm={async (scope, name) => {
+            setTitle(name);
+            setSavedSnapshot(JSON.stringify({ actions: [], title: name }));
+            setMode(scope.mode);
+            setSelectedPlants(scope.selectedPlants);
+            setSelectedWorkcells(scope.selectedWorkcells);
+            setScopeOpen(false);
+            await handleGenerate(scope);
+            // Persist immediately so a brand-new report shows up under "Load
+            // saved" right away, and so the header's "Saved" state is TRUE
+            // rather than merely un-edited. Skipped when we can't identify the
+            // user — the button then honestly reads "Save".
+            if (user) {
+              try {
+                await persistPlan(user, { id: null, title: name, actions: [], scope, announce: false });
+              } catch (e) { console.error('autosave failed', e); }
+            }
+          }} />
+
 
         {tab === 'editor' && (
           <>
@@ -1209,8 +1382,8 @@ export default function OLE4QReport() {
                       </TabsContent>
 
                       <TabsContent value="settings" className="m-0 space-y-4 max-w-sm">
-                        <div className="space-y-1.5"><Label className="text-xs">Report Title</Label><Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-xs" /></div>
-                        <div className="pt-4 border-t border-border space-y-4">
+                        {/* Report Title moved to the header — click it to edit in place. */}
+                        <div className="space-y-4">
                           <div className="space-y-1.5">
                             <Label className="text-xs text-muted-foreground uppercase tracking-wider">Report Scope</Label>
                             <div className="flex rounded-lg border border-border overflow-hidden">

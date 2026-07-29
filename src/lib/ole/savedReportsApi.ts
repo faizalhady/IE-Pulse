@@ -106,7 +106,15 @@ export const savedReportsApi = {
 
   load: <T>(id: number, ntid: string) => req<SavedReport<T>>(`/saved-reports/${id}`, ntid),
 
+  /**
+   * Create a new save, or update an existing one when `id` is given.
+   *
+   * The id is the identity; the name is only a label. That makes a rename an
+   * UPDATE of a known row, so it can't duplicate or silently clobber a
+   * same-titled save — which is exactly what name-keyed saving did.
+   */
   save: <T>(args: {
+    id?: number | null;
     module: string;
     reportType: string;
     name: string;
@@ -114,10 +122,10 @@ export const savedReportsApi = {
     payload: T;
   }) =>
     req<{ id: number; name: string; created_at: string; updated_at: string }>(
-      '/saved-reports',
+      args.id ? `/saved-reports/${args.id}` : '/saved-reports',
       args.user.userNtid,
       {
-        method: 'POST',
+        method: args.id ? 'PUT' : 'POST',
         body: JSON.stringify({
           module: args.module,
           report_type: args.reportType,
