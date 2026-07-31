@@ -41,7 +41,19 @@ export const DL_WEEKLY_DATA: DLRow[] = [
   { week: 'WW15', dl: 4341 },
   { week: 'WW16', dl: 4338 },
   { week: 'WW17', dl: 4369 },
-  { week: 'WW18', dl: 4369 },
+  { week: 'WW18', dl: 4259 },
+  { week: 'WW19', dl: 4394 },
+  { week: 'WW20', dl: 4483 },
+  { week: 'WW21', dl: 4457 },
+  { week: 'WW22', dl: 4409 },
+  { week: 'WW23', dl: 4360 },
+  { week: 'WW24', dl: 4481 },
+  { week: 'WW25', dl: 4499 },
+  { week: 'WW26', dl: 4579 },
+  { week: 'WW27', dl: 4646 },
+  { week: 'WW28', dl: 4555 },
+  { week: 'WW29', dl: 4597 },
+  { week: 'WW30', dl: 4622 },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
