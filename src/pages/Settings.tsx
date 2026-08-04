@@ -4,14 +4,14 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { setFeatureFlag, useFeatureFlag } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
 import { currentUser } from '@/mocks/data';
-import { Bell, Check, ChevronRight, Monitor, Shield, Sliders, User } from 'lucide-react';
+import { Bell, Monitor, Shield, Sliders, User } from 'lucide-react';
 import { useState } from 'react';
 
 type SettingsTab = 'profile' | 'roles' | 'display' | 'notifications' | 'system';
 
 const TABS: { key: SettingsTab; label: string; icon: any }[] = [
-  { key: 'profile', label: 'Profile', icon: User },
   { key: 'roles', label: 'Roles & Access', icon: Shield },
+  { key: 'profile', label: 'Profile', icon: User },
   { key: 'display', label: 'Display', icon: Monitor },
   { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'system', label: 'System', icon: Sliders },
