@@ -58,6 +58,47 @@ async function fetchUser(): Promise<CurrentUser> {
   return inflight;
 }
 
+/** The signed token, or null if identity could not be established. Awaits the
+ *  in-flight login call rather than racing it, so an API call fired during
+ *  startup still goes out authenticated instead of getting a 401. */
+export async function getAuthToken(): Promise<string | null> {
+  try {
+    return (await fetchUser()).token;
+  } catch {
+    return null;
+  }
+}
+
+/** Attach the token to backend calls, once, globally.
+ *
+ *  A wrapper rather than 44 edited call sites: every fetch in the app goes
+ *  through window.fetch anyway, and a call site that forgets the header is a
+ *  401 nobody notices until a user hits it.
+ *
+ *  Only same-origin API paths get the header. AD_GET's own endpoints are
+ *  excluded — they authenticate with Windows credentials, and sending the token
+ *  to the service that issues it would recurse through fetchUser().
+ */
+export function installAuthFetch(): void {
+  const original = window.fetch.bind(window);
+  const isBackendCall = (url: string) =>
+    (url.startsWith('/api/') || url.includes('/ole-api/')) && !url.includes('/userinfo/');
+
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input
+      : input instanceof URL ? input.href
+        : input.url;
+    if (!isBackendCall(url)) return original(input, init);
+
+    const token = await getAuthToken();
+    if (!token) return original(input, init);   // let the backend answer 401
+
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    headers.set('Authorization', `Bearer ${token}`);
+    return original(input, { ...init, headers });
+  };
+}
+
 /** Split a name on whitespace AND camel-case boundaries, e.g. "SyedFaizAlhady SyedAhmadAlhady" → ["Syed","Faiz","Alhady","Syed","Ahmad","Alhady"]. */
 export function splitNameWords(name: string): string[] {
   return name
