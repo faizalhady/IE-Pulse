@@ -1,5 +1,9 @@
-import { createRoot } from "react-dom/client";
+import { createRoot } from "react-dom/client"
+
+import { installAuthFetch } from "@/hooks/useCurrentUser";
 import App from "./App.tsx";
 import "./index.css";
+
+installAuthFetch();
 
 createRoot(document.getElementById("root")!).render(<App />);
