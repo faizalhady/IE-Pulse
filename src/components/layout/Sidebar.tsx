@@ -7,10 +7,11 @@ import { useApp } from '@/context/AppContext';
 import { shortName, useCurrentUser } from '@/hooks/useCurrentUser';
 import { useProductionSummary, useWorkcells } from '@/hooks/useMesData';
 import { cn } from '@/lib/utils';
-import {
-  ChevronDown,
-  Factory, Moon, PanelLeftClose, PanelLeftOpen,
-  Sun
+import { useAccessLevel } from '@/hooks/useAccessLevel';
+import { Settings,
+ ChevronDown,
+ Factory, Moon, PanelLeftClose, PanelLeftOpen,
+ Sun
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -21,6 +22,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { activeApp, collapsed, setCollapsed } = useApp();
   const { user } = useCurrentUser();
+  const { isDeveloper } = useAccessLevel();
 
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem('pulse-theme');
@@ -140,6 +142,35 @@ export default function Sidebar() {
             <span>Collapse</span>
           </button>
         )}
+        {/* Access settings — sits directly above the theme toggle. Goes straight
+            to Roles & Access rather than the Settings landing tab: it is the
+            only section there with a backing store. Hidden for everyone but
+            developers, who are the only ones the route will let in. */}
+        {isDeveloper && (collapsed ? (
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex">
+                  <button
+                    onClick={() => navigate('/settings')}
+                    className="flex w-full items-center justify-center rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                  >
+                    <Settings className="h-4 w-4 shrink-0" />
+                  </button>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs font-medium">Roles &amp; Access</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <button
+            onClick={() => navigate('/settings')}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            <Settings className="h-4 w-4 shrink-0" />
+            <span>Roles &amp; Access</span>
+          </button>
+        ))}
         {collapsed ? (
           <TooltipProvider delayDuration={100}>
             <Tooltip>

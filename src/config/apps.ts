@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  Users,
   Cog,
   Factory,
   FileSpreadsheet,

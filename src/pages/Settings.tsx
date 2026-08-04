@@ -1,3 +1,6 @@
+import { AccessManager } from '@/components/settings/AccessManager';
+import { useAccessLevel } from '@/hooks/useAccessLevel';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { setFeatureFlag, useFeatureFlag } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
 import { currentUser } from '@/mocks/data';
@@ -20,21 +23,6 @@ const ROLES = [
   { role: 'engineer', label: 'Engineer', desc: 'Full dashboard + raw data views.' },
   { role: 'admin', label: 'Admin', desc: 'Full access including settings and user management.' },
 ];
-
-const MOCK_USERS = [
-  { name: 'Syed Faiz Alhady', role: 'engineer', id: '4033375', active: true },
-  { name: 'J. Santos', role: 'operator', id: 'EMP-2031', active: true },
-  { name: 'M. Rivera', role: 'operator', id: 'EMP-2044', active: true },
-  { name: 'K. Chen', role: 'engineer', id: 'EMP-3011', active: true },
-  { name: 'A. Patel', role: 'operator', id: 'EMP-2067', active: false },
-];
-
-const ROLE_BADGE: Record<string, string> = {
-  operator: 'bg-muted text-muted-foreground border-border',
-  supervisor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  engineer: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
-  admin: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-};
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -69,11 +57,39 @@ function Section({ title, children, action }: { title: string; children: React.R
 }
 
 export default function Settings() {
-  const [tab, setTab] = useState<SettingsTab>('profile');
+  const { user } = useCurrentUser();
+  const { isDeveloper, loading: accessLoading } = useAccessLevel();
+  const currentNtid = user?.ntid ?? null;
+  const [tab, setTab] = useState<SettingsTab>('roles');
   const [currentRole, setCurrentRole] = useState(currentUser.role);
   const [notifs, setNotifs] = useState({ critical: true, warning: false, wip: true, shift: true, email: false });
   const [display, setDisplay] = useState({ darkMode: true, compactTable: false, autoRefresh: true, showIdle: true });
   const appSwitcherEnabled = useFeatureFlag('appSwitcher');
+
+  // Deny on unknown identity rather than assuming the best: this page edits who
+  // can do what everywhere else. Hooks all run above this line so the early
+  // return cannot change hook order.
+  if (accessLoading) {
+    return <div className="p-8 text-sm text-muted-foreground">Checking access...</div>;
+  }
+  if (!isDeveloper) {
+    return (
+      <div className="p-8">
+        <div className="max-w-md rounded-xl border bg-card p-6">
+          <h2 className="text-base font-semibold">Settings are restricted</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Roles &amp; access can only be changed by a developer. Ask one of them
+            if you need something here.
+          </p>
+          {user?.ntid && (
+            <p className="mt-3 font-mono text-[11px] text-muted-foreground">
+              signed in as {user.ntid}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-0">
@@ -154,59 +170,15 @@ export default function Settings() {
         {/* ── ROLES & ACCESS ── */}
         {tab === 'roles' && (
           <div className="space-y-4">
-            {/* Dev mode role switcher */}
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 space-y-3">
-              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Dev Mode — Role Switcher</p>
-              <div className="flex flex-wrap gap-2">
-                {ROLES.map(r => (
-                  <button
-                    key={r.role}
-                    onClick={() => setCurrentRole(r.role as any)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
-                      currentRole === r.role
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30'
-                    )}
-                  >
-                    {currentRole === r.role && <Check className="w-3 h-3" />}
-                    {r.label}
-                  </button>
-                ))}
+            <Section title="Person in charge">
+              <div className="px-5 py-4">
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Who owns each workcell and each app. Used to address notifications, and later to decide who can edit what.
+                </p>
+                <AccessManager currentNtid={currentNtid ?? undefined} />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Current: <span className="text-foreground font-medium capitalize">{currentRole}</span>
-                {' — '}{ROLES.find(r => r.role === currentRole)?.desc}
-              </p>
-            </div>
-
-            {/* User list */}
-            <Section
-              title="Users"
-              action={<button className="text-xs text-primary hover:underline">+ Add User</button>}
-            >
-              {MOCK_USERS.map(u => (
-                <div
-                  key={u.id}
-                  className="flex items-center gap-4 px-5 py-4 border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer group"
-                >
-                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground flex-shrink-0">
-                    {u.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">{u.name}</p>
-                    <p className="text-xs text-muted-foreground">{u.id}</p>
-                  </div>
-                  <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize flex-shrink-0', ROLE_BADGE[u.role])}>
-                    {u.role}
-                  </span>
-                  <span className={cn('text-xs flex-shrink-0 w-14 text-right', u.active ? 'text-status-optimal' : 'text-muted-foreground')}>
-                    {u.active ? 'Active' : 'Inactive'}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
-                </div>
-              ))}
             </Section>
+
           </div>
         )}
 

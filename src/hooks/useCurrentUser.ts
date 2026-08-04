@@ -9,6 +9,10 @@ const USER_INFO_URL = import.meta.env.DEV
   : '/userinfo/RetrieveUserInfoNoParam';
 
 export interface CurrentUser {
+  ntid: string | null;
+  /** Signed by AD_GET; proves `ntid` to the backend. Null when AD_GET has no
+   *  secret configured or the caller was not Windows-authenticated. */
+  token: string | null;
   fullName: string | null;
   email: string | null;
   department: string | null;
@@ -20,6 +24,7 @@ interface ApiUserInfo {
   userName?: string;
   userEmail?: string;
   userNtid?: string;
+  token?: string | null;
   department?: string;
   title?: string;
   officeLocation?: string;
@@ -38,6 +43,8 @@ async function fetchUser(): Promise<CurrentUser> {
     })
     .then((data: ApiUserInfo): CurrentUser => {
       const user: CurrentUser = {
+        ntid: data.userNtid ?? null,
+        token: data.token ?? null,
         fullName: data.userName ?? null,
         email: data.userEmail ?? null,
         department: data.department ?? null,
