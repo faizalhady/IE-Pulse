@@ -524,6 +524,16 @@ export interface DemandCompletionModel {
   non_iedb?: number | null;
   actual_steps?: number | null;
   coverage?: number | null;
+  /** Earliest planned start across the demand sources — when it next hits the floor. */
+  next_build?: string | null;
+  /** Latest planned finish — when current demand for it runs out. */
+  last_build?: string | null;
+  /** Line Balance Rate %. Null until the route is complete enough to compute. */
+  lbr?: number | null;
+  /** IPK buffer trolleys needed along the flow. */
+  ipk_trolleys?: number | null;
+  bottleneck_ct?: number | null;
+  station_count?: number | null;
 }
 
 export interface DemandCompletionScope {

@@ -24,8 +24,12 @@ import type { DemandCompletionModel } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import { Check, ChevronDown, Loader2, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { RouteComparisonDrawer } from './RouteComparisonDrawer';
 
-const GRID = '3rem minmax(7rem,1fr) minmax(8rem,1.2fr) 5rem 6rem 7.5rem 5rem 5rem';
+// Identity first (who/what/where), then schedule, then every number and
+// indicator on the right — so the eye scans names down the left and figures
+// down the right instead of hopping between them.
+const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  5.5rem 6rem 4.5rem 4.5rem';
 
 /** Status → label + colour. Ordered worst-first so the legend reads as a
  *  priority list: what needs creating, then fixing, then nothing. */
@@ -41,7 +45,22 @@ const STATUS_META: Record<string, { label: string; cls: string; hint: string }> 
 };
 const STATUS_ORDER = ['unavailable', 'no_data', 'incomplete', 'route_gap', 'unverified', 'not_checked', 'non_mes', 'complete'];
 
-type SortKey = 'rank' | 'customer' | 'assembly' | 'units' | 'status';
+type SortKey = 'rank' | 'customer' | 'assembly' | 'units' | 'status' | 'lbr' | 'ipk' | 'next' | 'last';
+
+/** "6 Aug" — the year is noise when everything sits inside a 13-week window. */
+function fmtDate(v?: string | null): string {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/** LBR is a balance target, not a percentage of something — 85%+ is healthy. */
+const LBR_TARGET = 85;
+const lbrTone = (v?: number | null) =>
+  v == null ? 'text-muted-foreground'
+    : v >= LBR_TARGET ? 'text-emerald-600 dark:text-emerald-400'
+    : v >= 70 ? 'text-amber-600 dark:text-amber-400'
+    : 'text-red-500';
 
 // Module-level: useSortable memoises on `accessors`, so rebuilding this object
 // every render would defeat the memo and re-sort on each keystroke.
@@ -52,6 +71,10 @@ const ACCESSORS: Record<SortKey, (m: DemandCompletionModel) => string | number |
   units:    m => m.units,
   // Sort by severity, not alphabetically — "what needs work" first.
   status:   m => STATUS_ORDER.indexOf(m.status),
+  lbr:      m => m.lbr ?? null,
+  ipk:      m => m.ipk_trolleys ?? null,
+  next:     m => m.next_build ?? null,
+  last:     m => m.last_build ?? null,
 };
 
 function Box({ on, partial = false }: { on: boolean; partial?: boolean }) {
@@ -74,6 +97,7 @@ export default function DemandCompletionReport() {
   const [q, setQ] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
   const [limit, setLimit] = useState(0);                // 0 = no cap
+  const [open, setOpen] = useState<{ customer: string; assembly: string } | null>(null);
 
   const scope = data?.scope;
   const plants = useMemo(() => Object.keys(scope?.plants ?? {}).sort(), [scope]);
@@ -260,10 +284,12 @@ export default function DemandCompletionReport() {
           <SortHeader label="Workcell" active={sort?.key === 'customer'} dir={sort?.dir} onClick={() => toggle('customer')} />
           <SortHeader label="Model" active={sort?.key === 'assembly'} dir={sort?.dir} onClick={() => toggle('assembly')} />
           <span>Plant</span>
+          <SortHeader label="Next build" active={sort?.key === 'next'} dir={sort?.dir} onClick={() => toggle('next')} />
+          <SortHeader label="Last build" active={sort?.key === 'last'} dir={sort?.dir} onClick={() => toggle('last')} />
           <SortHeader label="Units" active={sort?.key === 'units'} dir={sort?.dir} onClick={() => toggle('units')} />
           <SortHeader label="Status" active={sort?.key === 'status'} dir={sort?.dir} onClick={() => toggle('status')} />
-          <span>Steps</span>
-          <span>Evidence</span>
+          <SortHeader label="LBR" active={sort?.key === 'lbr'} dir={sort?.dir} onClick={() => toggle('lbr')} className="justify-end" />
+          <SortHeader label="IPK" active={sort?.key === 'ipk'} dir={sort?.dir} onClick={() => toggle('ipk')} className="justify-end" />
         </div>
 
         <div className="max-h-[62vh] overflow-y-auto">
@@ -275,32 +301,46 @@ export default function DemandCompletionReport() {
           {sorted.map(m => {
             const meta = STATUS_META[m.status] ?? STATUS_META.not_checked;
             return (
-              <div key={`${m.customer}|${m.assembly}`}
-                className="grid items-center gap-2 border-b px-4 py-2 text-xs last:border-0 hover:bg-muted/30"
+              <button key={`${m.customer}|${m.assembly}`}
+                onClick={() => setOpen({ customer: m.customer, assembly: m.assembly })}
+                className="grid w-full items-center gap-2 border-b px-4 py-2 text-left text-xs last:border-0 hover:bg-muted/30"
                 style={{ gridTemplateColumns: GRID }}>
                 <span className="tabular-nums text-muted-foreground">{m.rank}</span>
                 <span className="truncate font-medium" title={m.customer}>{m.customer}</span>
                 <span className="truncate font-mono text-[11px]" title={m.assembly}>{m.assembly}</span>
                 <span className="truncate text-muted-foreground">{m.plant}</span>
+
+                <span className="tabular-nums text-muted-foreground">{fmtDate(m.next_build)}</span>
+                <span className="tabular-nums text-muted-foreground">{fmtDate(m.last_build)}</span>
+
                 <span className="tabular-nums">{(m.units ?? 0).toLocaleString()}</span>
-                <span>
+                <span className="flex items-center gap-1">
                   <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-medium', meta.cls)}
                     title={meta.hint}>{meta.label}</span>
+                  {m.source === 'batch' && (
+                    <span title="Verdict from #21 batch counts — a customer-level aggregate that can drag in rework and other variants"
+                      className="text-[10px] text-amber-500">⚠</span>
+                  )}
                 </span>
-                <span className="tabular-nums text-muted-foreground">
-                  {m.expected != null ? `${m.present ?? 0}/${m.expected}` : '—'}
+                <span className={cn('text-right tabular-nums', lbrTone(m.lbr))}>
+                  {m.lbr != null ? `${Math.round(m.lbr)}%` : '—'}
                 </span>
-                <span className="truncate text-[10px] text-muted-foreground"
-                  title={m.source === 'batch'
-                    ? 'Verdict from #21 batch counts — a customer-level aggregate that can drag in rework and other variants'
-                    : m.source === 'serial' ? 'Verdict from a real board route walk (#132)' : ''}>
-                  {m.source === 'serial' ? 'board' : m.source === 'batch' ? 'batch ⚠' : '—'}
+                <span className="text-right tabular-nums text-muted-foreground">
+                  {m.ipk_trolleys != null ? Math.round(m.ipk_trolleys) : '—'}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
+
+      {open && (
+        <RouteComparisonDrawer
+          customer={open.customer}
+          assembly={open.assembly}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </div>
   );
 }
