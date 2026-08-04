@@ -23,12 +23,17 @@ import { useSortable } from '@/hooks/shared/useSortable';
 import type { DemandCompletionModel } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import { Check, ChevronDown, Loader2, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RouteComparisonDrawer } from './RouteComparisonDrawer';
 
 // Identity first (who/what/where), then schedule, then every number and
 // indicator on the right — so the eye scans names down the left and figures
 // down the right instead of hopping between them.
+/** Fixed row height — the virtualiser needs one number, and every row is a
+ *  single line of text, so measuring per-row would buy nothing. */
+const ROW_H = 34;
+
 const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  5.5rem 6rem 4.5rem 4.5rem';
 
 /** Status → label + colour. Ordered worst-first so the legend reads as a
@@ -95,6 +100,7 @@ export default function DemandCompletionReport() {
   const [picked, setPicked] = useState<string[]>([]);   // workcells; [] = all
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [q, setQ] = useState('');
+  const [qDebounced, setQDebounced] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
   const [limit, setLimit] = useState(0);                // 0 = no cap
   const [open, setOpen] = useState<{ customer: string; assembly: string } | null>(null);
@@ -102,6 +108,13 @@ export default function DemandCompletionReport() {
   const scope = data?.scope;
   const plants = useMemo(() => Object.keys(scope?.plants ?? {}).sort(), [scope]);
   const allWorkcells = scope?.workcells ?? [];
+
+  // Filtering 3,900 rows on every keystroke made typing feel laggy. The input
+  // stays instant; the filter catches up 180ms later.
+  useEffect(() => {
+    const id = setTimeout(() => setQDebounced(q), 180);
+    return () => clearTimeout(id);
+  }, [q]);
 
   // Default is EVERYTHING — the report's job is "show me the demand list", and
   // making the user pick before seeing anything hides the headline.
@@ -133,17 +146,37 @@ export default function DemandCompletionReport() {
 
   const rows = useMemo(() => {
     let r = data?.models ?? [];
-    if (picked.length) r = r.filter(m => picked.includes(m.customer));
-    if (statusFilter.length) r = r.filter(m => statusFilter.includes(m.status));
-    if (q.trim()) {
-      const s = q.trim().toLowerCase();
+    // Sets, not arrays: .includes() on every one of ~3,900 rows was a linear
+    // scan per row for both filters.
+    if (picked.length) {
+      const wanted = new Set(picked);
+      r = r.filter(m => wanted.has(m.customer));
+    }
+    if (statusFilter.length) {
+      const wanted = new Set(statusFilter);
+      r = r.filter(m => wanted.has(m.status));
+    }
+    if (qDebounced.trim()) {
+      const s = qDebounced.trim().toLowerCase();
       r = r.filter(m => m.assembly.toLowerCase().includes(s) || m.customer.toLowerCase().includes(s));
     }
     return limit ? r.slice(0, limit) : r;
-  }, [data, picked, statusFilter, q, limit]);
+  }, [data, picked, statusFilter, qDebounced, limit]);
 
   const { sorted, sort, toggle } = useSortable<DemandCompletionModel, SortKey>(rows, ACCESSORS,
     { key: 'rank', dir: 'asc' });
+
+  // Virtualised: the demand list is ~3,900 rows x 10 cells. Rendering them all
+  // put ~39,000 nodes in the DOM, and because `open`/`q`/`picked` live in this
+  // component EVERY keystroke and every row click re-rendered the lot — which is
+  // what made the page feel stuck. Only the visible window is mounted now.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 12,
+  });
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -292,19 +325,21 @@ export default function DemandCompletionReport() {
           <SortHeader label="IPK" active={sort?.key === 'ipk'} dir={sort?.dir} onClick={() => toggle('ipk')} className="justify-end" />
         </div>
 
-        <div className="max-h-[62vh] overflow-y-auto">
+        <div ref={scrollRef} className="max-h-[62vh] overflow-y-auto">
           {sorted.length === 0 && (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
               Nothing matches the current filters.
             </div>
           )}
-          {sorted.map(m => {
+          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+          {rowVirtualizer.getVirtualItems().map(v => {
+            const m = sorted[v.index];
             const meta = STATUS_META[m.status] ?? STATUS_META.not_checked;
             return (
               <button key={`${m.customer}|${m.assembly}`}
                 onClick={() => setOpen({ customer: m.customer, assembly: m.assembly })}
-                className="grid w-full items-center gap-2 border-b px-4 py-2 text-left text-xs last:border-0 hover:bg-muted/30"
-                style={{ gridTemplateColumns: GRID }}>
+                className="absolute left-0 top-0 grid w-full items-center gap-2 border-b px-4 text-left text-xs hover:bg-muted/30"
+                style={{ gridTemplateColumns: GRID, height: ROW_H, transform: `translateY(${v.start}px)` }}>
                 <span className="tabular-nums text-muted-foreground">{m.rank}</span>
                 <span className="truncate font-medium" title={m.customer}>{m.customer}</span>
                 <span className="truncate font-mono text-[11px]" title={m.assembly}>{m.assembly}</span>
@@ -331,6 +366,7 @@ export default function DemandCompletionReport() {
               </button>
             );
           })}
+          </div>
         </div>
       </div>
 
