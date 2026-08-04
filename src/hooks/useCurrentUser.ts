@@ -81,8 +81,12 @@ export async function getAuthToken(): Promise<string | null> {
  */
 export function installAuthFetch(): void {
   const original = window.fetch.bind(window);
+  // Match the API path wherever it sits: prod serves it under
+  // /ietools/<app>/api/, dev under /ole-api/api/. Anchoring on '/api/' covers
+  // both. AD_GET's own paths are excluded - they use Windows credentials, and
+  // calling back into fetchUser() would recurse.
   const isBackendCall = (url: string) =>
-    (url.startsWith('/api/') || url.includes('/ole-api/')) && !url.includes('/userinfo/');
+    url.includes('/api/') && !url.includes('/userinfo/') && !url.includes('/hc/');
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input

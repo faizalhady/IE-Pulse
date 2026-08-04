@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
-const BASE = import.meta.env.DEV ? '/ole-api/api' : '/api';
+// Must match AccessManager: in prod the OLE app's API is proxied under
+// /ietools/ole/api, not /api. Getting this wrong fails the access lookup, which
+// reads as 'not a developer' and silently hides the gear.
+const BASE = import.meta.env.DEV ? '/ole-api/api' : '/ietools/ole/api';
 
 export type Level = 'viewer' | 'admin' | 'super_admin' | 'developer';
 
