@@ -21,7 +21,6 @@ import {
   MapPin,
   Microscope,
   Pencil,
-  Settings2,
   TableProperties,
   Timer,
   Truck,
@@ -117,7 +116,8 @@ export const APPS: AppConfig[] = [
     navItems: [
       { label: 'Home', to: '/cycle-time/workcells', icon: Home },
       // { label: 'Incompletion Report', to: '/cycle-time/incompletion', icon: ClipboardList },
-      { label: 'Incompletion Report', to: '/cycle-time/plant-runners', icon: Building2 },
+      { label: 'Incompletion Report', to: '/cycle-time/completion', icon: ClipboardList },
+      { label: 'Plant Runners', to: '/cycle-time/plant-runners', icon: Building2 },
       // Hidden from the sidebar (routes still work):
       //  • Assemblies → now lives in the workcell Breakdown→Assemblies tab
       //  • Data → still reachable directly at /cycle-time/data
@@ -136,9 +136,9 @@ export const APPS: AppConfig[] = [
     category: 'Analytics',
     navItems: [
       { label: 'Dashboard', to: '/ppqt', icon: LayoutDashboard, exact: false },
-      { label: 'Testing Dashboard', to: '/ppqt/dash2', icon: FlaskConical },
-      { label: 'Workcells', to: '/ppqt/workcell', icon: Factory },
-      { label: 'Config', to: '/ppqt/config', icon: Settings2 },
+      // { label: 'Testing Dashboard', to: '/ppqt/dash2', icon: FlaskConical },
+      // { label: 'Workcells', to: '/ppqt/workcell', icon: Factory },
+      // { label: 'Config', to: '/ppqt/config', icon: Settings2 },
     ],
   },
   {

@@ -8,6 +8,7 @@ import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
 import CycleTimeWorkcell from "@/pages/cycletime/CycleTimeWorkcell";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
+import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
 import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail";
 import PlantRunnerDashboard from "@/pages/cycletime/PlantRunnerDashboard";
@@ -144,6 +145,7 @@ function AppShell() {
               <Route path="/cycle-time" element={<Navigate to="/cycle-time/workcells" replace />} />
               <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
               <Route path="/cycle-time/wc/:customer" element={<CycleTimeWorkcell />} />
+              <Route path="/cycle-time/completion" element={<DemandCompletionReport />} />
               <Route path="/cycle-time/incompletion" element={<IncompletionReport />} />
               <Route path="/cycle-time/incompletion/:customer" element={<IncompletionReportDetail />} />
               <Route path="/cycle-time/plant-runners" element={<PlantRunnerDashboard />} />

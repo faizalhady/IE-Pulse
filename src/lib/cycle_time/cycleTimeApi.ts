@@ -467,6 +467,152 @@ export interface CycleTimeProfileOpts {
   top_limit?: number;
 }
 
+// ─── Completion status (IEDB cycle-time vs MES actual route) ─────────────────
+
+/** One of five completion states for a top-runner model. */
+export type CompletionStatus = 'unavailable' | 'no_data' | 'incomplete' | 'complete' | 'unverified' | 'non_mes';
+
+/** Per-model completion summary row. */
+export interface CompletionModel {
+  customer: string;
+  assembly: string;
+  status: CompletionStatus;
+  /** # IEDB-relevant steps the model actually runs (mapped). */
+  expected: number;
+  /** # of those that HAVE cycle time in IEDB. */
+  present: number;
+  /** "; "-joined IEDB aliases the model runs but has no cycle time for. */
+  missing: string;
+  /** # MES steps not in the mapping (potential mapping gaps). */
+  unmapped: number;
+  /** Fraction of the model's MES steps the workbook recognises (confidence). */
+  coverage: number | null;
+  /** # distinct MES steps observed in the window (thin < 3 = low confidence). */
+  actual_steps: number;
+  /** Per-model Line Balance Rate % (from the IEDB route; only meaningful when complete). */
+  lbr?: number | null;
+  /** Per-model IPK trolley count (buffers along the route). */
+  ipk_trolleys?: number | null;
+}
+
+// ─── Demand-scoped completion (the Incompletion Report page) ─────────────────
+
+/** `not_checked` = the completion run has not reached this model yet. It is NOT
+ *  a verdict — the model is simply absent from the mart. Shown rather than
+ *  hidden, so "missing from the report" can't be mistaken for "no problems". */
+export type DemandCompletionStatus = CompletionStatus | 'route_gap' | 'not_checked';
+
+export interface DemandCompletionModel {
+  /** 1-based position by demand units across the WHOLE list, not the filtered view. */
+  rank: number;
+  plant: string;
+  region: string;
+  customer: string;
+  assembly: string;
+  /** Demand units: MES planned + planner forecast, summed. */
+  units: number;
+  /** Which demand source(s) saw it: "mes", "planner" or "mes+planner". */
+  sources: string;
+  status: DemandCompletionStatus;
+  /** How the verdict was reached: "serial" (#132, strong) | "batch" (#21, weak) | "none". */
+  source?: string | null;
+  expected?: number | null;
+  present?: number | null;
+  no_ct?: number | null;
+  not_in_iedb?: number | null;
+  unmapped?: number | null;
+  non_iedb?: number | null;
+  actual_steps?: number | null;
+  coverage?: number | null;
+}
+
+export interface DemandCompletionScope {
+  /** plant → its workcells. Drives the picker, so the UI never hardcodes plants. */
+  plants: Record<string, string[]>;
+  /** region → its plant codes (Penang Island = Plant 1 + JPE, Batu Kawan = JBK). */
+  regions: Record<string, string[]>;
+  workcells: string[];
+}
+
+export interface DemandCompletionResponse {
+  as_of: string | null;
+  /** Models in the demand list before filtering. */
+  total: number;
+  /** Models after filtering. */
+  count: number;
+  counts: Record<string, number>;
+  /** How many of `total` the completion run has not covered yet. */
+  unchecked: number;
+  scope: DemandCompletionScope;
+  models: DemandCompletionModel[];
+}
+
+// ─── Per-model LBR / IPK breakdown (the drawer proof) ────────────────────────
+
+export interface LineMetricsStation { step: string; ct: number; is_bottleneck: boolean; }
+export interface LineMetricsLine {
+  sub_workcenter: string;
+  lbr: number | null;
+  n0: number;
+  bottleneck_step: string;
+  bottleneck_ct: number;
+  /** The perfectly-levelled operator height (target line on the Yamazumi). */
+  balance_line: number | null;
+  stations: LineMetricsStation[];
+}
+export interface LineMetricsBuffer {
+  from: string; to: string; up_uph: number; down_uph: number;
+  gap: number; ipk_units: number; trolleys: number;
+}
+/** IPK flow for one line (sub-workcenter): every process with its UPH, buffers between each. */
+export interface IpkFlowStation { step: string; uph: number; ct: number; }
+export interface IpkLine {
+  sub_workcenter: string;
+  trolleys: number;
+  stations: IpkFlowStation[];
+  buffers: LineMetricsBuffer[];
+}
+export interface LineMetrics {
+  customer: string; assembly: string;
+  lbr: number | null; n0: number; bottleneck_ct: number; bottleneck_step: string;
+  station_count: number; ipk_trolleys: number; loading: number; boards_per_trolley: number;
+  lines: LineMetricsLine[];
+  ipk_lines: IpkLine[];
+  buffers: LineMetricsBuffer[];
+}
+
+export interface CompletionSummary {
+  as_of: string | null;
+  count: number;
+  counts: Partial<Record<CompletionStatus, number>>;
+  models: CompletionModel[];
+}
+
+/** One MES route step (actual), tagged by how it maps to IEDB. */
+export interface CompletionMesStep {
+  order: number | null;
+  step: string;
+  alias: string;
+  qty: number | null;
+  status: 'present' | 'missing' | 'non_iedb' | 'unmapped';
+}
+/** One IEDB route step (has a cycle time). */
+export interface CompletionIedbStep {
+  process: string;
+  alias: string | null;
+  sub_workcenter: string | null;
+  /** IEDB step sequence — sort by this so it aligns with the MES route order. */
+  order: number | null;
+  cycle_time: number | null;
+}
+/** MES route vs IEDB route for one model (the side-by-side). */
+export interface CompletionSteps {
+  customer: string;
+  assembly: string;
+  mes: CompletionMesStep[];
+  iedb: CompletionIedbStep[];
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export const cycleTimeApi = {
@@ -562,6 +708,20 @@ export const cycleTimeApi = {
     trigger: (mode: 'full' | 'incremental' = 'incremental') =>
       post<CycleTimeRefreshResponse>('/refresh', { mode }),
     status: () => get<CycleTimeRefreshStatus>('/refresh/status'),
+  },
+  completion: {
+    /** Per-model completion summary (all top-runners), optionally filtered. */
+    list: (customer?: string, status?: string) =>
+      get<CompletionSummary>('/completion', { customer, status }),
+    /** Demand-ranked completion: what we are building and about to build. */
+    demand: (params?: { plants?: string; workcells?: string; status?: string; limit?: number }) =>
+      get<DemandCompletionResponse>('/completion/demand', params),
+    /** MES actual route vs IEDB route for one model (the side-by-side). */
+    steps: (customer: string, assembly: string, signal?: AbortSignal) =>
+      get<CompletionSteps>('/completion/steps', { customer, assembly }, signal),
+    /** Per-model LBR + IPK breakdown (lines, stations, buffers). */
+    lineMetrics: (customer: string, assembly: string, signal?: AbortSignal) =>
+      get<LineMetrics>('/completion/line-metrics', { customer, assembly }, signal),
   },
 };
 

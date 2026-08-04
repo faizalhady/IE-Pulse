@@ -111,6 +111,47 @@ export function useCycleTimePlantRunners(top = 50, plants = 3, mode: 'historical
   });
 }
 
+/** Completion-status summary for all top-runners (one fetch → lookup by customer+assembly). */
+export function useCycleTimeCompletion() {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'completion'] as const,
+    queryFn:  () => cycleTimeApi.completion.list(),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** Demand-ranked completion for the Incompletion Report page.
+ *  Filtering is done client-side from one payload: the whole list is ~3.9k rows
+ *  and the picker changes constantly, so re-fetching per selection would be far
+ *  more traffic than sending it once. */
+export function useCycleTimeCompletionDemand() {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'completionDemand'] as const,
+    queryFn:  () => cycleTimeApi.completion.demand(),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** MES actual route vs IEDB route for one model (the side-by-side comparison). */
+export function useCycleTimeCompletionSteps(customer: string | undefined, assembly: string | undefined) {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'completionSteps', customer ?? '', assembly ?? ''] as const,
+    queryFn:  ({ signal }) => cycleTimeApi.completion.steps(customer!, assembly!, signal),
+    enabled:  Boolean(customer && assembly),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** Per-model LBR + IPK breakdown (lines, stations, buffers) — the drawer proof. */
+export function useCycleTimeLineMetrics(customer: string | undefined, assembly: string | undefined) {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'lineMetrics', customer ?? '', assembly ?? ''] as const,
+    queryFn:  ({ signal }) => cycleTimeApi.completion.lineMetrics(customer!, assembly!, signal),
+    enabled:  Boolean(customer && assembly),
+    staleTime: 30 * 60_000,
+  });
+}
+
 /** IEDB with-data / no-data assembly name sets for one customer (3-way badge). */
 export function useCycleTimeAssemblyCatalog(customer: string | undefined) {
   return useQuery({
