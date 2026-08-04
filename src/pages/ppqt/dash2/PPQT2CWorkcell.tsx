@@ -15,14 +15,17 @@
  *   TOP Demand   →  rows 37-59  top assemblies × CT at every process
  *
  * Used as the "DASH" tab in PPQT2AWorkcell — no standalone route.
- * Data: mock (ppqt2Data.ts + mockPpqtData.ts) — same numbers as the other tabs.
+ * Data: REAL — capacity comes in as a prop (same object as the other tabs);
+ * the TOP Demand matrix is one GET /api/ppqt/matrix per selected line.
  */
 
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { usePpqtMatrix } from '@/hooks/ppqt/usePpqtData';
 import { cn } from '@/lib/utils';
-import { useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -34,15 +37,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { PERIOD_OPTIONS, getCT } from '../mockPpqtData';
 import { PPQTProcess } from '../types';
 import { StepDrawer } from './StepDrawer';
-import {
-  Ppqt2Line,
-  buildWorkcellCapacity,
-  getEvidenceForProcess,
-  getMathTrail,
-} from './ppqt2Data';
+import { PPQT_RESOURCE_COPY, type PPQTResourceMode } from '@/lib/ppqt/ppqtConstants';
+import { Ppqt2Line, getMathTrail, type Ppqt2Workcell } from './ppqt2Data';
 
 // Matrix grid: row label | total ("D") column | one column per process.
 function matrixCols(n: number): string {
@@ -53,11 +51,18 @@ function matrixCols(n: number): string {
  * DASH replica body (line selector + chart + matrix + TOP Demand) — embeddable.
  * Rendered as the "DASH" tab in the PPQT dashboard workcell page.
  */
-export function PPQT2CWorkcellContent({ workcellId }: { workcellId: string }) {
-  const data = useMemo(() => buildWorkcellCapacity(workcellId), [workcellId]);
+export function PPQT2CWorkcellContent({
+  workcellId, data, period = '', month, resource = 'equipment',
+}: {
+  workcellId: string;
+  data: Ppqt2Workcell;
+  period?: string;
+  month?: string;
+  resource?: PPQTResourceMode;
+}) {
+  const copy = PPQT_RESOURCE_COPY[resource];
   const [lineId, setLineId] = useState<string | null>(null);
   const [drawerProc, setDrawerProc] = useState<PPQTProcess | null>(null);
-  if (!data) return null;
 
   // The Excel DASH works one sub-workcenter at a time — default to the first.
   const line: Ppqt2Line = data.lines.find(l => l.swc.id === lineId) ?? data.lines[0];
@@ -92,12 +97,16 @@ export function PPQT2CWorkcellContent({ workcellId }: { workcellId: string }) {
           {/* chart — Equipment Available vs Resources NEEDED per process */}
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-4 py-2.5 border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Equipment Available vs Resources NEEDED — {line.swc.name}
+              {copy.haveLabel} vs Resources NEEDED — {line.swc.name}
             </div>
             <div className="px-2 pt-3 pb-1">
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart
-                  data={procs.map(p => ({ name: p.name, Available: p.eqAvail, Needed: p.resNeeded, gap: p.gap }))}
+                  data={procs.map(p => ({
+                    name: p.name, Available: p.eqAvail,
+                    // dwell steps aren't serially sized — omit their (huge) bar so it doesn't blow the Y-axis
+                    Needed: p.dwell ? null : p.resNeeded, gap: p.gap, dwell: p.dwell,
+                  }))}
                   barGap={2}
                   onClick={onChartClick}
                 >
@@ -110,21 +119,27 @@ export function PPQT2CWorkcellContent({ workcellId }: { workcellId: string }) {
                     textAnchor="end"
                     height={55}
                   />
-                  {/* hidden numeric axis — lets zone shading cover each band edge-to-edge */}
-                  <XAxis xAxisId="zones" type="number" domain={[0, procs.length]} hide />
+                  {/* Hidden numeric axis — lets zone shading cover each band edge-to-edge.
+                      Recharts throws [DecimalError] NaN computing ticks for a single-band
+                      domain, and real data does have one-process lines (e.g. WAB BE ESS
+                      P1A-1), so the shading is skipped below 2 processes — the bars still
+                      carry the verdict. */}
+                  {procs.length > 1 && (
+                    <XAxis xAxisId="zones" type="number" domain={[0, procs.length]} hide />
+                  )}
                   <YAxis
                     allowDecimals={false}
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     width={28}
                   />
                   {/* zone shading: red = not enough machines, green = enough */}
-                  {procs.map((p, i) => (
+                  {procs.length > 1 && procs.map((p, i) => (
                     <ReferenceArea
                       key={p.id}
                       xAxisId="zones"
                       x1={i}
                       x2={i + 1}
-                      fill={p.gap > 0 ? '#ef4444' : '#10b981'}
+                      fill={p.dwell ? '#8b5cf6' : p.gap > 0 ? '#ef4444' : '#10b981'}
                       fillOpacity={0.08}
                       stroke="none"
                       cursor="pointer"
@@ -146,39 +161,47 @@ export function PPQT2CWorkcellContent({ workcellId }: { workcellId: string }) {
               </ResponsiveContainer>
             </div>
             <p className="px-4 pb-3 text-[10px] text-muted-foreground">
-              Zone shading: <span className="text-red-400 font-semibold">red</span> = not enough machines to meet{' '}
-              {PERIOD_OPTIONS[0]} demand at that step, <span className="text-emerald-400 font-semibold">green</span> = enough.
+              Zone shading: <span className="text-red-400 font-semibold">red</span> = not enough {copy.unitPlural} to meet{' '}
+              {period} demand at that step, <span className="text-emerald-400 font-semibold">green</span> = enough.
               Click a process to see the math trail and which assemblies drive its load.
             </p>
           </div>
 
           {/* the DASH matrix — table view of the same data */}
-          <DashMatrix line={line} totalDemand={data.wc.totalDemand} />
+          <DashMatrix line={line} totalDemand={data.wc.totalDemand} demandThru={data.demandThru} resource={resource} />
 
           {/* TOP Demand block — Excel rows 37-59 */}
-          <TopDemandMatrix line={line} workcellId={data.wc.id} />
+          <TopDemandMatrix line={line} workcellId={workcellId} month={month} resource={resource} />
         </div>
 
         {/* step drawer — opened by clicking a process band in the chart */}
         {drawerProc && (
-          <StepDrawer process={drawerProc} line={line.swc} onClose={() => setDrawerProc(null)} />
+          <StepDrawer
+            workcell={workcellId}
+            process={drawerProc}
+            line={line.swc}
+            month={month}
+            resource={resource}
+            onClose={() => setDrawerProc(null)}
+          />
         )}
       </div>
   );
 }
 
 // ─── The DASH calculation matrix (Excel rows 21-35) ──────────────────────────
-function DashMatrix({ line, totalDemand }: { line: Ppqt2Line; totalDemand: number }) {
+function DashMatrix({
+  line, totalDemand, demandThru, resource,
+}: {
+  line: Ppqt2Line;
+  totalDemand: number;
+  demandThru: Map<string, number>;
+  resource: PPQTResourceMode;
+}) {
+  const copy = PPQT_RESOURCE_COPY[resource];
   const procs = line.processes;
   const cols = matrixCols(procs.length);
   const s = line.swc;
-
-  // Demand-through-step per process (Excel row 28 E:S)
-  const demandThru = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const p of procs) m.set(p.id, getEvidenceForProcess(p.id).demandThruStep);
-    return m;
-  }, [procs]);
 
   // Round Up flag (Excel row 34) — set where rounding up changed the result.
   const roundUpFlag = (p: PPQTProcess): string => {
@@ -208,18 +231,18 @@ function DashMatrix({ line, totalDemand }: { line: Ppqt2Line; totalDemand: numbe
       total: totalDemand.toLocaleString(),
       cell: p => (demandThru.get(p.id) ?? 0).toLocaleString(),
     },
-    { label: 'Weighted Cycle time', cell: p => p.wct.toFixed(2) },
-    { label: 'Takt Time (Min)',     cell: p => p.takt.toFixed(1) },
+    { label: resource === 'people' ? 'Weighted Manual time' : 'Weighted Cycle time', cell: p => p.wct.toFixed(2) },
+    { label: 'Takt Time (Sec)',     cell: p => p.takt.toFixed(1) },
     // rows 32-35 — the output block
     {
-      label: 'Equipment Available', section: true,
+      label: copy.haveLabel, section: true,
       total: s.name,
       cell: p => String(p.eqAvail),
     },
     {
       label: 'Resources NEEDED',
-      cell: p => String(p.resNeeded),
-      cellClass: p => (p.gap > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'),
+      cell: p => (p.dwell ? 'dwell' : String(p.resNeeded)),
+      cellClass: p => (p.dwell ? 'text-violet-400' : p.gap > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'),
     },
     { label: 'Round Up',      cell: roundUpFlag },
     { label: 'Justification', cell: () => '' },
@@ -283,32 +306,32 @@ function DashMatrix({ line, totalDemand }: { line: Ppqt2Line; totalDemand: numbe
 }
 
 // ─── TOP Demand block (Excel rows 37-59) ──────────────────────────────────────
-function TopDemandMatrix({ line, workcellId }: { line: Ppqt2Line; workcellId: string }) {
+function TopDemandMatrix({
+  line, workcellId, month, resource,
+}: { line: Ppqt2Line; workcellId: string; month?: string; resource: PPQTResourceMode }) {
   const procs = line.processes;
   const cols = matrixCols(procs.length);
 
   // Top assemblies by demand with their CT at every process — blank = not routed.
-  const rows = useMemo(() => {
-    // Collect assemblies routing through this line via the first process's evidence,
-    // then rank the workcell's assemblies by demand (Excel: TOP Demand : 20).
-    const seen = new Map<string, { assemblyId: string; label: string; demand: number }>();
-    for (const p of procs) {
-      for (const r of getEvidenceForProcess(p.id).rows) {
-        if (!seen.has(r.assemblyId)) {
-          seen.set(r.assemblyId, { assemblyId: r.assemblyId, label: `${r.partNumber} / ${r.rev}`, demand: r.demand });
-        }
-      }
-    }
-    return [...seen.values()].sort((a, b) => b.demand - a.demand).slice(0, 20);
-  }, [procs]);
+  // One request per line; the backend does the ranking and the pivot.
+  const { data, isLoading } = usePpqtMatrix(workcellId, line.swc.name, 20, month, resource);
+  const rows = data?.assemblies ?? [];
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="px-4 py-2.5 border-b border-border flex items-baseline gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">TOP Demand :</span>
         <span className="text-[10px] font-bold text-foreground font-mono">{rows.length}</span>
-        <span className="text-[9px] text-muted-foreground ml-auto">cycle time (s) per assembly at each process — blank = does not route through</span>
+        <span className="text-[9px] text-muted-foreground ml-auto">
+          {resource === 'people' ? 'operator time' : 'cycle time'} (s) per assembly at each process — blank = does not route through
+        </span>
       </div>
+      {isLoading && (
+        <div className="flex items-center gap-2 px-4 py-6 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Loading top demand…
+        </div>
+      )}
       <div className="overflow-x-auto">
         <div style={{ minWidth: 15 * 16 + 6.5 * 16 + procs.length * 96 }}>
           {/* header — ' SAP Part Number' | 'Demand' | process columns */}
@@ -324,28 +347,31 @@ function TopDemandMatrix({ line, workcellId }: { line: Ppqt2Line; workcellId: st
             ))}
           </div>
 
-          {rows.map(r => (
-            <div
-              key={r.assemblyId}
-              className="grid items-center border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-              style={{ gridTemplateColumns: cols, height: 36 }}
-            >
-              <div className="px-3 text-[11px] font-mono font-medium text-foreground sticky left-0 bg-card truncate" title={r.label}>
-                {r.label}
+          {rows.map(r => {
+            const label = `${r.assembly} / ${r.revision}`;
+            return (
+              <div
+                key={`${r.assembly}-${r.revision}`}
+                className="grid items-center border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                style={{ gridTemplateColumns: cols, height: 36 }}
+              >
+                <div className="px-3 text-[11px] font-mono font-medium text-foreground sticky left-0 bg-card truncate" title={label}>
+                  {label}
+                </div>
+                <div className="px-2 text-right text-[11px] font-mono font-semibold text-foreground tabular-nums">
+                  {r.demand.toLocaleString()}
+                </div>
+                {procs.map(p => {
+                  const ct = r.ct[p.name];
+                  return (
+                    <div key={p.id} className="px-2 text-right text-[11px] font-mono text-muted-foreground tabular-nums">
+                      {ct && ct > 0 ? ct.toFixed(2) : ''}
+                    </div>
+                  );
+                })}
               </div>
-              <div className="px-2 text-right text-[11px] font-mono font-semibold text-foreground tabular-nums">
-                {r.demand.toLocaleString()}
-              </div>
-              {procs.map(p => {
-                const ct = getCT(r.assemblyId, p.id);
-                return (
-                  <div key={p.id} className="px-2 text-right text-[11px] font-mono text-muted-foreground tabular-nums">
-                    {ct && ct.totalAdj > 0 ? ct.totalAdj.toFixed(2) : ''}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

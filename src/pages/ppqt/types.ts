@@ -71,6 +71,7 @@ export interface PPQTProcess {
   resNeeded: number;           // Resources Needed (ROUNDUP output)
   gap: number;                 // resNeeded - eqAvail
   util: number;                // Utilisation %
+  dwell: boolean;              // CT is a batch/dwell time — not serially sized
 
   // CT source breakdown across assemblies routing through this process
   primaryCtSource: CTSource;   // dominant source — used for the row badge

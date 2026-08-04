@@ -127,3 +127,46 @@ export const PPQT_VERDICT_DOT: Record<PPQTVerdict, string> = {
   tight: 'bg-amber-400',
   ok:    'bg-emerald-500',
 };
+
+// ─── Period ──────────────────────────────────────────────────────────────────
+// PPQT is a MONTHLY analysis — confirmed against the Jabil training package
+// ("It is recommended to use the Monthly Demand") and the Wabtec workbook
+// (DASH!C22 "Days in the Period of the Demand = 26"). One run = one month.
+
+/** '2026-07' → 'Jul 2026'. Returns '' for empty/invalid input. */
+export function monthLabel(ym: string | undefined): string {
+  if (!ym) return '';
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(ym);
+  if (!m) return ym;
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+// ─── Resource mode ───────────────────────────────────────────────────────────
+// PPQT sizes two resources off the same demand and takt. Excel SMT!C40 labels
+// the output "Resources NEEDED (DLs per Shift or Equipment)" — same formula,
+// read as machines or as people depending on the process.
+export type PPQTResourceMode = 'equipment' | 'people';
+
+/** Per-mode wording so the grids/drawers read correctly in both modes. */
+export const PPQT_RESOURCE_COPY: Record<PPQTResourceMode, {
+  label: string;
+  /** Noun for one unit of the resource, e.g. "machine". */
+  unit: string;
+  unitPlural: string;
+  /** Column header for the CT that this mode charges. */
+  ctHeader: string;
+  /** What the "Have" column counts. */
+  haveLabel: string;
+  shortLabel: string;
+}> = {
+  equipment: {
+    label: 'Equipment', unit: 'machine', unitPlural: 'machines',
+    ctHeader: 'WCT (s)', haveLabel: 'Machines available', shortLabel: 'Machines short',
+  },
+  people: {
+    label: 'Head Count', unit: 'operator', unitPlural: 'operators',
+    ctHeader: 'Manual (s)', haveLabel: 'Headcount per station', shortLabel: 'People short',
+  },
+};

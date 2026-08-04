@@ -9,27 +9,36 @@
  * table with expand-in-place CT composition per assembly.
  */
 
+import { usePpqtEvidence } from '@/hooks/ppqt/usePpqtData';
 import {
   PPQT_AREA_BADGE,
   PPQT_CT_SOURCE_BADGE,
   PPQT_UTIL_TEXT,
   getPPQTStatus,
+  PPQT_RESOURCE_COPY,
+  type PPQTResourceMode,
 } from '@/lib/ppqt/ppqtConstants';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PPQTProcess, PPQTSubWorkcenter } from '../types';
-import { getEvidenceForProcess, getMathTrail } from './ppqt2Data';
+import { adaptEvidence, getMathTrail } from './ppqt2Data';
 
 export function StepDrawer({
-  process, line, onClose,
+  workcell, process, line, month, resource = 'equipment', onClose,
 }: {
+  workcell: string;
   process: PPQTProcess;
   line: PPQTSubWorkcenter;
+  month?: string;
+  resource?: PPQTResourceMode;
   onClose: () => void;
 }) {
+  const copy = PPQT_RESOURCE_COPY[resource];
+  const isPeople = resource === 'people';
   const trail = useMemo(() => getMathTrail(process, line), [process, line]);
-  const evidence = useMemo(() => getEvidenceForProcess(process.id), [process.id]);
+  const { data: api, isLoading } = usePpqtEvidence(workcell, line.name, process.name, month, resource);
+  const evidence = useMemo(() => adaptEvidence(api), [api]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const status = getPPQTStatus(process.util);
 
@@ -54,6 +63,18 @@ export function StepDrawer({
           </button>
         </div>
 
+        {/* dwell banner — explains why the serial NEED below is not real */}
+        {process.dwell && (
+          <div className="px-6 py-3 border-b border-border bg-violet-500/10 flex-shrink-0">
+            <p className="text-[11px] font-semibold text-violet-300">Dwell / batch step — NEED below is not a real headcount</p>
+            <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
+              The weighted {isPeople ? 'operator time' : 'cycle time'} is {trail.wct.toFixed(0)}s/unit — a whole-oven
+              dwell time (burn-in, ESS, test soak), not per-unit work. The serial formula treats each unit as occupying
+              the station back-to-back, so it over-demands. Size this step by the actual batch size / number of ovens.
+            </p>
+          </div>
+        )}
+
         {/* KPI strip — the verdict numbers */}
         <div className="grid grid-cols-4 divide-x divide-border border-b border-border flex-shrink-0">
           {[
@@ -76,11 +97,15 @@ export function StepDrawer({
               How NEED is calculated
             </p>
             <div className="flex items-center gap-1.5 flex-wrap text-xs font-mono">
-              <TrailBox label="WCT" value={`${trail.wct.toFixed(1)}s`} />
+              <TrailBox label={isPeople ? 'Manual' : 'WCT'} value={`${trail.wct.toFixed(1)}s`} />
               <span className="text-muted-foreground">÷</span>
               <TrailBox label="Takt" value={`${trail.takt.toFixed(1)}s`} />
-              <span className="text-muted-foreground">÷</span>
-              <TrailBox label="FPY" value={`${trail.fpy}%`} />
+              {!isPeople && (
+                <>
+                  <span className="text-muted-foreground">÷</span>
+                  <TrailBox label="FPY" value={`${trail.fpy}%`} />
+                </>
+              )}
               <span className="text-muted-foreground">×</span>
               <TrailBox label="Eff" value={`${trail.efficiency}%`} />
               <span className="text-muted-foreground">=</span>
@@ -95,8 +120,10 @@ export function StepDrawer({
             </div>
             <p className="text-[10px] text-muted-foreground mt-2.5 leading-relaxed">
               One unit must leave this step every {trail.takt.toFixed(0)}s to meet demand. The demand-weighted
-              average build time is {trail.wct.toFixed(1)}s, inflated by yield ({trail.fpy}%) and operator
-              efficiency ({trail.efficiency}%) losses. You can't own {trail.rawNeed.toFixed(2)} machines — round up.
+              average {isPeople ? 'operator time' : 'build time'} is {trail.wct.toFixed(1)}s, inflated by{' '}
+              {isPeople ? '' : `yield (${trail.fpy}%) and `}operator efficiency ({trail.efficiency}%) losses.
+              You can't have {trail.rawNeed.toFixed(2)} {copy.unitPlural} — round up.
+              {isPeople && ' FPY is excluded — it applies to equipment sizing only.'}
             </p>
           </div>
 
@@ -118,16 +145,29 @@ export function StepDrawer({
               What drives this step's load
             </p>
             <p className="text-[10px] text-muted-foreground mb-3">
-              {evidence.demandThruStep.toLocaleString()} units route through this step. Ranked by demand × CT.
+              {evidence.demandThruStep.toLocaleString()} units route through this step across{' '}
+              {evidence.assemblyCount.toLocaleString()} assemblies. Ranked by demand × CT.
               Click a row for the CT composition.
+              {evidence.truncated && (
+                <span className="text-amber-400">
+                  {' '}Showing the top {evidence.rows.length} only.
+                </span>
+              )}
             </p>
+
+            {isLoading && (
+              <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading load drivers…
+              </div>
+            )}
 
             <div className="rounded-lg border border-border overflow-hidden">
               <div
                 className="grid bg-muted/50 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
                 style={{ gridTemplateColumns: '1.8rem minmax(9rem,1fr) 4.5rem 4.5rem minmax(5.5rem,0.8fr) 4.5rem' }}
               >
-                {['#', 'Assembly', 'Demand', 'CT (s)', 'Load share', 'Source'].map((h, i) => (
+                {['#', 'Assembly', 'Demand', isPeople ? 'Manual (s)' : 'CT (s)', 'Load share', 'Source'].map((h, i) => (
                   <div key={h} className={cn('px-2 py-2', (i === 2 || i === 3) && 'text-right')}>{h}</div>
                 ))}
               </div>
@@ -172,7 +212,9 @@ export function StepDrawer({
                           {r.handAdj > 0 && <div className="bg-orange-500" style={{ width: `${(r.handAdj / r.ctAdj) * 100}%` }} />}
                         </div>
                         <div className="flex items-center gap-4 mt-2 text-[10px] font-mono text-muted-foreground">
-                          <span><span className="inline-block w-2 h-2 rounded-sm bg-blue-500 mr-1" />Mach {r.machAdj.toFixed(1)}s</span>
+                          <span className={cn(isPeople && 'line-through opacity-40')} title={isPeople ? 'Machine time is not direct labour' : undefined}>
+                            <span className="inline-block w-2 h-2 rounded-sm bg-blue-500 mr-1" />Mach {r.machAdj.toFixed(1)}s
+                          </span>
                           <span><span className="inline-block w-2 h-2 rounded-sm bg-violet-500 mr-1" />IMT {r.imtAdj.toFixed(1)}s</span>
                           <span><span className="inline-block w-2 h-2 rounded-sm bg-orange-500 mr-1" />Hand {r.handAdj.toFixed(1)}s</span>
                           <span className="ml-auto">

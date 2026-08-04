@@ -13,9 +13,11 @@
  * drawer); Triage is "show me only what's wrong, explain each one".
  *
  * Used as the "Triage" tab in PPQT2AWorkcell — no standalone route.
- * Data: mock (ppqt2Data.ts derived layer) — same numbers as the other tabs.
+ * Data: REAL — receives the adapted /api/ppqt/capacity response as a prop, so
+ * its numbers always match the other tabs. Evidence is fetched per expanded card.
  */
 
+import { usePpqtEvidence } from '@/hooks/ppqt/usePpqtData';
 import {
   PPQT_AREA_BADGE,
   PPQT_CT_SOURCE_BADGE,
@@ -23,42 +25,44 @@ import {
   PPQT_UTIL_TEXT,
   PPQT_VERDICT_DOT,
   getPPQTStatus,
+  PPQT_RESOURCE_COPY,
+  type PPQTResourceMode,
 } from '@/lib/ppqt/ppqtConstants';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { PERIOD_OPTIONS } from '../mockPpqtData';
 import { PPQTProcess, PPQTSubWorkcenter } from '../types';
-import {
-  buildWorkcellCapacity,
-  getEvidenceForProcess,
-  getMathTrail,
-} from './ppqt2Data';
+import { adaptEvidence, getMathTrail, type Ppqt2Workcell } from './ppqt2Data';
 
 /**
  * Triage body (line rail + pain-point feed) — embeddable.
  * Rendered as the "Triage" tab in the PPQT dashboard workcell page.
  */
 export function PPQT2BWorkcellContent({
-  workcellId, period = PERIOD_OPTIONS[0],
+  workcellId, period = '', data, month, resource = 'equipment',
 }: {
   workcellId: string;
   period?: string;
+  data: Ppqt2Workcell;
+  month?: string;
+  resource?: PPQTResourceMode;
 }) {
+  const copy = PPQT_RESOURCE_COPY[resource];
   const [scope, setScope] = useState<string>('all'); // 'all' | swc id
   const [showHealthy, setShowHealthy] = useState(false);
-
-  const data = useMemo(() => buildWorkcellCapacity(workcellId), [workcellId]);
-  if (!data) return null;
 
   const scopedLines = data.lines.filter(l => scope === 'all' || l.swc.id === scope);
 
   // Pain points = short or tight steps across the scoped lines, worst first.
+  // Dwell/batch steps (burn-in, ESS, test soak) aren't serially sized — they get
+  // their own bucket so their huge raw need never masquerades as a pain point.
   const painPoints: Array<{ process: PPQTProcess; line: PPQTSubWorkcenter }> = [];
   const healthySteps: Array<{ process: PPQTProcess; line: PPQTSubWorkcenter }> = [];
+  const dwellSteps: Array<{ process: PPQTProcess; line: PPQTSubWorkcenter }> = [];
   for (const line of scopedLines) {
     for (const p of line.processes) {
-      if (p.gap > 0 || p.util >= 90) painPoints.push({ process: p, line: line.swc });
+      if (p.dwell) dwellSteps.push({ process: p, line: line.swc });
+      else if (p.gap > 0 || p.util >= 90) painPoints.push({ process: p, line: line.swc });
       else healthySteps.push({ process: p, line: line.swc });
     }
   }
@@ -146,10 +150,10 @@ export function PPQT2BWorkcellContent({
               machinesShort > 0 ? 'text-red-400' : painPoints.length > 0 ? 'text-amber-400' : 'text-emerald-400',
             )}>
               {machinesShort > 0
-                ? `✕ ${period}: ${stepsShort} step${stepsShort !== 1 ? 's' : ''} cannot keep up — ${machinesShort} machine${machinesShort !== 1 ? 's' : ''} short.`
+                ? `✕ ${period}: ${stepsShort} step${stepsShort !== 1 ? 's' : ''} cannot keep up — ${machinesShort} ${machinesShort !== 1 ? copy.unitPlural : copy.unit} short.`
                 : painPoints.length > 0
                   ? `⚠ ${period}: demand fits, but ${painPoints.length} step${painPoints.length !== 1 ? 's run' : ' runs'} above 90% — no headroom.`
-                  : `✓ ${period}: demand fits with current equipment.`}
+                  : `✓ ${period}: demand fits with current ${resource === 'people' ? 'headcount' : 'equipment'}.`}
             </p>
             <p className="text-[11px] text-muted-foreground mt-1">
               {data.wc.totalDemand.toLocaleString()} units demanded · {scopedLines.length} line{scopedLines.length !== 1 ? 's' : ''} ·{' '}
@@ -164,13 +168,27 @@ export function PPQT2BWorkcellContent({
                 Pain points ({painPoints.length})
               </p>
               {painPoints.map(({ process, line }) => (
-                <PainPointCard key={process.id} process={process} line={line} />
+                <PainPointCard key={process.id} workcell={workcellId} process={process} line={line} month={month} resource={resource} />
               ))}
             </div>
           )}
           {painPoints.length === 0 && (
             <div className="rounded-xl border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
               No pain points in this scope. 🎉
+            </div>
+          )}
+
+          {/* dwell/batch steps — flagged, not serially sized */}
+          {dwellSteps.length > 0 && (
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-3">
+              <p className="text-[11px] font-semibold text-violet-300">
+                {dwellSteps.length} dwell / batch step{dwellSteps.length !== 1 ? 's' : ''} not serially sized
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Burn-in, ESS, test soak and the like: the recorded CT is the whole-oven dwell time, not per-unit,
+                so the serial NEED formula doesn't apply. Size these by hand:{' '}
+                {dwellSteps.map(d => d.process.name).join(', ')}.
+              </p>
             </div>
           )}
 
@@ -273,7 +291,16 @@ function Param({ label, value }: { label: string; value: string }) {
 }
 
 // ─── Pain point card with inline "why" expansion ─────────────────────────────
-function PainPointCard({ process, line }: { process: PPQTProcess; line: PPQTSubWorkcenter }) {
+function PainPointCard({
+  workcell, process, line, month, resource,
+}: {
+  workcell: string;
+  process: PPQTProcess;
+  line: PPQTSubWorkcenter;
+  month?: string;
+  resource: PPQTResourceMode;
+}) {
+  const copy = PPQT_RESOURCE_COPY[resource];
   const [open, setOpen] = useState(false);
   const status = getPPQTStatus(process.util);
   const isShort = process.gap > 0;
@@ -297,7 +324,7 @@ function PainPointCard({ process, line }: { process: PPQTProcess; line: PPQTSubW
           <div className="flex flex-col flex-shrink-0">
             <span className="text-[9px] uppercase tracking-wider text-muted-foreground leading-tight">need / have</span>
             {isShort ? (
-              <span className="text-[11px] font-bold text-red-400 leading-tight">−{process.gap} machine{process.gap !== 1 ? 's' : ''}</span>
+              <span className="text-[11px] font-bold text-red-400 leading-tight">−{process.gap} {process.gap !== 1 ? copy.unitPlural : copy.unit}</span>
             ) : (
               <span className="text-[11px] font-bold text-amber-400 leading-tight">no headroom</span>
             )}
@@ -338,17 +365,27 @@ function PainPointCard({ process, line }: { process: PPQTProcess; line: PPQTSubW
         </div>
       </button>
 
-      {/* inline "why" */}
-      {open && <PainPointWhy process={process} line={line} />}
+      {/* inline "why" — evidence fetched lazily, only when expanded */}
+      {open && <PainPointWhy workcell={workcell} process={process} line={line} month={month} resource={resource} />}
     </div>
   );
 }
 
-function PainPointWhy({ process, line }: { process: PPQTProcess; line: PPQTSubWorkcenter }) {
+function PainPointWhy({
+  workcell, process, line, month, resource,
+}: {
+  workcell: string;
+  process: PPQTProcess;
+  line: PPQTSubWorkcenter;
+  month?: string;
+  resource: PPQTResourceMode;
+}) {
+  const isPeople = resource === 'people';
+  const copy = PPQT_RESOURCE_COPY[resource];
   const trail = useMemo(() => getMathTrail(process, line), [process, line]);
-  const evidence = useMemo(() => getEvidenceForProcess(process.id), [process.id]);
+  const { data: api, isLoading } = usePpqtEvidence(workcell, line.name, process.name, month, resource);
+  const evidence = useMemo(() => adaptEvidence(api), [api]);
   const top = evidence.rows.slice(0, 5);
-  const rest = evidence.rows.length - top.length;
 
   return (
     <div className="border-t border-border bg-muted/10">
@@ -356,9 +393,9 @@ function PainPointWhy({ process, line }: { process: PPQTProcess; line: PPQTSubWo
       <div className="px-5 py-3 border-b border-border/60">
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           A unit must leave every <span className="font-mono font-semibold text-foreground">{trail.takt.toFixed(0)}s</span> to
-          meet demand; this step's weighted build time is <span className="font-mono font-semibold text-foreground">{trail.wct.toFixed(1)}s</span>.
-          After yield ({trail.fpy}%) and efficiency ({trail.efficiency}%) losses that's{' '}
-          <span className="font-mono font-semibold text-foreground">{trail.rawNeed.toFixed(2)}</span> machines →
+          meet demand; this step's weighted {isPeople ? 'operator time' : 'build time'} is <span className="font-mono font-semibold text-foreground">{trail.wct.toFixed(1)}s</span>.
+          After {isPeople ? '' : `yield (${trail.fpy}%) and `}efficiency ({trail.efficiency}%) losses that's{' '}
+          <span className="font-mono font-semibold text-foreground">{trail.rawNeed.toFixed(2)}</span> {copy.unitPlural} →
           rounds up to <span className={cn('font-mono font-bold', trail.gap > 0 ? 'text-red-400' : 'text-foreground')}>{trail.resNeeded}</span>,
           and the line has <span className="font-mono font-bold text-foreground">{trail.eqAvail}</span>.
         </p>
@@ -376,6 +413,12 @@ function PainPointWhy({ process, line }: { process: PPQTProcess; line: PPQTSubWo
         <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           Top load drivers — demand × CT
         </p>
+        {isLoading && (
+          <div className="flex items-center gap-2 py-3 text-[11px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading load drivers…
+          </div>
+        )}
         <div className="space-y-1.5">
           {top.map(r => (
             <div key={r.assemblyId} className="flex items-center gap-2.5">
@@ -400,9 +443,11 @@ function PainPointWhy({ process, line }: { process: PPQTProcess; line: PPQTSubWo
             </div>
           ))}
         </div>
-        {rest > 0 && (
+        {evidence.assemblyCount > top.length && (
           <p className="text-[10px] text-muted-foreground mt-2">
-            + {rest} more assembl{rest !== 1 ? 'ies' : 'y'} ({evidence.demandThruStep.toLocaleString()} units total through this step)
+            + {(evidence.assemblyCount - top.length).toLocaleString()} more
+            assembl{evidence.assemblyCount - top.length !== 1 ? 'ies' : 'y'}{' '}
+            ({evidence.demandThruStep.toLocaleString()} units total through this step)
           </p>
         )}
       </div>

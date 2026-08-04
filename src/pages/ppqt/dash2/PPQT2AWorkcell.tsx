@@ -12,7 +12,8 @@
  * The step drawer itself is shared — see StepDrawer.tsx.
  *
  * Route: /ppqt/dash2a/:workcell
- * Data: mock (ppqt2Data.ts derived layer) — all tabs share the same numbers.
+ * Data: REAL — GET /api/ppqt/capacity, fetched once here and passed to every
+ * tab, so all three views always show the same numbers.
  */
 
 import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
@@ -20,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { usePpqtCapacity } from '@/hooks/ppqt/usePpqtData';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import {
   PPQT_AREA_BADGE,
@@ -28,22 +30,22 @@ import {
   PPQT_VERDICT_TEXT,
   gapTextClass,
   getPPQTStatus,
+  monthLabel,
+  PPQT_RESOURCE_COPY,
+  type PPQTResourceMode,
 } from '@/lib/ppqt/ppqtConstants';
 import { cn } from '@/lib/utils';
 import {
-  AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, FileSpreadsheet, ListChecks, Search, Table2,
+  AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, FileSpreadsheet,
+  ListChecks, Loader2, Search, Table2,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { PERIOD_OPTIONS } from '../mockPpqtData';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PPQTProcess, PPQTSubWorkcenter } from '../types';
 import { PPQT2BWorkcellContent } from './PPQT2BWorkcell';
 import { PPQT2CWorkcellContent } from './PPQT2CWorkcell';
 import { StepDrawer } from './StepDrawer';
-import {
-  buildWorkcellCapacity,
-  getEvidenceForProcess,
-} from './ppqt2Data';
+import { adaptCapacity, type Ppqt2Workcell } from './ppqt2Data';
 
 const TABS = [
   { key: 'dash',   label: 'A', icon: FileSpreadsheet, tip: 'Excel DASH replica — chart + calculation matrix' },
@@ -53,23 +55,57 @@ const TABS = [
 type TabKey = typeof TABS[number]['key'];
 
 const GRID_STEPS = 'minmax(11rem,1.4fr) 7rem 5.5rem 5.5rem 4.5rem 4.5rem 5rem minmax(7rem,1fr)';
-const STEP_HEADERS = ['Step', 'Demand thru', 'WCT (s)', 'Takt (s)', 'Have', 'Need', 'Gap', 'Load'];
+const STEP_HEADERS_FOR = (ctHeader: string) =>
+  ['Step', 'Demand thru', ctHeader, 'Takt (s)', 'Have', 'Need', 'Gap', 'Load'];
 
 // ─── Page shell: header + tabs ────────────────────────────────────────────────
 export default function PPQT2AWorkcell() {
   const { workcell = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<TabKey>('dash');
-  const period = PERIOD_OPTIONS[0];
+  // Month + resource ride in the query string so a deep link keeps both.
+  const month = searchParams.get('month') ?? undefined;
+  const resource: PPQTResourceMode =
+    searchParams.get('resource') === 'people' ? 'people' : 'equipment';
+  const copy = PPQT_RESOURCE_COPY[resource];
 
-  const data = useMemo(() => buildWorkcellCapacity(workcell), [workcell]);
+  const { data: api, isLoading, error } = usePpqtCapacity(workcell, { month, resource });
+  const period = monthLabel(api?.month ?? month);
+  const data = useMemo(() => (api ? adaptCapacity(api) : undefined), [api]);
 
-  if (!data) {
+  if (isLoading) {
+    return (
+      <div className="p-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Computing capacity for {workcell}…
+      </div>
+    );
+  }
+
+  if (error || !data) {
     return (
       <div className="p-8 text-center text-muted-foreground text-sm">
-        Workcell "{workcell}" not found.
-        <button onClick={() => navigate('/ppqt/dash2a')} className="block mx-auto mt-3 text-emerald-400 hover:underline text-xs">
+        {error
+          ? `Could not load capacity for "${workcell}": ${(error as Error).message}`
+          : `Workcell "${workcell}" not found.`}
+        <button onClick={() => navigate('/ppqt')} className="block mx-auto mt-3 text-emerald-400 hover:underline text-xs">
+          ← Back to capacity verdict
+        </button>
+      </div>
+    );
+  }
+
+  // A workcell with no overlapping cycle-time × demand data returns 200 with a warning.
+  if (data.lines.length === 0) {
+    return (
+      <div className="p-8 text-center text-muted-foreground text-sm">
+        No overlapping cycle-time and planner-demand data for "{workcell}".
+        {api?.warnings?.length ? (
+          <p className="text-xs mt-2 text-muted-foreground/70">{api.warnings[0]}</p>
+        ) : null}
+        <button onClick={() => navigate('/ppqt')} className="block mx-auto mt-3 text-emerald-400 hover:underline text-xs">
           ← Back to capacity verdict
         </button>
       </div>
@@ -84,7 +120,7 @@ export default function PPQT2AWorkcell() {
       <div className="sticky top-0 z-20 bg-background border-b border-border px-5 pb-0">
         <div className="pt-3 pb-3 flex items-center gap-3">
           <button
-            onClick={() => navigate('/ppqt/dash2a')}
+            onClick={() => navigate('/ppqt')}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
             title="Back to capacity verdict"
           >
@@ -102,7 +138,31 @@ export default function PPQT2AWorkcell() {
 
           <div className="min-w-0">
             <h1 className="text-base font-bold text-foreground truncate">{data.wc.name}</h1>
-            <p className="text-[11px] text-muted-foreground truncate">{data.wc.division} · Capacity report · {period}</p>
+            <p className="text-[11px] text-muted-foreground truncate">
+              {data.wc.division} · {copy.label} sizing · {period}
+            </p>
+          </div>
+
+          {/* resource toggle — rewrites the query string so the view is linkable */}
+          <div className="ml-auto inline-flex rounded-lg border border-border overflow-hidden flex-shrink-0">
+            {(['equipment', 'people'] as PPQTResourceMode[]).map(m => (
+              <button
+                key={m}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set('resource', m);
+                  setSearchParams(next, { replace: true });
+                }}
+                className={cn(
+                  'px-3 h-7 text-[11px] font-semibold transition-colors',
+                  resource === m
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : 'bg-card text-muted-foreground hover:bg-muted',
+                )}
+              >
+                {PPQT_RESOURCE_COPY[m].label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -110,35 +170,33 @@ export default function PPQT2AWorkcell() {
         <UnderlineTabs tabs={TABS} active={tab} onChange={setTab} />
       </div>
 
-      {/* tab content */}
-      {tab === 'report' && <ReportContent workcellId={workcell} period={period} />}
-      {tab === 'triage' && <PPQT2BWorkcellContent workcellId={workcell} period={period} />}
-      {tab === 'dash'   && <PPQT2CWorkcellContent workcellId={workcell} />}
+      {/* tab content — all tabs share the one fetched dataset */}
+      {tab === 'report' && <ReportContent workcellId={workcell} period={period} data={data} month={month} resource={resource} />}
+      {tab === 'triage' && <PPQT2BWorkcellContent workcellId={workcell} period={period} data={data} month={month} resource={resource} />}
+      {tab === 'dash'   && <PPQT2CWorkcellContent workcellId={workcell} data={data} period={period} month={month} resource={resource} />}
     </div>
   );
 }
 
 // ─── Report tab — the Variant A capacity report ───────────────────────────────
-function ReportContent({ workcellId, period }: { workcellId: string; period: string }) {
+function ReportContent({
+  workcellId, period, data, month, resource,
+}: {
+  workcellId: string;
+  period: string;
+  data: Ppqt2Workcell;
+  month?: string;
+  resource: PPQTResourceMode;
+}) {
+  const copy = PPQT_RESOURCE_COPY[resource];
   const [lineFilter, setLineFilter] = useState<string>('all');
   const [problemsOnly, setProblemsOnly] = useState(true);
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<{ process: PPQTProcess; line: PPQTSubWorkcenter } | null>(null);
 
-  const data = useMemo(() => buildWorkcellCapacity(workcellId), [workcellId]);
-
-  // Demand-through-step per process (league of assemblies that route through it)
-  const demandThru = useMemo(() => {
-    const m = new Map<string, number>();
-    if (!data) return m;
-    for (const line of data.lines)
-      for (const p of line.processes)
-        m.set(p.id, getEvidenceForProcess(p.id).demandThruStep);
-    return m;
-  }, [data]);
-
-  if (!data) return null;
+  // Demand-through-step comes straight from the API — no extra round trips.
+  const demandThru = data.demandThru;
 
   // Visible lines + steps after filters
   const visibleLines = data.lines
@@ -214,7 +272,7 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
             <p className={cn('text-sm font-bold', PPQT_VERDICT_TEXT[scoped.verdict])}>
               {scoped.verdict === 'short' ? (
                 <>✕ {period}: cannot meet demand — {scoped.stepsShort} step{scoped.stepsShort !== 1 ? 's' : ''} short,
-                  {' '}{scoped.machinesShort} machine{scoped.machinesShort !== 1 ? 's' : ''} missing
+                  {' '}{scoped.machinesShort} {scoped.machinesShort !== 1 ? copy.unitPlural : copy.unit} missing
                   {data.worstStep && lineFilter === 'all' ? ` — worst: ${data.worstStep.process.name} on ${data.worstStep.line.name}` : ''}.</>
               ) : scoped.verdict === 'tight' ? (
                 <>⚠ {period}: demand fits, but {scoped.stepsTight} step{scoped.stepsTight !== 1 ? 's are' : ' is'} above
@@ -223,6 +281,14 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
                 <>✓ {period}: demand fits with current equipment.</>
               )}
             </p>
+            {scoped.lines[0] && (
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Available time this period:{' '}
+                <span className="font-mono text-foreground/80">{Math.round(data.availableSeconds).toLocaleString()} s</span>
+                {' '}= ({scoped.lines[0].swc.shiftHours}h × 60 − {scoped.lines[0].swc.changeoverQty}×{scoped.lines[0].swc.changeoverTime}min CO)
+                {' '}× {scoped.lines[0].swc.workingDays} days × 60 · Takt = Available ÷ demand-thru
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-border">
             {[
@@ -230,7 +296,7 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
               { label: 'Lines', value: String(scoped.lines.length), unit: lineFilter === 'all' ? 'analyzed' : 'selected' },
               { label: 'Steps', value: String(scoped.stepsTotal), unit: 'analyzed' },
               { label: 'Steps short', value: String(scoped.stepsShort), unit: `+ ${scoped.stepsTight} tight`, tone: scoped.stepsShort > 0 ? 'text-red-400' : undefined },
-              { label: 'Machines short', value: scoped.machinesShort > 0 ? `−${scoped.machinesShort}` : '0', unit: 'vs available', tone: scoped.machinesShort > 0 ? 'text-red-400' : 'text-emerald-400' },
+              { label: copy.shortLabel, value: scoped.machinesShort > 0 ? `−${scoped.machinesShort}` : '0', unit: 'vs available', tone: scoped.machinesShort > 0 ? 'text-red-400' : 'text-emerald-400' },
             ].map(t => (
               <div key={t.label} className="px-4 py-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{t.label}</p>
@@ -247,7 +313,7 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
             className="grid bg-muted/50 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
             style={{ gridTemplateColumns: GRID_STEPS }}
           >
-            {STEP_HEADERS.map((h, i) => (
+            {STEP_HEADERS_FOR(copy.ctHeader).map((h, i) => (
               <div key={h} className={cn('px-3 py-2.5', i >= 1 && i <= 6 && 'text-right')}>{h}</div>
             ))}
           </div>
@@ -280,7 +346,7 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
                     line.machinesShort > 0 ? 'text-red-400' : line.stepsTight > 0 ? 'text-amber-400' : 'text-emerald-400',
                   )}>
                     {line.machinesShort > 0
-                      ? `${line.stepsShort} short · −${line.machinesShort} machines`
+                      ? `${line.stepsShort} short · −${line.machinesShort} ${copy.unitPlural}`
                       : line.stepsTight > 0
                         ? `${line.stepsTight} tight`
                         : 'all steps OK'}
@@ -299,6 +365,14 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
                     >
                       <div className="px-3 flex items-center gap-2 min-w-0">
                         <span className="text-xs font-medium text-foreground truncate">{p.name}</span>
+                        {p.dwell && (
+                          <span
+                            title="Batch/dwell step (burn-in, ESS, test soak): CT is the whole-oven time, not per-unit — the serial sizing formula doesn't apply. Size by hand."
+                            className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-violet-500/15 text-violet-400 border-violet-500/30 flex-shrink-0"
+                          >
+                            dwell
+                          </span>
+                        )}
                         {p.ctSourceCounts.Est > 0 && (
                           <span title={`${p.ctSourceCounts.Est} estimated CTs`}>
                             <AlertTriangle className="h-3 w-3 text-amber-400 flex-shrink-0" />
@@ -313,25 +387,30 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
                       <div className="px-3 text-right text-sm font-mono font-semibold text-foreground tabular-nums">{p.eqAvail}</div>
                       <div className={cn(
                         'px-3 text-right text-sm font-mono font-bold tabular-nums',
-                        p.gap > 0 ? 'text-red-400' : 'text-foreground',
+                        p.dwell ? 'text-muted-foreground' : p.gap > 0 ? 'text-red-400' : 'text-foreground',
                       )}>
-                        {p.resNeeded}
+                        {p.dwell ? '—' : p.resNeeded}
                       </div>
-                      <div className={cn('px-3 text-right text-xs font-mono tabular-nums', gapTextClass(p.gap))}>
-                        {p.gap > 0 ? `−${p.gap}` : '0'}
+                      <div className={cn('px-3 text-right text-xs font-mono tabular-nums',
+                        p.dwell ? 'text-muted-foreground' : gapTextClass(p.gap))}>
+                        {p.dwell ? '—' : p.gap > 0 ? `−${p.gap}` : '0'}
                       </div>
                       <div className="px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                            <div
-                              className={cn('h-full rounded-full', PPQT_UTIL_BAR[status])}
-                              style={{ width: `${Math.min(100, p.util)}%` }}
-                            />
+                        {p.dwell ? (
+                          <span className="text-[10px] text-muted-foreground">dwell — size by hand</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                              <div
+                                className={cn('h-full rounded-full', PPQT_UTIL_BAR[status])}
+                                style={{ width: `${Math.min(100, p.util)}%` }}
+                              />
+                            </div>
+                            <span className={cn('text-[10px] font-mono font-semibold tabular-nums w-9 text-right', PPQT_UTIL_TEXT[status])}>
+                              {Math.round(p.util)}%
+                            </span>
                           </div>
-                          <span className={cn('text-[10px] font-mono font-semibold tabular-nums w-9 text-right', PPQT_UTIL_TEXT[status])}>
-                            {Math.round(p.util)}%
-                          </span>
-                        </div>
+                        )}
                       </div>
                     </button>
                   );
@@ -354,16 +433,26 @@ function ReportContent({ workcellId, period }: { workcellId: string; period: str
         </div>
 
         <p className="text-[10px] text-muted-foreground">
-          <span className="font-semibold text-foreground/80">Need</span> = machines required to meet {period} demand
-          (WCT ÷ Takt ÷ FPY ÷ Efficiency, rounded up). <span className="font-semibold text-foreground/80">Have</span> =
-          machines on the floor. Click any step for the math trail and the assemblies driving its load.
+          <span className="font-semibold text-foreground/80">Need</span> = {copy.unitPlural} required to meet {period} demand
+          ({resource === 'people'
+            ? 'Manual time ÷ Takt ÷ Efficiency'
+            : 'WCT ÷ Takt ÷ FPY ÷ Efficiency'}, rounded up).{' '}
+          <span className="font-semibold text-foreground/80">Have</span> = {copy.haveLabel.toLowerCase()}.
+          Click any step for the math trail and the assemblies driving its load.
           <AlertTriangle className="inline h-3 w-3 text-amber-400 mx-1" />= step contains estimated cycle times.
         </p>
       </div>
 
       {/* drawer */}
       {drawer && (
-        <StepDrawer process={drawer.process} line={drawer.line} onClose={() => setDrawer(null)} />
+        <StepDrawer
+          workcell={workcellId}
+          process={drawer.process}
+          line={drawer.line}
+          month={month}
+          resource={resource}
+          onClose={() => setDrawer(null)}
+        />
       )}
     </>
   );

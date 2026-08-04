@@ -1,30 +1,29 @@
 /**
  * ppqt2Data.ts
  * ─────────────
- * Derived data layer for the PPQT "Dashboard 2" prototypes (variants A + B).
+ * Adapter + derived layer for the PPQT "Dashboard 2" pages.
  *
- * Built on top of mockPpqtData.ts — no new mock universe, just the Excel-DASH
- * mental model recomputed per scope:
+ * The backend (GET /api/ppqt/capacity) already runs the forward chain —
+ * demand-weighted WCT, Takt, Resources Needed, Gap, Utilisation — over real
+ * IEDB cycle time × planner demand. This file only reshapes that response into
+ * the line/workcell rollups the dash2 components render:
  *
  *   Step verdict     →  NEED (machines) vs HAVE (machines), Gap
  *   Line rollup      →  steps short / tight, machines short  (per sub-workcenter)
- *   Workcell rollup  →  worst-line-wins verdict for the league table
- *   Evidence         →  per step: which assemblies drive the load (Demand × CT)
+ *   Workcell rollup  →  worst-line-wins verdict + worst step
  *
- * Both dashboard variants consume this file so their numbers always agree.
- * When the real API arrives this maps 1:1 onto the processes/assembly_cts marts.
+ * No mock data. No recomputation of the formulas — the numbers come from the
+ * API so every tab and the league table always agree.
  */
 
 import { getPPQTVerdict, PPQTVerdict } from '@/lib/ppqt/ppqtConstants';
-import {
-  MOCK_WORKCELLS,
-  getAssembly,
-  getCTsForProcess,
-  getProcessesForSubWorkcenter,
-  getSubWorkcentersForWorkcell,
-  getWorkcell,
-} from '../mockPpqtData';
-import { PPQTProcess, PPQTSubWorkcenter, PPQTWorkcell } from '../types';
+import type {
+  PPQTApiCapacity,
+  PPQTApiEvidence,
+  PPQTApiProcess,
+  PPQTApiSubWorkcenter,
+} from '@/lib/ppqt/ppqtApi';
+import { PPQTProcess, PPQTSubWorkcenter } from '../types';
 
 // ─── Line (sub-workcenter) rollup ────────────────────────────────────────────
 export interface Ppqt2Line {
@@ -36,9 +35,14 @@ export interface Ppqt2Line {
   verdict: PPQTVerdict;
 }
 
-// ─── Workcell rollup (league table row) ──────────────────────────────────────
+// ─── Workcell rollup ─────────────────────────────────────────────────────────
 export interface Ppqt2Workcell {
-  wc: PPQTWorkcell;
+  wc: {
+    id: string;
+    name: string;
+    division: string;
+    totalDemand: number;
+  };
   lines: Ppqt2Line[];
   stepsTotal: number;
   stepsShort: number;
@@ -47,36 +51,80 @@ export interface Ppqt2Workcell {
   verdict: PPQTVerdict;
   /** The single worst step across all lines (largest gap, then highest util). */
   worstStep: { process: PPQTProcess; line: PPQTSubWorkcenter } | null;
+  /** Productive seconds in the demand period — the Takt numerator. */
+  availableSeconds: number;
+  /** Demand units routing through each step, keyed by process id. */
+  demandThru: Map<string, number>;
 }
 
-function buildLine(swc: PPQTSubWorkcenter): Ppqt2Line {
-  const processes = getProcessesForSubWorkcenter(swc.id)
-    .slice()
-    .sort((a, b) => a.sequence - b.sequence);
-
-  let stepsShort = 0;
-  let stepsTight = 0;
-  let machinesShort = 0;
-  for (const p of processes) {
-    if (p.gap > 0) {
-      stepsShort++;
-      machinesShort += p.gap;
-    } else if (p.util >= 90) {
-      stepsTight++;
-    }
-  }
-
+function adaptSwc(s: PPQTApiSubWorkcenter, workcellId: string): PPQTSubWorkcenter {
   return {
-    swc, processes, stepsShort, stepsTight, machinesShort,
-    verdict: getPPQTVerdict(machinesShort, stepsTight),
+    id: s.id,
+    name: s.name,
+    workcellId,
+    area: s.area,
+    shiftHours: s.shiftHours,
+    workingDays: s.workingDays,
+    changeoverQty: s.changeoverQty,
+    changeoverTime: s.changeoverTime,
+    fpy: s.fpy,
+    efficiency: s.efficiency,
+    totalDemand: s.totalDemand,
+    processCount: s.processCount,
+    bottlenecks: s.bottlenecks,
+    avgUtil: s.avgUtil,
+    ctEstimates: s.processes.reduce((n, p) => n + (p.ctSourceCounts?.Est ?? 0), 0),
   };
 }
 
-export function buildWorkcellCapacity(workcellId: string): Ppqt2Workcell | undefined {
-  const wc = getWorkcell(workcellId);
-  if (!wc) return undefined;
+function adaptProcess(p: PPQTApiProcess): PPQTProcess {
+  return {
+    id: p.id,
+    name: p.name,
+    subWorkcenterId: p.subWorkcenterId,
+    area: p.area,
+    sequence: p.sequence,
+    wct: p.wct,
+    takt: p.takt,
+    eqAvail: p.eqAvail,
+    resNeeded: p.resNeeded,
+    gap: p.gap,
+    util: p.util,
+    dwell: p.dwell,
+    primaryCtSource: p.primaryCtSource,
+    ctSourceCounts: p.ctSourceCounts,
+  };
+}
 
-  const lines = getSubWorkcentersForWorkcell(wc.id).map(buildLine);
+/** Reshape one /capacity response into the rollups the dash2 components render. */
+export function adaptCapacity(api: PPQTApiCapacity): Ppqt2Workcell {
+  const demandThru = new Map<string, number>();
+
+  const lines: Ppqt2Line[] = api.sub_workcenters.map(s => {
+    const swc = adaptSwc(s, api.workcell);
+    const processes = s.processes
+      .map(adaptProcess)
+      .slice()
+      .sort((a, b) => a.sequence - b.sequence);
+
+    for (const p of s.processes) demandThru.set(p.id, p.demandThrough);
+
+    let stepsShort = 0, stepsTight = 0, machinesShort = 0;
+    for (const p of processes) {
+      if (p.dwell) continue;   // dwell steps aren't serially sized — mirror the backend
+      if (p.gap > 0) {
+        stepsShort++;
+        machinesShort += p.gap;
+      } else if (p.util >= 90) {
+        stepsTight++;
+      }
+    }
+
+    return {
+      swc, processes, stepsShort, stepsTight, machinesShort,
+      verdict: getPPQTVerdict(machinesShort, stepsTight),
+    };
+  });
 
   let stepsTotal = 0, stepsShort = 0, stepsTight = 0, machinesShort = 0;
   let worstStep: Ppqt2Workcell['worstStep'] = null;
@@ -86,6 +134,7 @@ export function buildWorkcellCapacity(workcellId: string): Ppqt2Workcell | undef
     stepsTight += line.stepsTight;
     machinesShort += line.machinesShort;
     for (const p of line.processes) {
+      if (p.dwell) continue;   // never let a dwell step (huge gap) be the worst
       if (!worstStep
         || p.gap > worstStep.process.gap
         || (p.gap === worstStep.process.gap && p.util > worstStep.process.util)) {
@@ -95,26 +144,23 @@ export function buildWorkcellCapacity(workcellId: string): Ppqt2Workcell | undef
   }
 
   return {
-    wc, lines, stepsTotal, stepsShort, stepsTight, machinesShort,
+    wc: {
+      id: api.workcell,
+      name: api.workcell,
+      division: `${api.process_count} steps across ${api.sub_workcenters.length} lines`,
+      totalDemand: api.total_demand,
+    },
+    lines, stepsTotal, stepsShort, stepsTight, machinesShort,
     verdict: getPPQTVerdict(machinesShort, stepsTight),
     worstStep,
+    availableSeconds: api.available_seconds,
+    demandThru,
   };
 }
 
-export function getAllWorkcellCapacities(): Ppqt2Workcell[] {
-  return MOCK_WORKCELLS
-    .map(w => buildWorkcellCapacity(w.id))
-    .filter((w): w is Ppqt2Workcell => !!w)
-    // Worst first: machines short desc → steps tight desc → demand desc
-    .sort((a, b) =>
-      b.machinesShort - a.machinesShort
-      || b.stepsTight - a.stepsTight
-      || b.wc.totalDemand - a.wc.totalDemand);
-}
-
 // ─── Evidence — which assemblies drive a step's load ─────────────────────────
-// Mirrors the Excel DASH "TOP Demand" block (rows 37-59): per assembly at this
-// step, demand × adjusted CT = load share. Answers "which product is the hog?"
+// Mirrors the Excel DASH "TOP Demand" block: per assembly at this step,
+// demand × adjusted CT = load share. Answers "which product is the hog?"
 export interface Ppqt2EvidenceRow {
   assemblyId: string;
   partNumber: string;
@@ -132,59 +178,48 @@ export interface Ppqt2EvidenceRow {
 }
 
 export interface Ppqt2Evidence {
-  rows: Ppqt2EvidenceRow[];     // sorted by load desc
+  rows: Ppqt2EvidenceRow[];     // sorted by load desc (backend already sorts)
   demandThruStep: number;       // Σ demand of assemblies routed through this step
   estCount: number;             // how many CTs are mere estimates
   estLoadShare: number;         // 0-100 — load % carried by estimated CTs
+  /** Assemblies through this step in total — exceeds rows.length when capped. */
+  assemblyCount: number;
+  /** True when the row list is capped for display. */
+  truncated: boolean;
 }
 
-export function getEvidenceForProcess(processId: string): Ppqt2Evidence {
-  const cts = getCTsForProcess(processId);
-
-  const rows: Ppqt2EvidenceRow[] = [];
-  let totalLoad = 0;
-  let demandThruStep = 0;
-  let estCount = 0;
-  let estLoad = 0;
-
-  for (const ct of cts) {
-    const asm = getAssembly(ct.assemblyId);
-    if (!asm || ct.totalAdj <= 0) continue;
-    const load = asm.demand * ct.totalAdj;
-    totalLoad += load;
-    demandThruStep += asm.demand;
-    if (ct.ctSource === 'Est') { estCount++; estLoad += load; }
-    rows.push({
-      assemblyId: asm.id,
-      partNumber: asm.partNumber,
-      rev: asm.rev,
-      family: asm.family,
-      demand: asm.demand,
-      ctAdj: ct.totalAdj,
-      load,
-      loadShare: 0, // filled below
-      ctSource: ct.ctSource,
-      studyDate: ct.studyDate,
-      machAdj: ct.machAdj,
-      imtAdj: ct.imtAdj,
-      handAdj: ct.handAdj,
-    });
+/** Reshape one /evidence response for the drawer / pain-point card. */
+export function adaptEvidence(api: PPQTApiEvidence | undefined): Ppqt2Evidence {
+  if (!api) {
+    return { rows: [], demandThruStep: 0, estCount: 0, estLoadShare: 0, assemblyCount: 0, truncated: false };
   }
-
-  for (const r of rows) r.loadShare = totalLoad > 0 ? Math.round((r.load / totalLoad) * 100) : 0;
-  rows.sort((a, b) => b.load - a.load);
-
   return {
-    rows,
-    demandThruStep,
-    estCount,
-    estLoadShare: totalLoad > 0 ? Math.round((estLoad / totalLoad) * 100) : 0,
+    rows: api.assemblies.map(a => ({
+      assemblyId: `${a.assembly}-${a.revision}`,
+      partNumber: a.assembly,
+      rev: a.revision,
+      family: '',
+      demand: a.demand,
+      ctAdj: a.ctAdj,
+      load: a.load,
+      loadShare: a.loadShare,
+      ctSource: a.ctSource,
+      studyDate: a.studyDate,
+      machAdj: a.machAdj,
+      imtAdj: a.imtAdj,
+      handAdj: a.handAdj,
+    })),
+    demandThruStep: api.demandThruStep,
+    estCount: api.estCount,
+    estLoadShare: api.estLoadShare,
+    assemblyCount: api.assemblyCount,
+    truncated: api.truncated,
   };
 }
 
 // ─── Math trail — the formula chain behind one step's NEED ──────────────────
 // WCT ÷ Takt ÷ (FPY × Eff) = raw machines → ROUNDUP → NEED. Shown in the
-// detail drawer / accordion so the engineer can audit the number.
+// detail drawer / pain-point card so the engineer can audit the number.
 export interface Ppqt2MathTrail {
   wct: number;
   takt: number;
@@ -197,13 +232,14 @@ export interface Ppqt2MathTrail {
 }
 
 export function getMathTrail(process: PPQTProcess, swc: PPQTSubWorkcenter): Ppqt2MathTrail {
-  const rawNeed = process.wct / process.takt / (swc.fpy / 100) / (swc.efficiency / 100);
   return {
     wct: process.wct,
     takt: process.takt,
     fpy: swc.fpy,
     efficiency: swc.efficiency,
-    rawNeed,
+    // ponytail: recomputed rather than threaded through — identical to the
+    // backend's rawNeed, and keeps this a pure function of the two entities.
+    rawNeed: process.wct / process.takt / (swc.fpy / 100) / (swc.efficiency / 100),
     resNeeded: process.resNeeded,
     eqAvail: process.eqAvail,
     gap: process.gap,
