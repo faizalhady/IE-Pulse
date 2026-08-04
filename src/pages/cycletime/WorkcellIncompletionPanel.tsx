@@ -15,16 +15,25 @@
 
 import { SortHeader } from '@/components/shared/SortHeader';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useCycleTimeAssemblyCatalog, useCycleTimeRunners } from '@/hooks/cycle_time/useCycleTimeData';
+import { useCycleTimeAssemblyCatalog, useCycleTimeCompletion, useCycleTimeRunners } from '@/hooks/cycle_time/useCycleTimeData';
 import { useSortable } from '@/hooks/shared/useSortable';
-import type { CycleTimeRunner } from '@/lib/cycle_time/cycleTimeApi';
+import type { CompletionModel, CycleTimeRunner } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
-import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react';
+import { Check, ChevronsUpDown, Columns2, Loader2, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { CompletionBadge } from './CompletionBadge';
+import { RouteComparisonDrawer } from './RouteComparisonDrawer';
 import { useCycleTimeFilters } from './CycleTimeFilters';
 
+/** Completion lookup key — normalise customer (runner is UPPERCASE, completion is config-name). */
+const compKey = (customer: string, assembly: string) =>
+  customer.toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + assembly;
+
 const TOP_N = 50;
-const GRID = '2.5rem minmax(12rem,1fr) 9rem 6rem 9rem 8rem';
+const GRID = '2.5rem minmax(10rem,1fr) 6.5rem 4.5rem 7rem 4rem 4rem 7rem';
+
+const lbrTone = (lbr: number) =>
+  lbr >= 85 ? 'text-emerald-600' : lbr >= 70 ? 'text-amber-600' : 'text-red-500';
 
 type RunnerMode = 'historical' | 'projection' | 'planner';
 const MODE_LABEL: Record<RunnerMode, string> = {
@@ -38,6 +47,8 @@ const detailColumns = (mode: RunnerMode): { label: string; key?: DetailSortKey }
   { label: mode === 'historical' ? 'Units (24mo)' : 'Demand', key: 'units' },
   { label: 'Jobs', key: 'jobs' },
   { label: mode === 'historical' ? 'Last built' : 'Planned', key: 'last' },
+  { label: 'LBR' },
+  { label: 'IPK' },
   { label: 'Cycle-time data', key: 'data' },
 ];
 
@@ -86,13 +97,22 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function WorkcellIncompletionPanel({ customer }: { customer: string }) {
-  const [mode, setMode] = useState<RunnerMode>('historical');
+  const [mode, setMode] = useState<RunnerMode>('planner');
   const isDemand = mode !== 'historical';
   const columns = detailColumns(mode);
   const md = (iso: string | null | undefined) => (iso ? iso.slice(5, 10) : '—'); // MM-DD
 
   const { data: runners, isLoading: runnersLoading, isError: runnersError } = useCycleTimeRunners(customer, mode);
   const { data: catalog, isLoading: catalogLoading } = useCycleTimeAssemblyCatalog(customer);
+
+  // Completion status (5-state) overlay — one global fetch, keyed by customer+assembly.
+  const completion = useCycleTimeCompletion();
+  const compMap = useMemo(() => {
+    const m = new Map<string, CompletionModel>();
+    for (const md of completion.data?.models ?? []) m.set(compKey(md.customer, md.assembly), md);
+    return m;
+  }, [completion.data]);
+  const [compare, setCompare] = useState<{ customer: string; assembly: string; tab: 'route' | 'lbr' | 'ipk' } | null>(null);
 
   // Assemblies we have cycle-time data for (normalised) — ground truth from
   // assembly_summary (same source as the Cycle Time tab).
@@ -137,7 +157,19 @@ export default function WorkcellIncompletionPanel({ customer }: { customer: stri
   const { sorted, sort, toggle } = useSortable(shown, DETAIL_ACCESSORS, { key: 'units', dir: 'desc' });
 
   const loading = runnersLoading || catalogLoading;
-  const missingRunners = rows.filter((r) => r.status !== 'has').length;
+  // Completion-status breakdown (new statuses) over this workcell's runners.
+  const statusCounts = useMemo(() => {
+    const c = { complete: 0, incomplete: 0, no_data: 0, unverified: 0, na: 0, pending: 0 };
+    for (const r of rows) {
+      const st = compMap.get(compKey(customer, r.assembly))?.status;
+      const b = !st ? 'pending' : st === 'unavailable' ? 'no_data' : st === 'no_data' ? 'incomplete'
+        : st === 'non_mes' ? 'na' : st;
+      if (b in c) c[b as keyof typeof c]++; else c.pending++;
+    }
+    return c;
+  }, [rows, compMap, customer]);
+  const totalRows = rows.length;
+  const sPct = (n: number) => (totalRows ? Math.round((n / totalRows) * 100) : 0);
 
   return (
     <div>
@@ -145,7 +177,7 @@ export default function WorkcellIncompletionPanel({ customer }: { customer: stri
         <div className="flex items-center gap-2">
           {/* Historical / Projection / Planner Demand toggle */}
           <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
-            {(['historical', 'projection', 'planner'] as RunnerMode[]).map((m) => (
+            {(['planner', 'historical'] as RunnerMode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
@@ -223,7 +255,13 @@ export default function WorkcellIncompletionPanel({ customer }: { customer: stri
             : mode === 'projection' ? 'Assemblies ranked by MES demand (next ~4 wk)'
             : "Assemblies ranked by planners' demand (next ~13 wk)"}{' '}
           {rows.length > 0 && (
-            <>· <span className="text-red-500 font-medium">{missingRunners} models missing cycle-time data</span></>
+            <>
+              {' · '}<span className="font-medium text-emerald-600">{statusCounts.complete} ({sPct(statusCounts.complete)}%) complete</span>
+              {' · '}<span className="font-medium text-amber-600">{statusCounts.incomplete} ({sPct(statusCounts.incomplete)}%) incomplete</span>
+              {' · '}<span className="font-medium text-red-500">{statusCounts.no_data} ({sPct(statusCounts.no_data)}%) no data</span>
+              {statusCounts.unverified > 0 && <>{' · '}<span className="font-medium text-muted-foreground">{statusCounts.unverified} unverified</span></>}
+              {statusCounts.na > 0 && <>{' · '}<span className="font-medium text-muted-foreground">{statusCounts.na} N/A</span></>}
+            </>
           )}
         </p>
       </div>
@@ -284,20 +322,67 @@ export default function WorkcellIncompletionPanel({ customer }: { customer: stri
               >
                 {isDemand ? `${md(r.first_start)} → ${md(r.planned_finish)}` : fmtDate(r.last_completed)}
               </div>
-              <div className="px-3">
-                <span
-                  className={cn(
-                    'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                    BADGE[r.status].cls,
-                  )}
-                >
-                  {BADGE[r.status].label}
-                </span>
+              {/* LBR + IPK — reliable only for complete models; click opens the breakdown drawer */}
+              {(() => {
+                const comp = compMap.get(compKey(customer, r.assembly));
+                const lbrShow = comp?.lbr != null;                 // any model with CT data (complete or partial)
+                const ipkShow = comp?.ipk_trolleys != null;
+                return (
+                  <>
+                    <div className="px-3">
+                      {comp ? (
+                        <button type="button" onClick={() => setCompare({ customer, assembly: r.assembly, tab: 'lbr' })}
+                          className={cn('text-xs tabular-nums underline-offset-2 hover:underline decoration-dotted', lbrShow ? lbrTone(comp.lbr!) : 'text-muted-foreground')}>
+                          {lbrShow ? `${comp.lbr}%` : '—'}
+                        </button>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </div>
+                    <div className="px-3">
+                      {comp ? (
+                        <button type="button" onClick={() => setCompare({ customer, assembly: r.assembly, tab: 'ipk' })}
+                          className="text-xs tabular-nums text-foreground underline-offset-2 hover:underline decoration-dotted">
+                          {ipkShow ? comp.ipk_trolleys : '—'}
+                        </button>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </div>
+                  </>
+                );
+              })()}
+              <div className="flex items-center gap-1.5 px-3">
+                {(() => {
+                  const comp = compMap.get(compKey(customer, r.assembly));
+                  if (!comp) {
+                    // not computed yet (completion mart still rebuilding) — pending, not the old flag
+                    return <span className="text-xs text-muted-foreground" title="Completion not computed yet">—</span>;
+                  }
+                  return (
+                    <>
+                      <CompletionBadge status={comp.status} />
+                      <button
+                        type="button"
+                        title="Open route / LBR / IPK breakdown"
+                        onClick={() => setCompare({ customer, assembly: r.assembly, tab: 'route' })}
+                        className="flex-shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-emerald-600"
+                      >
+                        <Columns2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           ))
         )}
       </div>
+
+      {compare && (
+        <RouteComparisonDrawer
+          customer={compare.customer}
+          assembly={compare.assembly}
+          tab={compare.tab}
+          onClose={() => setCompare(null)}
+        />
+      )}
     </div>
   );
 }

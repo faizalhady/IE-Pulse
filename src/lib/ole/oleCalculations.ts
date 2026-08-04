@@ -5,7 +5,7 @@
  * No React, no side effects — safe to import anywhere.
  */
 
-import type { OleWeeklyResult } from '@/lib/ole/oleApi';
+import type { OleResult, OleWeeklyResult } from '@/lib/ole/oleApi';
 import { formatWeekLabel } from '@/lib/ole/oleConstants';
 import type {
   AggregateTotals,
@@ -46,6 +46,35 @@ export function aggregateByWorkcell(rows: OleWeeklyResult[]): WorkcellAggregate[
     m.total_qty += r.total_qty;
     m.total_shifts += r.shift_count;
     m.flagged_shifts += r.shifts_flagged;
+  });
+  return Object.values(map);
+}
+
+/**
+ * Same shape as aggregateByWorkcell(), but from day+shift rows (/api/ole)
+ * instead of weekly rows. Weekly rows can only be filtered a whole week at a
+ * time, so any page that offers a from/to date picker must aggregate from
+ * these — otherwise moving the date by a day changes nothing.
+ */
+export function aggregateResultsByWorkcell(rows: OleResult[]): WorkcellAggregate[] {
+  const map: Record<string, WorkcellAggregate> = {};
+  rows.forEach(r => {
+    if (!map[r.workcell]) {
+      map[r.workcell] = {
+        workcell: r.workcell,
+        total_output_smh: 0,
+        total_input_hours: 0,
+        total_qty: 0,
+        total_shifts: 0,
+        flagged_shifts: 0,
+      };
+    }
+    const m = map[r.workcell];
+    m.total_output_smh += r.effective_output_smh || 0;
+    m.total_input_hours += r.total_input_hours || 0;
+    m.total_qty += r.total_qty || 0;
+    m.total_shifts += 1;                                    // one row = one shift
+    m.flagged_shifts += r.data_quality !== 'OK' ? 1 : 0;
   });
   return Object.values(map);
 }

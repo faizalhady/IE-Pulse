@@ -1,0 +1,252 @@
+/**
+ * RouteComparisonDrawer.tsx
+ * ─────────────────────────
+ * Right-side drawer — the PROOF behind a model's completion + LBR/IPK badges.
+ * Three tabs:
+ *   • Route — MES actual route ‖ IEDB route (which steps have cycle time)
+ *   • LBR   — per-line Yamazumi (station CTs) with the balance target line
+ *   • IPK   — buffer/trolley need along the process flow, where each sits
+ * Data: /completion/steps + /completion/line-metrics.
+ */
+
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { useCycleTimeCompletionSteps, useCycleTimeLineMetrics } from '@/hooks/cycle_time/useCycleTimeData';
+import { formatCycleSecondsLabel } from '@/lib/cycle_time/cycleTimeApi';
+import type { CompletionMesStep, IpkLine, LineMetrics, LineMetricsLine } from '@/lib/cycle_time/cycleTimeApi';
+import { cn } from '@/lib/utils';
+import { Loader2, ShoppingCart } from 'lucide-react';
+import { useState } from 'react';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+const LBR_TARGET = 85;
+const lbrColor = (v: number | null) =>
+  v == null ? 'text-muted-foreground' : v >= LBR_TARGET ? 'text-emerald-600' : v >= 70 ? 'text-amber-600' : 'text-red-500';
+
+const MES_STATUS: Record<CompletionMesStep['status'], { label: string; row: string; pill: string }> = {
+  present:  { label: 'in IEDB',    row: 'bg-emerald-500/5', pill: 'bg-emerald-500/15 text-emerald-600' },
+  missing:  { label: 'missing CT', row: 'bg-red-500/5',     pill: 'bg-red-500/15 text-red-600' },
+  non_iedb: { label: 'not IEDB',   row: '',                 pill: 'bg-muted text-muted-foreground' },
+  unmapped: { label: 'unmapped',   row: 'bg-amber-500/5',   pill: 'bg-amber-500/15 text-amber-600' },
+};
+
+type Tab = 'route' | 'lbr' | 'ipk';
+
+export function RouteComparisonDrawer({
+  customer, assembly, onClose, tab: initialTab = 'route',
+}: { customer: string; assembly: string; onClose: () => void; tab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const steps = useCycleTimeCompletionSteps(customer, assembly);
+  const lm = useCycleTimeLineMetrics(customer, assembly);
+
+  return (
+    <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-3xl">
+        <div className="border-b border-border px-5 py-3 pr-12">
+          <h2 className="truncate text-sm font-bold text-foreground">{assembly}</h2>
+          <p className="text-[11px] text-muted-foreground">{customer}</p>
+          <div className="mt-2 flex gap-1">
+            {(['route', 'lbr', 'ipk'] as Tab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={cn('rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors',
+                  tab === t ? 'bg-emerald-500/15 text-emerald-600' : 'text-muted-foreground hover:text-foreground')}
+              >
+                {t === 'route' ? 'Route' : t.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {tab === 'route' && <RouteView q={steps} />}
+        {tab === 'lbr' && <MetricsGate q={lm}>{(m) => <LbrView lm={m} />}</MetricsGate>}
+        {tab === 'ipk' && <MetricsGate q={lm}>{(m) => <IpkView lm={m} />}</MetricsGate>}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ─── Route tab (MES ‖ IEDB) ──────────────────────────────────────────────────
+function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> }) {
+  const [hideNoise, setHideNoise] = useState(true);
+  const data = q.data;
+  const mes = data?.mes ?? [];
+  const mesShown = hideNoise ? mes.filter((s) => s.status !== 'non_iedb') : mes;
+  const iedb = [...(data?.iedb ?? [])].sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9));
+
+  if (q.isLoading) return <Center><Loader2 className="h-5 w-5 animate-spin" /></Center>;
+  if (q.isError || !data) return <Center><span className="text-sm text-muted-foreground">No route data available for this model.</span></Center>;
+
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-2">
+      <div className="flex min-h-0 flex-col border-b border-border md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">MES route (actual) · {mesShown.length}</span>
+          <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <input type="checkbox" checked={hideNoise} onChange={(e) => setHideNoise(e.target.checked)} className="h-3 w-3" /> hide logistics
+          </label>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {mes.length === 0 && (
+            <p className="p-4 text-center text-xs text-muted-foreground">
+              MES data not available for this model (not built recently) — showing IEDB cycle time only.
+            </p>
+          )}
+          {mesShown.map((s, i) => {
+            const m = MES_STATUS[s.status];
+            return (
+              <div key={i} className={cn('grid grid-cols-[2rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0', m.row)}>
+                <span className="text-[10px] tabular-nums text-muted-foreground">{s.order ?? '·'}</span>
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-medium text-foreground">{s.step}</p>
+                  {s.alias && <p className="truncate text-[10px] text-muted-foreground">→ {s.alias}</p>}
+                </div>
+                <span className={cn('rounded-full px-1.5 py-px text-[8px] font-semibold uppercase tracking-wide whitespace-nowrap', m.pill)}>{m.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-col">
+        <div className="border-b border-border bg-muted/40 px-4 py-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">IEDB route (cycle time) · {iedb.length}</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {iedb.map((s, i) => (
+            <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0">
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-medium text-foreground">{s.process}{s.alias && <span className="text-muted-foreground"> · {s.alias}</span>}</p>
+                {s.sub_workcenter && <p className="truncate text-[10px] text-muted-foreground">{s.sub_workcenter}</p>}
+              </div>
+              <span className="ct-num tabular-nums text-[11px] font-semibold text-foreground whitespace-nowrap">{formatCycleSecondsLabel(s.cycle_time)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LBR tab — per-line Yamazumi with balance line ───────────────────────────
+function LbrView({ lm }: { lm: LineMetrics }) {
+  return (
+    <div className="min-h-0 flex-1 space-y-5 overflow-auto p-4">
+      <p className="text-xs text-muted-foreground">
+        Headline LBR <span className={cn('font-bold', lbrColor(lm.lbr))}>{lm.lbr ?? '—'}%</span> · {lm.lines.length} line(s) ·
+        each bar = a station's operator CT; dashed line = the balanced target (≥{LBR_TARGET}% is healthy).
+      </p>
+      {lm.lines.map((line) => <LineYamazumi key={line.sub_workcenter} line={line} />)}
+    </div>
+  );
+}
+
+function CtBarLabel(props: { x?: number; y?: number; width?: number; value?: number }) {
+  const { x = 0, y = 0, width = 0, value } = props;
+  if (value == null) return null;
+  const text = `${Number(value).toFixed(0)}s`;
+  const cx = x + width / 2;
+  const boxW = text.length * 7 + 8;
+  const boxH = 15;
+  const boxY = y - boxH - 3;
+  return (
+    <g>
+      <rect x={cx - boxW / 2} y={boxY} width={boxW} height={boxH} rx={3}
+        className="fill-background stroke-border" strokeWidth={1} opacity={0.9} />
+      <text x={cx} y={boxY + boxH / 2 + 0.5} textAnchor="middle" dominantBaseline="central"
+        className="fill-foreground" fontSize={11} fontWeight={700}>{text}</text>
+    </g>
+  );
+}
+
+function LineYamazumi({ line }: { line: LineMetricsLine }) {
+  const data = line.stations.map((s) => ({ step: s.step, ct: s.ct, bottleneck: s.is_bottleneck }));
+  return (
+    <div className="rounded-lg border border-border p-2">
+      <div className="mb-1 flex items-center justify-between px-1 text-xs">
+        <span className="truncate font-medium text-foreground">{line.sub_workcenter}</span>
+        <span className="whitespace-nowrap text-muted-foreground">
+          <span className={cn('font-bold', lbrColor(line.lbr))}>{line.lbr ?? '—'}%</span> · {line.n0} ops · bn {line.bottleneck_step}
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={168}>
+        <BarChart data={data} margin={{ top: 22, right: 8, bottom: 2, left: -18 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+          <XAxis dataKey="step" interval={0} angle={-30} textAnchor="end" height={52} tick={{ fontSize: 9 }} />
+          <YAxis tick={{ fontSize: 9 }} domain={[0, (max: number) => Math.ceil(max * 1.18)]} />
+          <Tooltip formatter={(v: number) => [`${Number(v).toFixed(0)}s`, 'CT']} contentStyle={{ fontSize: 11 }} />
+          {line.balance_line != null && (
+            <ReferenceLine y={line.balance_line} stroke="#64748b" strokeDasharray="4 3"
+              label={{ value: `balance ${line.balance_line}s`, position: 'insideTopRight', fontSize: 9, fill: '#64748b' }} />
+          )}
+          <Bar dataKey="ct" radius={[2, 2, 0, 0]}>
+            <LabelList dataKey="ct" content={<CtBarLabel />} />
+            {data.map((d, i) => <Cell key={i} fill={d.bottleneck ? '#f59e0b' : '#10b981'} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── IPK tab — full per-line flow: every process + UPH, trolley gap between each ──
+function IpkView({ lm }: { lm: LineMetrics }) {
+  const ipkLines = lm.ipk_lines ?? [];
+  return (
+    <div className="min-h-0 flex-1 space-y-5 overflow-auto p-4">
+      <p className="text-xs text-muted-foreground">
+        Total <span className="font-bold text-foreground">{lm.ipk_trolleys}</span> trolleys ·
+        {' '}{lm.boards_per_trolley} boards/trolley · lot {lm.loading} · a trolley buffer sits where an upstream process outruns the next (UPH gap).
+      </p>
+      {ipkLines.map((line) => <IpkLineFlow key={line.sub_workcenter} line={line} />)}
+      {ipkLines.length === 0 && <p className="py-8 text-center text-xs text-muted-foreground">No route steps with cycle time.</p>}
+    </div>
+  );
+}
+
+function IpkLineFlow({ line }: { line: IpkLine }) {
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="mb-2 flex items-center justify-between px-1 text-xs">
+        <span className="truncate font-medium text-foreground">{line.sub_workcenter}</span>
+        <span className="whitespace-nowrap text-muted-foreground">
+          <span className={cn('font-bold', line.trolleys > 0 ? 'text-amber-600' : 'text-emerald-600')}>{line.trolleys}</span> trolley{line.trolleys === 1 ? '' : 's'}
+        </span>
+      </div>
+      {/* vertical flow: every station (UPH) → gap → next station */}
+      <div className="mx-auto max-w-md">
+        {line.stations.map((s, i) => (
+          <div key={i}>
+            <div className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-1.5">
+              <span className="text-[12px] font-medium text-foreground">{s.step}</span>
+              <span className="ct-num tabular-nums text-[11px] text-muted-foreground">{s.uph} UPH</span>
+            </div>
+            {i < line.buffers.length && (
+              <div className="flex items-center gap-2 py-1 pl-3 text-[11px] text-muted-foreground">
+                <span className="text-lg leading-none">↓</span>
+                {line.buffers[i].trolleys > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-600">
+                    <ShoppingCart className="h-3 w-3" /> {line.buffers[i].trolleys} trolley{line.buffers[i].trolleys > 1 ? 's' : ''}
+                    <span className="font-normal text-amber-600/70">({line.buffers[i].ipk_units} boards)</span>
+                  </span>
+                ) : (
+                  <span className="text-emerald-600/70">balanced — no buffer</span>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+function MetricsGate({ q, children }: { q: ReturnType<typeof useCycleTimeLineMetrics>; children: (m: LineMetrics) => React.ReactNode }) {
+  if (q.isLoading) return <Center><Loader2 className="h-5 w-5 animate-spin" /></Center>;
+  if (q.isError || !q.data) return <Center><span className="text-sm text-muted-foreground">No LBR/IPK — needs complete cycle-time data.</span></Center>;
+  return <>{children(q.data)}</>;
+}
+
+function Center({ children }: { children: React.ReactNode }) {
+  return <div className="flex min-h-0 flex-1 items-center justify-center p-6">{children}</div>;
+}

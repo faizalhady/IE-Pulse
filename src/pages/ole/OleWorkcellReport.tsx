@@ -198,7 +198,15 @@ export default function OleWorkcellReport() {
   const rawResults = resultsHook.data ?? [];
   const rawProduction = productionHook.data ?? [];
   const smhList = smhLookupHook.data ?? [];
-  const isLoading = weeklyHook.loading && rawWeekly.length === 0;
+  // Skeletons must wait for EVERY dataset the page renders, not just the fastest
+  // one. ole_weekly returns first; gating on it alone showed a 0.0% hero and a
+  // "No labor data" table while ole_results (the biggest payload) was still in
+  // flight -- which reads as "this workcell produced nothing".
+  const isLoading =
+    (weeklyHook.loading && rawWeekly.length === 0) ||
+    (workcellsHook.loading && workcellConfigs.length === 0) ||
+    (resultsHook.loading && rawResults.length === 0) ||
+    (mhHook.loading && !mhHook.data);
 
   const smhMap = useMemo(() => {
     const m = new Map<string, number>();
@@ -673,7 +681,9 @@ export default function OleWorkcellReport() {
                     ))}
                   </div>
                   {laborRows.length === 0
-                    ? <div className="py-8 text-center text-[10px] text-muted-foreground">No labor data</div>
+                    ? <div className="py-8 text-center text-[10px] text-muted-foreground">
+                        {resultsHook.loading ? 'Loading labor data…' : 'No labor data'}
+                      </div>
                     : laborRows.map((row) => {
                       const rowKey = `${row.workcell}|${row.date}|${row.shift}`;
                       const status = getOleStatus(row.ole_pct);
@@ -732,7 +742,9 @@ export default function OleWorkcellReport() {
                     ))}
                   </div>
                   {prodRows.length === 0
-                    ? <div className="py-8 text-center text-[10px] text-muted-foreground">No production data</div>
+                    ? <div className="py-8 text-center text-[10px] text-muted-foreground">
+                        {productionHook.loading || smhLookupHook.loading ? 'Loading production data…' : 'No production data'}
+                      </div>
                     : prodRows.map((row, idx) => {
                       const smhUnit = smhMap.get(`${row.workcell}|${row.assembly}`) ?? null;
                       const outputSmh = smhUnit !== null ? row.qty * smhUnit : null;

@@ -2,12 +2,11 @@ import { MhPieModal } from '@/components/ole/MhPieModal';
 import { OleFilterBar } from '@/components/ole/OleFilterBar';
 import { TrendModal } from '@/components/ole/TrendModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useIndirectLabor, useMhDistribution, useOleWeekly, useOleWorkcells } from '@/hooks/ole/useOleData';
+import { useIndirectLabor, useMhDistribution, useOleResults, useOleWeekly, useOleWorkcells } from '@/hooks/ole/useOleData';
 import { useOleDateFilter } from '@/hooks/ole/useOleDateFilter';
-import type { OleWeeklyResult } from '@/lib/ole/oleApi';
 import {
   aggregateByWeek,
-  aggregateByWorkcell,
+  aggregateResultsByWorkcell,
   calculateOLE,
 } from '@/lib/ole/oleCalculations';
 import { TT } from '@/lib/ole/oleChartStyles';
@@ -54,10 +53,22 @@ export default function OlePlantReport() {
   const workcellsHook = useOleWorkcells();
   const indirectHook = useIndirectLabor();
   const mhHook = useMhDistribution();
+  // Day+shift grain. The weekly mart can't answer a from/to date picker — see
+  // dayFilteredResults below.
+  const resultsHook = useOleResults();
 
   const rawWeekly = weeklyHook.data ?? [];
+  const rawResults = resultsHook.data ?? [];
   const workcellConfigs = workcellsHook.data ?? [];
-  const isLoading = weeklyHook.loading && rawWeekly.length === 0;
+  // Skeletons must wait for EVERY dataset the page renders, not just the fastest
+  // one. ole_weekly returns first; gating on it alone flashed 0.0% / "—" cards
+  // while workcells + mh_distribution + indirect_labor were still in flight.
+  const isLoading =
+    (weeklyHook.loading && rawWeekly.length === 0) ||
+    (workcellsHook.loading && workcellConfigs.length === 0) ||
+    (resultsHook.loading && rawResults.length === 0) ||
+    (mhHook.loading && !mhHook.data) ||
+    (indirectHook.loading && !indirectHook.data);
 
   // ── Derive week list from live data ─────────────────────────────────────────
   const weeks = useMemo((): WeekRow[] => {
@@ -102,33 +113,43 @@ export default function OlePlantReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weeks]);
 
-  // ── Filter by date/week ONLY (no plant filter) ──────────────────────────────
-  const weekFilteredWeekly = useMemo(() => {
-    return rawWeekly.filter(r => {
-      const inDate = (!dateFrom && !dateTo) ||
-        ((!dateFrom || r.week_start_date <= dateTo) && (!dateTo || r.week_end_date >= dateFrom));
-      if (selectedWeek !== null) return r.iso_week === selectedWeek;
-      return inDate;
-    });
-  }, [rawWeekly, dateFrom, dateTo, selectedWeek]);
+  // ── Effective date range ────────────────────────────────────────────────────
+  // A selected week is just a date range. Resolving it to one here means every
+  // consumer below filters the same way, whether the user clicked a week bar or
+  // typed a custom from/to.
+  const [rangeFrom, rangeTo] = useMemo((): [string, string] => {
+    if (selectedWeek !== null) {
+      const w = weeks.find(x => x.isoWeek === selectedWeek);
+      if (w) return [w.start, w.end];
+    }
+    return [dateFrom, dateTo];
+  }, [selectedWeek, weeks, dateFrom, dateTo]);
 
-  // ── Filter by plant (site level filter) ─────────────────────────────────────
-  const filteredWeekly = useMemo(() => {
-    return weekFilteredWeekly.filter(r => {
-      const wcPlant = workcellConfigs.find(w => w.workcell === r.workcell)?.plant;
-      return plant === 'all' || wcPlant === plant;
-    });
-  }, [weekFilteredWeekly, plant, workcellConfigs]);
+  // ── Day-grain rows for the date range (no plant filter) ─────────────────────
+  // Everything below reads from here, NOT from the weekly mart. Weekly rows are
+  // whole weeks, so a from/to picker could only ever move a week at a time —
+  // nudging the date by one day changed nothing on screen.
+  const dayFilteredResults = useMemo(() => {
+    return rawResults.filter(r =>
+      (!rangeFrom || r.date >= rangeFrom) && (!rangeTo || r.date <= rangeTo)
+    );
+  }, [rawResults, rangeFrom, rangeTo]);
+
+  const plantFilteredResults = useMemo(() => {
+    if (plant === 'all') return dayFilteredResults;
+    const wcPlant = new Map(workcellConfigs.map(w => [w.workcell, w.plant]));
+    return dayFilteredResults.filter(r => wcPlant.get(r.workcell) === plant);
+  }, [dayFilteredResults, plant, workcellConfigs]);
 
   // ── Per-workcell aggregates ──────────────────────────────────────────────────
   const workcellsSorted = useMemo(() => {
-    return aggregateByWorkcell(filteredWeekly)
+    return aggregateResultsByWorkcell(plantFilteredResults)
       .map(r => ({
         ...r,
         ole_pct: calculateOLE(r.total_output_smh, r.total_input_hours),
       }))
       .sort((a, b) => a.ole_pct - b.ole_pct);
-  }, [filteredWeekly]);
+  }, [plantFilteredResults]);
 
   // ── Site aggregate ───────────────────────────────────────────────────────────
   const site = useMemo(() => {
@@ -146,15 +167,15 @@ export default function OlePlantReport() {
 
   // ── Plant aggregates (ALWAYS show both plants, ignore plant filter) ─────────
   const plantAgg = useMemo(() => {
-    const p1rows = weekFilteredWeekly.filter(r => workcellConfigs.find(w => w.workcell === r.workcell)?.plant === 'Plant 1');
-    const p2rows = weekFilteredWeekly.filter(r => workcellConfigs.find(w => w.workcell === r.workcell)?.plant === 'Plant 2');
-    const agg = (rows: OleWeeklyResult[]) => {
-      const out = rows.reduce((s, r) => s + r.total_output_smh, 0);
-      const inp = rows.reduce((s, r) => s + r.total_input_hours, 0);
+    const wcPlant = new Map(workcellConfigs.map(w => [w.workcell, w.plant]));
+    const agg = (p: string) => {
+      const rows = dayFilteredResults.filter(r => wcPlant.get(r.workcell) === p);
+      const out = rows.reduce((s, r) => s + (r.effective_output_smh || 0), 0);
+      const inp = rows.reduce((s, r) => s + (r.total_input_hours || 0), 0);
       return { ole_pct: calculateOLE(out, inp) };
     };
-    return { p1: agg(p1rows), p2: agg(p2rows) };
-  }, [weekFilteredWeekly, workcellConfigs]);
+    return { p1: agg('Plant 1'), p2: agg('Plant 2') };
+  }, [dayFilteredResults, workcellConfigs]);
 
   // ── Man-hours distribution — per shift, summed under plant + date filter ────
   // mfg_lost is RE-DERIVED from the aggregated buckets (the per-shift formula
@@ -167,8 +188,8 @@ export default function OlePlantReport() {
       const wcPlant = wcPlantMap.get(r.workcell);
       if (!wcPlant) continue;
       if (plant !== 'all' && wcPlant !== plant) continue;
-      if (dateFrom && r.date < dateFrom) continue;
-      if (dateTo && r.date > dateTo) continue;
+      if (rangeFrom && r.date < rangeFrom) continue;
+      if (rangeTo && r.date > rangeTo) continue;
       acc.nva += r.nva_hours || 0;
       acc.lunch += r.lunch_hours || 0;
       acc.mfg_dt += r.mfg_dt_hours || 0;
@@ -181,7 +202,7 @@ export default function OlePlantReport() {
     const named = acc.output + acc.nva + acc.lunch + acc.mfg_dt + acc.downtime;
     const mfg_lost = acc.paid - named;
     return { ...acc, named, mfg_lost };
-  }, [mhHook.data, workcellConfigs, plant, dateFrom, dateTo]);
+  }, [mhHook.data, workcellConfigs, plant, rangeFrom, rangeTo]);
 
   const [mhModalOpen, setMhModalOpen] = useState(false);
 
@@ -189,18 +210,18 @@ export default function OlePlantReport() {
   const { vaTotal, nvaTotal } = useMemo(() => {
     let va = 0;
     let nva = 0;
-    for (const r of filteredWeekly) {
-      va += r.total_va_count || 0;
-      nva += r.total_nva_count || 0;
+    for (const r of plantFilteredResults) {
+      va += r.va_count || 0;
+      nva += r.nva_count || 0;
     }
     return { vaTotal: va, nvaTotal: nva };
-  }, [filteredWeekly]);
+  }, [plantFilteredResults]);
 
   // ── Indirect labor aggregate (filtered by date + plant) ─────────────────────
   const indirectByEntity = useMemo(() => {
     const rows = indirectHook.data ?? [];
     const inRange = (d: string) =>
-      (!dateFrom && !dateTo) || ((!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
+      (!rangeFrom && !rangeTo) || ((!rangeFrom || d >= rangeFrom) && (!rangeTo || d <= rangeTo));
     const inPlant = (p: string) => plant === 'all' || p === plant;
     const totals = new Map<string, { entity: string; label: string; plant: string; hours: number }>();
     for (const r of rows) {
@@ -210,7 +231,7 @@ export default function OlePlantReport() {
       totals.set(r.entity, cur);
     }
     return Array.from(totals.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [indirectHook.data, dateFrom, dateTo, plant]);
+  }, [indirectHook.data, rangeFrom, rangeTo, plant]);
 
   const [trendModalOpen, setTrendModalOpen] = useState(false);
 
@@ -495,8 +516,9 @@ export default function OlePlantReport() {
               </button>
 
               {/* Indirect labor — input hours only */}
-              {indirectByEntity.length > 0 && (
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
+              {/* Card shell renders even when empty — it used to pop in late and
+                  shove the whole left column down. */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="px-4 py-2.5 border-b border-border">
                     <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Indirect Labor — Input Hours</p>
                   </div>
@@ -521,8 +543,12 @@ export default function OlePlantReport() {
                       </div>
                     );
                   })}
-                </div>
-              )}
+                  {indirectByEntity.length === 0 && (
+                    <div className="px-4 py-4 text-center text-[10px] text-muted-foreground">
+                      No indirect labor for selected period
+                    </div>
+                  )}
+              </div>
 
               {/* Hours distribution */}
               {/* <div className="rounded-xl border border-border bg-card p-4">
@@ -683,8 +709,8 @@ export default function OlePlantReport() {
                 </div>
                 <div className="overflow-x-auto">
                   <div className="grid bg-muted/40 text-[9px] text-muted-foreground uppercase tracking-wider font-semibold border-b border-border"
-                    style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem' }}>
-                    {['#', 'Workcell', 'Plant', 'OLE %', 'Output SMH', 'Input Hrs', 'Status'].map(h => (
+                    style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 6rem 5rem 5rem' }}>
+                    {['#', 'Workcell', 'Plant', 'OLE %', 'Total Output', 'Output SMH', 'Input Hrs', 'Status'].map(h => (
                       <div key={h} className="px-2 py-2">{h}</div>
                     ))}
                   </div>
@@ -698,7 +724,7 @@ export default function OlePlantReport() {
                     return (
                       <div key={wc.workcell}
                         className="grid items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                        style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 5rem 4.5rem 5rem', height: 44 }}
+                        style={{ gridTemplateColumns: '1.5rem minmax(9rem, 1fr) 5rem 7rem 6rem 6rem 5rem 5rem', height: 44 }}
                         onClick={() => {
                           const params = new URLSearchParams();
                           if (selectedWeek !== null) params.set('week', String(selectedWeek));
@@ -738,6 +764,9 @@ export default function OlePlantReport() {
                           <div className="h-0.5 rounded-full bg-muted/40 overflow-hidden mt-0.5" style={{ width: 56 }}>
                             <div className="h-full rounded-full" style={{ width: `${Math.min(wc.ole_pct, 100)}%`, background: clr }} />
                           </div>
+                        </div>
+                        <div className="px-2 text-[10px] font-mono text-foreground text-right">
+                          {Math.round(wc.total_qty).toLocaleString()}
                         </div>
                         <div className="px-2 text-[10px] font-mono text-foreground text-right">
                           {Math.round(wc.total_output_smh).toLocaleString()}
