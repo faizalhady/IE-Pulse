@@ -12,7 +12,8 @@ import type { SavedReportMeta, UserInfo } from '@/lib/ole/savedReportsApi';
 import { fetchUserInfo, savedReportsApi, setLocalUser } from '@/lib/ole/savedReportsApi';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { CalendarIcon, ChevronLeft, ChevronRight, Download, Check, Eye, EyeOff, FileSpreadsheet, FolderOpen, GripVertical, Info, Pencil, Plus, Save, Settings, Trash2 } from 'lucide-react';
+import { PersonSearch } from '@/components/shared/PersonSearch';
+import { CalendarIcon, ChevronLeft, ChevronRight, Download, Check, Eye, EyeOff, FileSpreadsheet, FolderOpen, GripVertical, Info, Pencil, Plus, Save, Settings, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
@@ -23,7 +24,7 @@ import {
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type SetupMode = 'plant' | 'workcell';
-type ActionItem = { id: string; issue: string; problemDescription: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; commitDate: string; status: string; };
+type ActionItem = { id: string; issue: string; problemDescription: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; responsibleNtid?: string; responsibleEmail?: string; commitDate: string; status: string; };
 type ReportScope = { mode: SetupMode; selectedPlants: string[]; selectedWorkcells: string[] };
 type SavedPlan = { actions: ActionItem[]; scope?: ReportScope; title?: string };
 type TrendPoint = { id: string; label: string; ole: number; target: number; projected?: boolean; hidden?: boolean };
@@ -836,6 +837,13 @@ export default function OLE4QReport() {
   const [savedList, setSavedList] = useState<SavedReportMeta[]>([]);
   // The saved row's id — the identity. null = this report has never been saved.
   const [loadedId, setLoadedId] = useState<number | null>(null);
+  // Read at save time rather than closed over: autosaves are serialised, and a
+  // queued one must see the id the previous one just created, or it inserts a
+  // SECOND row instead of updating the first.
+  const loadedIdRef = useRef<number | null>(null);
+  useEffect(() => { loadedIdRef.current = loadedId; }, [loadedId]);
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  const [autoState, setAutoState] = useState<'idle' | 'saving' | 'error'>('idle');
   const [saveMsg, setSaveMsg] = useState('');
   // Snapshot of the plan as last saved/loaded. Anything else means unsaved work.
   // Compared as JSON because ActionItem is flat data — no need for a deep-equal
@@ -924,6 +932,7 @@ export default function OLE4QReport() {
       payload: { actions: opts.actions, scope: opts.scope, title: opts.title } satisfies SavedPlan,
     });
     setLoadedId(res.id);
+    loadedIdRef.current = res.id;
     setSavedSnapshot(JSON.stringify({ actions: opts.actions, title: opts.title }));
     if (opts.announce) {
       setSaveMsg(`Saved "${name}"`);
@@ -950,6 +959,29 @@ export default function OLE4QReport() {
       setTimeout(() => setSaveMsg(''), 4000);
     }
   }
+
+  /* Autosave. Debounced, so typing a sentence is one write and not one per
+     keystroke. Runs only once we know who you are: on a dev machine saving
+     needs an NTID prompt, and a prompt fired by a timer would be an ambush, so
+     the manual button stays as the fallback there. */
+  useEffect(() => {
+    // 'saving' would otherwise schedule a second write on top of the one in
+    // flight, because dirty stays true until the snapshot lands.
+    if (!dirty || !user || tab !== 'editor' || autoState === 'saving') return;
+    // A failed autosave has to keep trying on its own. There is no button left
+    // to press, so giving up would quietly lose the work.
+    const timer = setTimeout(() => {
+      const snapshot = { title, actions,
+        scope: { mode, selectedPlants, selectedWorkcells }, announce: false };
+      setAutoState('saving');
+      saveChain.current = saveChain.current
+        .then(() => persistPlan(user, { ...snapshot, id: loadedIdRef.current }))
+        .then(() => setAutoState('idle'))
+        .catch(e => { console.error('autosave failed', e); setAutoState('error'); });
+    }, autoState === 'error' ? 5000 : 1000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, planFingerprint, user, tab, autoState]);
 
   async function handleDeleteSave(id: number) {
     if (!user) return;
@@ -1143,17 +1175,31 @@ export default function OLE4QReport() {
         {tab === 'editor' && (
           <div className="flex items-center gap-2">
             {saveMsg && <span className="text-[11px] text-muted-foreground">{saveMsg}</span>}
-            <div className="relative">
-              <Button onClick={handleSavePlan} variant={dirty ? 'default' : 'outline'} size="sm" className="gap-2"
-                title={dirty ? 'Unsaved changes — click to save the improvement plan' : 'Improvement plan is saved'}>
-                <Save className="w-4 h-4" />
-                {dirty ? 'Save' : 'Saved'}
-              </Button>
-              {dirty && (
-                <span aria-label="Unsaved changes"
-                  className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-card" />
-              )}
-            </div>
+            {user ? (
+              <span aria-live="polite"
+                title={autoState === 'error' ? 'Autosave failed - retrying every 5s' : undefined}
+                className={cn('flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium',
+                  autoState === 'error' ? 'bg-red-500/10 text-red-500'
+                    : autoState === 'saving' ? 'bg-muted text-muted-foreground'
+                      : dirty ? 'bg-amber-400/15 text-amber-600 dark:text-amber-400'
+                        : 'text-muted-foreground')}>
+                <span className={cn('h-1.5 w-1.5 rounded-full',
+                  autoState === 'error' ? 'bg-red-500'
+                    : autoState === 'saving' ? 'bg-muted-foreground animate-pulse'
+                      : dirty ? 'bg-amber-500' : 'bg-emerald-500')} />
+                {autoState === 'error' ? 'Retrying save...'
+                  : autoState === 'saving' ? 'Saving...' : dirty ? 'Unsaved changes' : 'Saved'}
+              </span>
+            ) : (
+              <div className="relative">
+                <Button onClick={handleSavePlan} variant={dirty ? 'default' : 'outline'} size="sm" className="gap-2"
+                  title="Autosave is off until we can identify you - click to save">
+                  <Save className="w-4 h-4" />{dirty ? 'Save' : 'Saved'}
+                </Button>
+                {dirty && <span aria-label="Unsaved changes"
+                  className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-card" />}
+              </div>
+            )}
             <PreviewModal />
           </div>
         )}
@@ -1325,14 +1371,25 @@ export default function OLE4QReport() {
                                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 absolute right-2 top-1/2 -translate-y-1/2 z-20 opacity-0 group-hover/item:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); setActions(actions.filter(x => x.id !== a.id)); }}><Trash2 className="w-3.5 h-3.5" /></Button>
                                     </div>
                                     <AccordionContent className="px-4 pb-4 space-y-4 border-t border-border pt-4 bg-muted/20">
-                                      <div className="grid grid-cols-2 gap-2">
+                                      <div className="space-y-4">
                                         <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Problem Description</Label><Input value={a.problemDescription} onChange={e => update({ problemDescription: e.target.value })} placeholder="New Problem..." className="h-7 text-xs bg-background" /></div>
                                         <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Responsible</Label>
-                                          <select value={a.responsible} onChange={e => update({ responsible: e.target.value })} className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                                            <option value="">Select Owner</option>
-                                            <option value="Syuhada (IE SME)">Syuhada (IE SME)</option>
-                                            <option value="ChoHui (IE SME)">ChoHui (IE SME)</option>
-                                          </select>
+                                          {a.responsible ? (
+                                            <div className="flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-2 text-xs">
+                                              <span className="truncate">{a.responsible}</span>
+                                              {a.responsibleNtid && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{a.responsibleNtid}</span>}
+                                              <button type="button" title="Clear owner" className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
+                                                onClick={() => update({ responsible: '', responsibleNtid: '', responsibleEmail: '' })}>
+                                                <X className="h-3 w-3" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            /* ntid + email are carried alongside the name so the task can be emailed later. */
+                                            <PersonSearch placeholder="Search anyone by name or NTID..." onPick={pn => update({
+                                              responsible: pn.legalName ?? pn.ntid ?? '',
+                                              responsibleNtid: pn.ntid ?? '', responsibleEmail: pn.email ?? '',
+                                            })} />
+                                          )}
                                         </div>
                                       </div>
                                       <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Root Cause</Label><textarea value={a.rootCause} onChange={e => update({ rootCause: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[40px]" /></div>
