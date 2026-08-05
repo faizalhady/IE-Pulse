@@ -35,7 +35,6 @@ const ALL = '__all__';
 
 const SMH_STATUS_OPTIONS = [
   { value: 'OK', label: 'OK' },
-  { value: 'MISSING_SMH', label: 'Missing SMH' },
   { value: 'NOT_IN_SMH_DB', label: 'Not in SMH DB' },
 ] as const;
 

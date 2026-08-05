@@ -182,7 +182,6 @@ export const STAGE_BADGE: Record<string, string> = {
 };
 
 export const SMH_STATUS_BADGE: Record<string, string> = {
-  MISSING_SMH: 'bg-amber-500/15  text-amber-400  border-amber-500/30',
   NOT_IN_SMH_DB: 'bg-red-500/15    text-red-400    border-red-500/30',
   OK: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
 };

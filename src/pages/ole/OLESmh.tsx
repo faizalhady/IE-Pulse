@@ -11,7 +11,7 @@
  * otherwise saving a value appears to do nothing until Monday.
  *
  * Filters live in the URL, so a pre-filtered link can be sent to a workcell
- * owner: /ole/smh?workcell=ASP&status=NOT_IN_SMH_DB
+ * owner: /ole/smh?workcell=ASP&status=NOT_IN_SMH_DB  (the 'Missing SMH' filter)
  */
 
 import WorkcellBadge from '@/components/ole/WorkcellBadge';
@@ -33,7 +33,7 @@ import { useSearchParams } from 'react-router-dom';
 
 // UNUSED = in the SMH table but not produced in the current window. Only these
 // are safe to delete as "outdated" — the other three are live production.
-type RowStatus = 'OK' | 'MISSING_SMH' | 'NOT_IN_SMH_DB' | 'UNUSED';
+type RowStatus = 'OK' | 'NOT_IN_SMH_DB' | 'UNUSED';
 type StatusFilter = 'all' | RowStatus;
 
 interface Row {
@@ -51,22 +51,19 @@ interface Row {
 
 const STATUS_BADGE: Record<RowStatus, string> = {
   OK:            'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  MISSING_SMH:   'bg-amber-500/15   text-amber-400   border-amber-500/30',
   NOT_IN_SMH_DB: 'bg-red-500/15     text-red-400     border-red-500/30',
   UNUSED:        'bg-slate-500/15   text-slate-400   border-slate-500/30',
 };
 
 const STATUS_LABEL: Record<RowStatus, string> = {
   OK: 'OK',
-  MISSING_SMH: 'Missing SMH',
-  NOT_IN_SMH_DB: 'Not in DB',
+  NOT_IN_SMH_DB: 'Missing SMH',
   UNUSED: 'Not produced',
 };
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'MISSING_SMH', label: 'Missing SMH' },
-  { key: 'NOT_IN_SMH_DB', label: 'Not in DB' },
+  { key: 'NOT_IN_SMH_DB', label: 'Missing SMH' },
   { key: 'OK', label: 'OK' },
   { key: 'UNUSED', label: 'Not produced' },
 ];
@@ -149,7 +146,7 @@ export default function OLESmh() {
         smh_value: value,
         // Derived from the LIVE value, not the snapshot's status — that's the
         // whole point of the overlay.
-        smh_status: value > 0 ? 'OK' : (l ? 'MISSING_SMH' : 'NOT_IN_SMH_DB'),
+        smh_status: value > 0 ? 'OK' : 'NOT_IN_SMH_DB',
         total_qty_produced: s.total_qty_produced,
         active_days: s.active_days,
         last_seen_date: s.last_seen_date,
@@ -406,7 +403,6 @@ export default function OLESmh() {
                 <div className="py-12 text-center text-muted-foreground text-sm">No assemblies found</div>
               ) : paginated.map((row, idx) => {
                 const badgeStatus = row.smh_status === 'OK' ? 'optimal'
-                  : row.smh_status === 'MISSING_SMH' ? 'warning'
                   : row.smh_status === 'UNUSED' ? 'optimal' : 'critical';
                 const inDb = row.smh_value > 0;
 
@@ -426,7 +422,6 @@ export default function OLESmh() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className={cn('w-2 h-2 rounded-full flex-shrink-0',
                           row.smh_status === 'OK' ? 'bg-emerald-400'
-                            : row.smh_status === 'MISSING_SMH' ? 'bg-amber-400'
                             : row.smh_status === 'UNUSED' ? 'bg-slate-400' : 'bg-red-400')} />
                         <p className="font-semibold text-sm text-foreground font-mono truncate">{row.assembly}</p>
                       </div>

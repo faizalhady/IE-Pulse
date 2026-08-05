@@ -128,7 +128,7 @@ export interface SmhStatus {
   first_seen_date: string;
   last_seen_date: string;
   active_days: number;
-  smh_status: 'OK' | 'MISSING_SMH' | 'NOT_IN_SMH_DB';
+  smh_status: 'OK' | 'NOT_IN_SMH_DB';
 }
 
 export interface OleWeeklyResult {

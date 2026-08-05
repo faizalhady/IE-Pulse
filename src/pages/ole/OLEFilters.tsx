@@ -194,8 +194,7 @@ export default function OLEFilters({
             <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Any status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>Any status</SelectItem>
-              <SelectItem value="MISSING_SMH">Missing SMH</SelectItem>
-              <SelectItem value="NOT_IN_SMH_DB">Not in DB</SelectItem>
+              <SelectItem value="NOT_IN_SMH_DB">Missing SMH</SelectItem>
               <SelectItem value="OK">OK</SelectItem>
             </SelectContent>
           </Select>

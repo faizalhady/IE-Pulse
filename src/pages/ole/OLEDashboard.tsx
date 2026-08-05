@@ -679,7 +679,7 @@ export default function OLEOverview() {
                 >
                   <div className="px-4 text-center text-xs text-muted-foreground font-mono">{idx + 1}</div>
                   <div className="px-3 flex items-center gap-2.5">
-                    <WorkcellBadge name={row.workcell} status={row.smh_status === 'OK' ? 'optimal' : row.smh_status === 'MISSING_SMH' ? 'warning' : 'critical'} />
+                    <WorkcellBadge name={row.workcell} status={row.smh_status === 'OK' ? 'optimal' : 'critical'} />
                     <span className="font-semibold text-foreground truncate">{row.workcell}</span>
                   </div>
                   <div className="px-3 font-mono text-xs text-foreground truncate" title={row.assembly}>{row.assembly}</div>
@@ -694,7 +694,7 @@ export default function OLEOverview() {
                   <div className="px-3 font-mono text-xs text-muted-foreground">{row.last_seen_date}</div>
                   <div className="px-3 flex justify-center">
                     <span className={cn('text-[10px] font-semibold px-2 py-1 rounded-full border', SMH_STATUS_BADGE[row.smh_status] ?? '')}>
-                      {row.smh_status === 'OK' ? 'OK' : row.smh_status === 'MISSING_SMH' ? 'Missing' : 'Not in DB'}
+                      {row.smh_status === 'OK' ? 'OK' : 'Missing SMH'}
                     </span>
                   </div>
                 </div>
