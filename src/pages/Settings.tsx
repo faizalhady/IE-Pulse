@@ -1,5 +1,6 @@
 import { AccessManager } from '@/components/settings/AccessManager';
 import { useAccessLevel } from '@/hooks/useAccessLevel';
+import NotAuthorized from '@/pages/NotAuthorized';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { setFeatureFlag, useFeatureFlag } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
@@ -73,22 +74,7 @@ export default function Settings() {
     return <div className="p-8 text-sm text-muted-foreground">Checking access...</div>;
   }
   if (!isDeveloper) {
-    return (
-      <div className="p-8">
-        <div className="max-w-md rounded-xl border bg-card p-6">
-          <h2 className="text-base font-semibold">Settings are restricted</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Roles &amp; access can only be changed by a developer. Ask one of them
-            if you need something here.
-          </p>
-          {user?.ntid && (
-            <p className="mt-3 font-mono text-[11px] text-muted-foreground">
-              signed in as {user.ntid}
-            </p>
-          )}
-        </div>
-      </div>
-    );
+    return <NotAuthorized reason="Roles & access can only be changed by a developer" />;
   }
 
   return (
