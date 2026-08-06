@@ -60,8 +60,13 @@ async function fetchUser(): Promise<CurrentUser> {
 
 /** The signed token, or null if identity could not be established. Awaits the
  *  in-flight login call rather than racing it, so an API call fired during
- *  startup still goes out authenticated instead of getting a 401. */
-export async function getAuthToken(): Promise<string | null> {
+ *  startup still goes out authenticated instead of getting a 401.
+ *
+ *  `force` drops the cache first — for re-minting an expired token. AD_GET's
+ *  token lives 60 minutes and tabs live much longer, so this is routine, not
+ *  an error path. NTLM re-authenticates silently, so the user sees nothing. */
+export async function getAuthToken(force = false): Promise<string | null> {
+  if (force) cached = null;
   try {
     return (await fetchUser()).token;
   } catch {
@@ -94,12 +99,23 @@ export function installAuthFetch(): void {
         : input.url;
     if (!isBackendCall(url)) return original(input, init);
 
+    const send = (token: string) => {
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      headers.set('Authorization', `Bearer ${token}`);
+      return original(input, { ...init, headers });
+    };
+
     const token = await getAuthToken();
     if (!token) return original(input, init);   // let the backend answer 401
 
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-    headers.set('Authorization', `Bearer ${token}`);
-    return original(input, { ...init, headers });
+    const res = await send(token);
+    if (res.status !== 401) return res;
+
+    // The token expired mid-session — the tab outlived it. Re-mint once and
+    // retry, so a long-open tab keeps working instead of degrading into
+    // "you have no access" until someone thinks to press F5.
+    const fresh = await getAuthToken(true);
+    return fresh && fresh !== token ? send(fresh) : res;
   };
 }
 
