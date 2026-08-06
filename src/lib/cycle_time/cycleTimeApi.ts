@@ -612,6 +612,43 @@ export interface CompletionSummary {
   models: CompletionModel[];
 }
 
+/** One week on the completion trend. `pct` is by DEMAND UNITS — volume is
+ *  concentrated, so counting models flatters the number. `pct_models` is kept
+ *  beside it so the two can be shown together rather than argued about. */
+export interface CompletionWeek {
+  iso_week: string;
+  as_of: string | null;
+  units: number;
+  complete_units: number;
+  pct: number | null;
+  models: number;
+  complete_models: number;
+  pct_models: number | null;
+}
+/** One non-complete bucket. complete + every loss = 100% of demand units. */
+export interface CompletionLoss {
+  status: string;
+  reason: string;
+  units: number;
+  models: number;
+  pct: number | null;
+}
+export interface CompletionSplit {
+  plant?: string;
+  workcell?: string;
+  units: number;
+  complete_units: number;
+  pct: number | null;
+  models: number;
+}
+export interface CompletionHistory {
+  weeks: CompletionWeek[];
+  latest: CompletionWeek | null;
+  losses: CompletionLoss[];
+  by_plant: CompletionSplit[];
+  by_workcell: CompletionSplit[];
+}
+
 /** One MES route step (actual), tagged by how it maps to IEDB. */
 export interface CompletionMesStep {
   order: number | null;
@@ -742,6 +779,9 @@ export const cycleTimeApi = {
     /** Demand-ranked completion: what we are building and about to build. */
     demand: (params?: { plants?: string; workcells?: string; status?: string; limit?: number }) =>
       get<DemandCompletionResponse>('/completion/demand', params),
+    /** Weekly trend + loss breakdown — the 4Q view. */
+    history: (params?: { plants?: string; workcells?: string; weeks?: number }) =>
+      get<CompletionHistory>('/completion/history', params),
     /** MES actual route vs IEDB route for one model (the side-by-side). */
     steps: (customer: string, assembly: string, signal?: AbortSignal) =>
       get<CompletionSteps>('/completion/steps', { customer, assembly }, signal),

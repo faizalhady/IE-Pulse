@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { Check, ChevronDown, Loader2, Search } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import CompletionFourQuadrant from './CompletionFourQuadrant';
 import { RouteComparisonDrawer } from './RouteComparisonDrawer';
 
 // Identity first (who/what/where), then schedule, then every number and
@@ -47,6 +48,17 @@ const STATUS_META: Record<string, { label: string; cls: string; hint: string }> 
   complete:    { label: 'Complete', cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', hint: 'Every step MES ran has a cycle time' },
 };
 const STATUS_ORDER = ['incomplete', 'no_cycle_time', 'not_in_iedb', 'not_in_mes', 'not_checked', 'complete'];
+
+/** Plant keys as the backend sends them (`_PLANT_REGION` in api/routers/cycle_time.py),
+ *  in site order with the names people actually use. The key stays the raw code —
+ *  filtering is by workcell, so only the label and the order change here. */
+const PLANT_ORDER = ['Plant 1', 'JPE', 'JBK'];
+const PLANT_LABEL: Record<string, string> = {
+  'Plant 1': 'Plant 1',
+  JPE: 'Plant 2',
+  JBK: 'Batu Kawan',
+};
+const plantLabel = (p: string) => PLANT_LABEL[p] ?? p;
 
 /** The `reason` behind a status — the detail the 4 statuses deliberately fold
  *  away. Shown as a sub-label so the chip stays scannable. */
@@ -111,11 +123,19 @@ export default function DemandCompletionReport() {
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
+  const [view, setView] = useState<'table' | '4q'>('table');
   const [limit, setLimit] = useState(0);                // 0 = no cap
   const [open, setOpen] = useState<{ customer: string; assembly: string } | null>(null);
 
   const scope = data?.scope;
-  const plants = useMemo(() => Object.keys(scope?.plants ?? {}).sort(), [scope]);
+  // Site order, not alphabetical: Plant 1, Plant 2, Batu Kawan is how everyone
+  // here lists them. Anything the backend sends that is not in PLANT_ORDER
+  // (e.g. "Unassigned") sorts to the end, so a new plant code still shows up.
+  const plants = useMemo(() => {
+    const keys = Object.keys(scope?.plants ?? {});
+    const rank = (p: string) => { const i = PLANT_ORDER.indexOf(p); return i < 0 ? PLANT_ORDER.length : i; };
+    return keys.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  }, [scope]);
   const allWorkcells = scope?.workcells ?? [];
 
   // Filtering 3,900 rows on every keystroke made typing feel laggy. The input
@@ -231,6 +251,19 @@ export default function DemandCompletionReport() {
         )}
       </div>
 
+      {/* ── Tabs ─────────────────────────────────────────────────────────── */}
+      <div className="flex gap-1 border-b">
+        {(['table', '4q'] as const).map(t => (
+          <button key={t} onClick={() => setView(t)}
+            className={cn('-mb-px border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+              view === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+            {t === 'table' ? 'Data Table' : '4Q'}
+          </button>
+        ))}
+      </div>
+
+      {view === '4q' ? <CompletionFourQuadrant /> : <>
+
       {/* ── Filters ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border bg-card">
         <button onClick={() => setScopeOpen(o => !o)}
@@ -266,7 +299,7 @@ export default function DemandCompletionReport() {
                   <button onClick={() => togglePlant(p)}
                     className="flex w-full items-center gap-2.5 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-muted/50">
                     <Box on={st === 'all'} partial={st === 'some'} />
-                    <span className="text-sm font-semibold">{p}</span>
+                    <span className="text-sm font-semibold">{plantLabel(p)}</span>
                     <span className="text-[11px] text-muted-foreground">
                       {list.filter(w => effectivePicked.includes(w)).length}/{list.length}
                     </span>
@@ -291,14 +324,25 @@ export default function DemandCompletionReport() {
         )}
       </div>
 
-      {/* ── Status chips + search ────────────────────────────────────────── */}
+      {/* ── Search + status chips ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
-        {STATUS_ORDER.filter(s => (counts[s] ?? 0) > 0 || statusFilter.includes(s)).map(s => {
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search model or workcell"
+            className="h-8 w-56 pl-8 text-xs" />
+        </div>
+        <Button variant="outline" size="sm" className="h-8 text-xs"
+          onClick={() => setLimit(limit ? 0 : 500)}>
+          {limit ? 'Show all' : 'Top 500 only'}
+        </Button>
+        {/* Chips sit right; ml-auto on the FIRST one so they stay one group. */}
+        {STATUS_ORDER.filter(s => (counts[s] ?? 0) > 0 || statusFilter.includes(s)).map((s, i) => {
           const m = STATUS_META[s];
           const on = statusFilter.includes(s);
           return (
             <button key={s} onClick={() => toggleStatus(s)} title={m.hint}
               className={cn('rounded-full px-2.5 py-1 text-[11px] font-medium transition-all',
+                i === 0 && 'ml-auto',
                 m.cls, on ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : 'opacity-80 hover:opacity-100')}>
               {m.label} <span className="tabular-nums">{counts[s] ?? 0}</span>
             </button>
@@ -308,15 +352,6 @@ export default function DemandCompletionReport() {
           <button onClick={() => setStatusFilter([])}
             className="text-[11px] text-muted-foreground transition-colors hover:text-foreground">Clear</button>
         )}
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search model or workcell"
-            className="h-8 w-56 pl-8 text-xs" />
-        </div>
-        <Button variant="outline" size="sm" className="h-8 text-xs"
-          onClick={() => setLimit(limit ? 0 : 500)}>
-          {limit ? 'Show all' : 'Top 500 only'}
-        </Button>
       </div>
 
       <div className="text-xs text-muted-foreground">
@@ -388,6 +423,7 @@ export default function DemandCompletionReport() {
           </div>
         </div>
       </div>
+      </>}
 
       {open && (
         <RouteComparisonDrawer

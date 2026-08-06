@@ -132,6 +132,16 @@ export function useCycleTimeCompletionDemand() {
   });
 }
 
+/** Weekly completion trend + loss breakdown — the 4Q tab. */
+export function useCycleTimeCompletionHistory(weeks = 13) {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'completionHistory', weeks] as const,
+    queryFn:  () => cycleTimeApi.completion.history({ weeks }),
+    staleTime: 30 * 60_000,
+    retry: false,   // 503 until the first snapshot exists — retrying just delays the message
+  });
+}
+
 /** MES actual route vs IEDB route for one model (the side-by-side comparison). */
 export function useCycleTimeCompletionSteps(customer: string | undefined, assembly: string | undefined) {
   return useQuery({
