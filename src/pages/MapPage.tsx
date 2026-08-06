@@ -99,10 +99,8 @@ export default function MapPage() {
       <div className="absolute top-4 left-4 z-10">
         <div
           onClick={() => navigate(latestIsoWeek ? `/ole/report?week=${latestIsoWeek}` : '/ole/report')}
-          className="bg-card/95 backdrop-blur-sm border border-border rounded-xl px-5 py-3.5 shadow-lg min-w-[220px] cursor-pointer hover:bg-card transition-colors overflow-hidden relative"
+          className="bg-card/95 backdrop-blur-sm border border-border rounded-xl px-5 py-3.5 shadow-lg min-w-[220px] cursor-pointer hover:bg-card transition-colors"
         >
-          <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
-            style={{ background: 'linear-gradient(90deg, #2563eb 0%, #7c3aed 50%, #21b735 100%)' }} />
           <p className="text-[13px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5">All Plants</p>
           <p className="text-[34px] font-mono font-bold leading-none mt-1 text-foreground">
             {loading ? '...' : siteOle !== null ? `${siteOle}%` : 'N/A'}
@@ -136,7 +134,6 @@ export default function MapPage() {
               }
             }}
             className="bg-card/90 backdrop-blur-sm border border-border rounded-xl px-5 py-3.5 shadow-lg min-w-[160px] cursor-pointer hover:bg-card transition-colors"
-            style={{ borderLeft: `4px solid ${plant.color}` }}
           >
             <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: plant.color }}>
               {plant.label}
