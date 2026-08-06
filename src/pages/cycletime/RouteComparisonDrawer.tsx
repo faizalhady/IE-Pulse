@@ -35,6 +35,26 @@ const MES_STATUS: Record<string, { label: string; row: string; pill: string }> =
   unmapped:    { label: 'unmapped',   row: 'bg-amber-500/5',   pill: 'bg-amber-500/15 text-amber-600' },
 };
 
+/** Step-order badge. Sky = MES (what the floor ran), violet = IEDB (the route
+ *  on paper). Same shape both sides so the eye pairs them; colour says which
+ *  list a number belongs to. */
+function OrderDot({ n, side }: { n: number | null; side: 'mes' | 'iedb' }) {
+  return (
+    <span className={cn(
+      'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold tabular-nums',
+      n == null ? 'bg-muted text-muted-foreground'
+        : side === 'mes' ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+          : 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
+    )}>{n ?? '·'}</span>
+  );
+}
+
+/** Mirrors `_code` in modules/cycle_time/completion_v2.py — the alias CODE is
+ *  the only identifier both sides share. Take the part before the first dash,
+ *  drop the trailing instance number, strip punctuation. */
+const aliasCode = (s: string | null | undefined) =>
+  (s ?? '').split('-')[0].trim().toUpperCase().replace(/[\s\d./]+$/, '').replace(/[^A-Z0-9]/g, '');
+
 type Tab = 'route' | 'lbr' | 'ipk';
 
 export function RouteComparisonDrawer({
@@ -80,6 +100,19 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
   const mesShown = hideNoise ? mes.filter((s) => s.status !== 'non_iedb') : mes;
   const iedb = [...(data?.iedb ?? [])].sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9));
 
+  // alias CODE -> the IEDB step it points at, so a MES row can show WHICH step
+  // on the right it was judged against. First one wins, matching the backend:
+  // IEDB numbers a step per-model ("MA 1", "MA 2") but the code is the identity.
+  const byCode = new Map<string, number | null>();
+  for (const s of iedb) {
+    const c = aliasCode(s.alias);
+    if (c && !byCode.has(c)) byCode.set(c, s.order);
+  }
+  const iedbOrderOf = (alias: string | null) => {
+    const c = aliasCode(alias);
+    return c ? byCode.get(c) ?? null : null;
+  };
+
   if (q.isLoading) return <Center><Loader2 className="h-5 w-5 animate-spin" /></Center>;
   if (q.isError || !data) return <Center><span className="text-sm text-muted-foreground">No route data available for this model.</span></Center>;
 
@@ -102,12 +135,20 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
             // Fallback, not decoration: an unknown status used to read as
             // undefined and crash the whole drawer on `m.row`.
             const m = MES_STATUS[s.status] ?? MES_STATUS.unmapped;
+            const iedbOrder = iedbOrderOf(s.alias);
             return (
-              <div key={i} className={cn('grid grid-cols-[2rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0', m.row)}>
-                <span className="text-[10px] tabular-nums text-muted-foreground">{s.order ?? '·'}</span>
+              <div key={i} className={cn('grid grid-cols-[1.25rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0', m.row)}>
+                <OrderDot n={s.order} side="mes" />
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-medium text-foreground">{s.step}</p>
-                  {s.alias && <p className="truncate text-[10px] text-muted-foreground">→ {s.alias}</p>}
+                  {s.alias && (
+                    <p className="flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+                      <span className="truncate">→ {s.alias}</span>
+                      {/* Which IEDB step this one answers to. Absent = the alias
+                          matched nothing in the route on the right. */}
+                      {iedbOrder != null && <OrderDot n={iedbOrder} side="iedb" />}
+                    </p>
+                  )}
                 </div>
                 <span className={cn('rounded-full px-1.5 py-px text-[8px] font-semibold uppercase tracking-wide whitespace-nowrap', m.pill)}>{m.label}</span>
               </div>
@@ -121,10 +162,13 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
           {iedb.map((s, i) => (
-            <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0">
+            <div key={i} className="grid grid-cols-[1.25rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0">
+              <OrderDot n={s.order} side="iedb" />
               <div className="min-w-0">
-                <p className="truncate text-[12px] font-medium text-foreground">{s.process}{s.alias && <span className="text-muted-foreground"> · {s.alias}</span>}</p>
-                {s.sub_workcenter && <p className="truncate text-[10px] text-muted-foreground">{s.sub_workcenter}</p>}
+                <p className="truncate text-[12px] font-medium text-foreground">{s.process}</p>
+                {/* Alias, not sub_workcenter: the alias is what the MES side is
+                    actually matched against, so it belongs next to the step. */}
+                {s.alias && <p className="truncate text-[10px] text-muted-foreground">{s.alias}</p>}
               </div>
               <span className="ct-num tabular-nums text-[11px] font-semibold text-foreground whitespace-nowrap">{formatCycleSecondsLabel(s.cycle_time)}</span>
             </div>
