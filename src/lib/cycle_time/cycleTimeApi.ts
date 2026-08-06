@@ -500,7 +500,17 @@ export interface CompletionModel {
 /** `not_checked` = the completion run has not reached this model yet. It is NOT
  *  a verdict — the model is simply absent from the mart. Shown rather than
  *  hidden, so "missing from the report" can't be mistaken for "no problems". */
-export type DemandCompletionStatus = CompletionStatus | 'route_gap' | 'not_checked';
+/** Four verdicts, worst-first, plus `not_checked` for rows the run hasn't reached.
+ *  Collapsed from seven on 2026-08-05 — route_gap/no_data/unverified/unavailable
+ *  said the same thing four ways. The detail moved to `reason`. */
+export type DemandCompletionStatus =
+  | 'incomplete' | 'no_cycle_time' | 'not_in_iedb' | 'not_in_mes' | 'complete' | 'not_checked';
+
+/** Why a status was given — the detail the four statuses fold away. */
+export type DemandCompletionReason =
+  | 'missing_ct' | 'missing_step' | 'missing_ct+step' | 'unmapped' | 'no_alias'
+  | 'absent' | 'absent_unverified' | 'in_iedb_untimed'
+  | 'no_production' | 'workcell_not_on_mes' | '';
 
 export interface DemandCompletionModel {
   /** 1-based position by demand units across the WHOLE list, not the filtered view. */
@@ -514,6 +524,7 @@ export interface DemandCompletionModel {
   /** Which demand source(s) saw it: "mes", "planner" or "mes+planner". */
   sources: string;
   status: DemandCompletionStatus;
+  reason?: DemandCompletionReason | null;
   /** How the verdict was reached: "serial" (#132, strong) | "batch" (#21, weak) | "none". */
   source?: string | null;
   expected?: number | null;
@@ -524,10 +535,13 @@ export interface DemandCompletionModel {
   non_iedb?: number | null;
   actual_steps?: number | null;
   coverage?: number | null;
-  /** Earliest planned start across the demand sources — when it next hits the floor. */
+  /** Next planned start from TODAY onward. Null when nothing upcoming — which for
+   *  a model already on the floor means `in_progress`, not "not building". */
   next_build?: string | null;
   /** Latest planned finish — when current demand for it runs out. */
   last_build?: string | null;
+  /** No upcoming start, but demand still runs past today — it is building now. */
+  in_progress?: boolean | null;
   /** Line Balance Rate %. Null until the route is complete enough to compute. */
   lbr?: number | null;
   /** IPK buffer trolleys needed along the flow. */
@@ -604,7 +618,9 @@ export interface CompletionMesStep {
   step: string;
   alias: string;
   qty: number | null;
-  status: 'present' | 'missing' | 'non_iedb' | 'unmapped';
+  /** v1: present|missing|non_iedb|unmapped. v2 splits `missing` into `no_ct`
+   *  (in route, blank CT) and `not_in_iedb` (route lacks the step). */
+  status: 'present' | 'missing' | 'no_ct' | 'not_in_iedb' | 'non_iedb' | 'unmapped';
 }
 /** One IEDB route step (has a cycle time). */
 export interface CompletionIedbStep {

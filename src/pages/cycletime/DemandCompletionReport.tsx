@@ -34,23 +34,33 @@ import { RouteComparisonDrawer } from './RouteComparisonDrawer';
  *  single line of text, so measuring per-row would buy nothing. */
 const ROW_H = 34;
 
-const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  5.5rem 6rem 4.5rem 4.5rem';
+const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  7rem 4.5rem 4.5rem';
 
 /** Status → label + colour. Ordered worst-first so the legend reads as a
  *  priority list: what needs creating, then fixing, then nothing. */
 const STATUS_META: Record<string, { label: string; cls: string; hint: string }> = {
-  unavailable: { label: 'Not in IEDB', cls: 'bg-red-500/15 text-red-600 dark:text-red-400', hint: 'Model has no IEDB record at all — cycle times need creating' },
-  no_data:     { label: 'No cycle time', cls: 'bg-orange-500/15 text-orange-600 dark:text-orange-400', hint: 'In IEDB but not one cycle time entered' },
-  incomplete:  { label: 'Missing CT', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', hint: 'IEDB lists the step but its cycle time is blank' },
-  route_gap:   { label: 'Route gap', cls: 'bg-violet-500/15 text-violet-600 dark:text-violet-400', hint: "MES runs steps IEDB's route doesn't list — fix the route" },
-  unverified:  { label: 'Unverified', cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', hint: 'Has cycle times, but no MES production found to check against' },
+  incomplete:  { label: 'Missing CT', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', hint: 'In IEDB with cycle times, but gaps against what the floor actually runs' },
+  no_cycle_time: { label: 'No cycle time', cls: 'bg-orange-500/15 text-orange-600 dark:text-orange-400', hint: 'Model EXISTS in IEDB, but not one cycle time has been entered' },
+  not_in_iedb: { label: 'Not in IEDB', cls: 'bg-red-500/15 text-red-600 dark:text-red-400', hint: 'Model does not exist in IEDB at all — it has to be created first' },
+  not_in_mes:  { label: 'Not in MES', cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', hint: 'No MES production found — not built yet, or the workcell is not on MES' },
   not_checked: { label: 'Not checked', cls: 'bg-muted text-muted-foreground', hint: 'The completion run has not reached this model yet' },
-  non_mes:     { label: 'Non-MES', cls: 'bg-muted text-muted-foreground', hint: 'Workcell does not run through MES' },
   complete:    { label: 'Complete', cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', hint: 'Every step MES ran has a cycle time' },
 };
-const STATUS_ORDER = ['unavailable', 'no_data', 'incomplete', 'route_gap', 'unverified', 'not_checked', 'non_mes', 'complete'];
+const STATUS_ORDER = ['incomplete', 'no_cycle_time', 'not_in_iedb', 'not_in_mes', 'not_checked', 'complete'];
 
-type SortKey = 'rank' | 'customer' | 'assembly' | 'units' | 'status' | 'lbr' | 'ipk' | 'next' | 'last';
+/** The `reason` behind a status — the detail the 4 statuses deliberately fold
+ *  away. Shown as a sub-label so the chip stays scannable. */
+const REASON_LABEL: Record<string, string> = {
+  missing_ct: 'blank cycle time', missing_step: 'step not in route',
+  'missing_ct+step': 'blank CT + route gap', unmapped: 'steps unrecognised',
+  no_alias: 'cycle times entered, but no alias to match them on',
+  in_iedb_untimed: 'in IEDB, nobody has timed it',
+  absent: 'no IEDB record',
+  absent_unverified: 'not in our IEDB snapshot, and the snapshot is short for this workcell',
+  no_production: 'not built yet', workcell_not_on_mes: 'workcell not on MES',
+};
+
+type SortKey = 'rank' | 'customer' | 'assembly' | 'status' | 'lbr' | 'ipk' | 'next' | 'last';
 
 /** "6 Aug" — the year is noise when everything sits inside a 13-week window. */
 function fmtDate(v?: string | null): string {
@@ -73,7 +83,6 @@ const ACCESSORS: Record<SortKey, (m: DemandCompletionModel) => string | number |
   rank:     m => m.rank,
   customer: m => m.customer,
   assembly: m => m.assembly,
-  units:    m => m.units,
   // Sort by severity, not alphabetically — "what needs work" first.
   status:   m => STATUS_ORDER.indexOf(m.status),
   lbr:      m => m.lbr ?? null,
@@ -144,7 +153,11 @@ export default function DemandCompletionReport() {
   const toggleStatus = (s: string) =>
     setStatusFilter(statusFilter.includes(s) ? statusFilter.filter(x => x !== s) : [...statusFilter, s]);
 
-  const rows = useMemo(() => {
+  // Everything EXCEPT the status filter. The chip counts read from this, so each
+  // chip always shows how many models it holds in the current workcell/search
+  // scope. Counting post-status-filter meant picking one status zeroed every
+  // other chip, and the numbers only appeared on whatever was selected.
+  const scopedRows = useMemo(() => {
     let r = data?.models ?? [];
     // Sets, not arrays: .includes() on every one of ~3,900 rows was a linear
     // scan per row for both filters.
@@ -152,16 +165,21 @@ export default function DemandCompletionReport() {
       const wanted = new Set(picked);
       r = r.filter(m => wanted.has(m.customer));
     }
-    if (statusFilter.length) {
-      const wanted = new Set(statusFilter);
-      r = r.filter(m => wanted.has(m.status));
-    }
     if (qDebounced.trim()) {
       const s = qDebounced.trim().toLowerCase();
       r = r.filter(m => m.assembly.toLowerCase().includes(s) || m.customer.toLowerCase().includes(s));
     }
+    return r;
+  }, [data, picked, qDebounced]);
+
+  const rows = useMemo(() => {
+    let r = scopedRows;
+    if (statusFilter.length) {
+      const wanted = new Set(statusFilter);
+      r = r.filter(m => wanted.has(m.status));
+    }
     return limit ? r.slice(0, limit) : r;
-  }, [data, picked, statusFilter, qDebounced, limit]);
+  }, [scopedRows, statusFilter, limit]);
 
   const { sorted, sort, toggle } = useSortable<DemandCompletionModel, SortKey>(rows, ACCESSORS,
     { key: 'rank', dir: 'asc' });
@@ -180,11 +198,9 @@ export default function DemandCompletionReport() {
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    rows.forEach(m => { c[m.status] = (c[m.status] ?? 0) + 1; });
+    scopedRows.forEach(m => { c[m.status] = (c[m.status] ?? 0) + 1; });
     return c;
-  }, [rows]);
-
-  const unitsShown = useMemo(() => rows.reduce((a, m) => a + (m.units ?? 0), 0), [rows]);
+  }, [scopedRows]);
 
   if (isLoading) {
     return <div className="flex h-64 items-center justify-center">
@@ -203,7 +219,7 @@ export default function DemandCompletionReport() {
         <div>
           <h1 className="text-lg font-semibold">Incompletion Report</h1>
           <p className="text-xs text-muted-foreground">
-            Models in demand — MES plan (~4wk) + planner forecast (~13wk) — ranked by units.
+            Models in demand — MES plan (~4wk) + planner forecast (~13wk) — ranked by demand.
           </p>
         </div>
         {data.as_of && (
@@ -277,7 +293,7 @@ export default function DemandCompletionReport() {
 
       {/* ── Status chips + search ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
-        {STATUS_ORDER.filter(s => (data.counts[s] ?? 0) > 0 || statusFilter.includes(s)).map(s => {
+        {STATUS_ORDER.filter(s => (counts[s] ?? 0) > 0 || statusFilter.includes(s)).map(s => {
           const m = STATUS_META[s];
           const on = statusFilter.includes(s);
           return (
@@ -305,7 +321,6 @@ export default function DemandCompletionReport() {
 
       <div className="text-xs text-muted-foreground">
         {sorted.length.toLocaleString()} model{sorted.length === 1 ? '' : 's'}
-        {' · '}{unitsShown.toLocaleString()} units
         {sorted.length !== data.total && <> of {data.total.toLocaleString()}</>}
       </div>
 
@@ -319,7 +334,6 @@ export default function DemandCompletionReport() {
           <span>Plant</span>
           <SortHeader label="Next build" active={sort?.key === 'next'} dir={sort?.dir} onClick={() => toggle('next')} />
           <SortHeader label="Last build" active={sort?.key === 'last'} dir={sort?.dir} onClick={() => toggle('last')} />
-          <SortHeader label="Units" active={sort?.key === 'units'} dir={sort?.dir} onClick={() => toggle('units')} />
           <SortHeader label="Status" active={sort?.key === 'status'} dir={sort?.dir} onClick={() => toggle('status')} />
           <SortHeader label="LBR" active={sort?.key === 'lbr'} dir={sort?.dir} onClick={() => toggle('lbr')} className="justify-end" />
           <SortHeader label="IPK" active={sort?.key === 'ipk'} dir={sort?.dir} onClick={() => toggle('ipk')} className="justify-end" />
@@ -345,13 +359,18 @@ export default function DemandCompletionReport() {
                 <span className="truncate font-mono text-[11px]" title={m.assembly}>{m.assembly}</span>
                 <span className="truncate text-muted-foreground">{m.plant}</span>
 
-                <span className="tabular-nums text-muted-foreground">{fmtDate(m.next_build)}</span>
+                {/* No upcoming start but demand still running = already on the floor. */}
+                <span className="tabular-nums text-muted-foreground">
+                  {m.next_build ? fmtDate(m.next_build)
+                    : m.in_progress ? <span className="text-emerald-600 dark:text-emerald-400">Building</span>
+                    : '—'}
+                </span>
                 <span className="tabular-nums text-muted-foreground">{fmtDate(m.last_build)}</span>
 
-                <span className="tabular-nums">{(m.units ?? 0).toLocaleString()}</span>
                 <span className="flex items-center gap-1">
                   <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-medium', meta.cls)}
-                    title={meta.hint}>{meta.label}</span>
+                    title={m.reason ? `${meta.hint}\n\n${REASON_LABEL[m.reason] ?? m.reason}` : meta.hint}>
+                    {meta.label}</span>
                   {m.source === 'batch' && (
                     <span title="Verdict from #21 batch counts — a customer-level aggregate that can drag in rework and other variants"
                       className="text-[10px] text-amber-500">⚠</span>

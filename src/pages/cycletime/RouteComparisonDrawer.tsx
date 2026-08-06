@@ -22,11 +22,17 @@ const LBR_TARGET = 85;
 const lbrColor = (v: number | null) =>
   v == null ? 'text-muted-foreground' : v >= LBR_TARGET ? 'text-emerald-600' : v >= 70 ? 'text-amber-600' : 'text-red-500';
 
-const MES_STATUS: Record<CompletionMesStep['status'], { label: string; row: string; pill: string }> = {
-  present:  { label: 'in IEDB',    row: 'bg-emerald-500/5', pill: 'bg-emerald-500/15 text-emerald-600' },
-  missing:  { label: 'missing CT', row: 'bg-red-500/5',     pill: 'bg-red-500/15 text-red-600' },
-  non_iedb: { label: 'not IEDB',   row: '',                 pill: 'bg-muted text-muted-foreground' },
-  unmapped: { label: 'unmapped',   row: 'bg-amber-500/5',   pill: 'bg-amber-500/15 text-amber-600' },
+/** v1 said `missing` for two different problems; v2 splits them into `no_ct`
+ *  (step is in IEDB's route, cycle time blank) and `not_in_iedb` (route doesn't
+ *  list the step at all). Both spellings are kept — the drawer reads v2 first
+ *  but falls back to v1 per side, so a single render can mix them. */
+const MES_STATUS: Record<string, { label: string; row: string; pill: string }> = {
+  present:     { label: 'in IEDB',    row: 'bg-emerald-500/5', pill: 'bg-emerald-500/15 text-emerald-600' },
+  missing:     { label: 'missing CT', row: 'bg-red-500/5',     pill: 'bg-red-500/15 text-red-600' },
+  no_ct:       { label: 'missing CT', row: 'bg-red-500/5',     pill: 'bg-red-500/15 text-red-600' },
+  not_in_iedb: { label: 'not in route', row: 'bg-violet-500/5', pill: 'bg-violet-500/15 text-violet-600' },
+  non_iedb:    { label: 'not IEDB',   row: '',                 pill: 'bg-muted text-muted-foreground' },
+  unmapped:    { label: 'unmapped',   row: 'bg-amber-500/5',   pill: 'bg-amber-500/15 text-amber-600' },
 };
 
 type Tab = 'route' | 'lbr' | 'ipk';
@@ -93,7 +99,9 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
             </p>
           )}
           {mesShown.map((s, i) => {
-            const m = MES_STATUS[s.status];
+            // Fallback, not decoration: an unknown status used to read as
+            // undefined and crash the whole drawer on `m.row`.
+            const m = MES_STATUS[s.status] ?? MES_STATUS.unmapped;
             return (
               <div key={i} className={cn('grid grid-cols-[2rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0', m.row)}>
                 <span className="text-[10px] tabular-nums text-muted-foreground">{s.order ?? '·'}</span>
