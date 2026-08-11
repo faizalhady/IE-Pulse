@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSmhStatus } from '@/hooks/ole/useOleData';
-import { fetchUserInfo, type UserInfo } from '@/lib/ole/savedReportsApi';
+import { fetchUserInfo, type UserInfo } from '@/lib/shared/savedReportsApi';
 import { smhApi, type SmhRow } from '@/lib/ole/smhApi';
 import { fmtDate } from '@/lib/ole/oleConstants';
 import { cn } from '@/lib/utils';

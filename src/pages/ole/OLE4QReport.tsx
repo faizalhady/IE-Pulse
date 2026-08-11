@@ -8,12 +8,18 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MhDistributionRow, OleWeeklyResult, OleWorkcellConfig } from '@/lib/ole/oleApi';
 import { oleApi } from '@/lib/ole/oleApi';
-import type { SavedReportMeta, UserInfo } from '@/lib/ole/savedReportsApi';
-import { fetchUserInfo, savedReportsApi, setLocalUser } from '@/lib/ole/savedReportsApi';
+import type { SavedReportMeta } from '@/lib/shared/savedReportsApi';
+import { savedReports } from '@/lib/shared/savedReportsApi';
+import { useSavedReport } from '@/hooks/shared/useSavedReport';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { PersonSearch } from '@/components/shared/PersonSearch';
-import { CalendarIcon, ChevronLeft, ChevronRight, Download, Check, Eye, EyeOff, FileSpreadsheet, FolderOpen, GripVertical, Info, Pencil, Plus, Save, Settings, Trash2, X } from 'lucide-react';
+import { FourQPreview } from '@/components/shared/FourQPreview';
+import { ParetoChart, buildPareto } from '@/components/shared/ParetoChart';
+import type { ActionItem } from '@/components/shared/ImprovementPlan';
+import { ImprovementEditor, ImprovementTable } from '@/components/shared/ImprovementPlan';
+import { ReportStartScreen } from '@/components/shared/ReportStartScreen';
+import { ScopePicker, plantState } from '@/components/shared/ScopePicker';
+import { CalendarIcon, ChevronLeft, ChevronRight, Download, Eye, EyeOff, FileSpreadsheet, FolderOpen, GripVertical, Info, Pencil, Plus, Save, Settings, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
@@ -24,12 +30,14 @@ import {
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type SetupMode = 'plant' | 'workcell';
-type ActionItem = { id: string; issue: string; problemDescription: string; rootCause: string; containmentAction: string; correctiveAction: string; impactPct: string; ecnPcn: string; fia: string; responsible: string; responsibleNtid?: string; responsibleEmail?: string; commitDate: string; status: string; };
 type ReportScope = { mode: SetupMode; selectedPlants: string[]; selectedWorkcells: string[] };
 type SavedPlan = { actions: ActionItem[]; scope?: ReportScope; title?: string };
 type TrendPoint = { id: string; label: string; ole: number; target: number; projected?: boolean; hidden?: boolean };
 
 const genId = () => Math.random().toString(36).substr(2, 9);
+
+// Module scope, not per-render: the factory returns a fresh object each call.
+const reportsApi = savedReports('ole', '4q');
 
 /** "4Q Report 07-29-26" — MM-DD-YY, matching how the reports are named by hand. */
 function defaultReportTitle(): string {
@@ -125,124 +133,7 @@ function fmtWeekLabel(v: string): string {
   return m ? `WW${m[0].padStart(2, '0')}` : v;
 }
 
-// ─── DatePicker ───────────────────────────────────────────────────────────────
 
-function toYmd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function fromYmd(s: string): Date | undefined {
-  if (!s?.trim()) return undefined;
-  const [y, mo, d] = s.trim().split('-').map(Number);
-  if (!y || !mo || !d) return undefined;
-  return new Date(y, mo - 1, d);
-}
-
-function DatePickerField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (ymd: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const date = fromYmd(value);
-  return (
-    <div className="w-full">
-      <Label htmlFor={id} className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button id={id} type="button" variant="outline" className={cn('mt-1 w-full h-7 justify-start text-left font-normal px-2 text-xs shadow-none', !value && 'text-muted-foreground')}>
-            <CalendarIcon className="mr-2 h-3 w-3 shrink-0 opacity-70" />
-            <span className="truncate">{date ? format(date, 'MMM d, yyyy') : 'Any date'}</span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={date} defaultMonth={date} onSelect={d => { onChange(d ? toYmd(d) : ''); setOpen(false); }} initialFocus />
-          {value && <div className="border-t border-border p-2"><Button type="button" variant="ghost" size="sm" className="w-full h-8 text-xs" onClick={() => { onChange(''); setOpen(false); }}>Clear date</Button></div>}
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
-// ─── Pareto helpers ───────────────────────────────────────────────────────────
-
-interface ParetoBar { name: string; value: number; color: string; cum: number; }
-
-function buildPareto(data: { name: string; value: number; color: string }[]): ParetoBar[] {
-  const sorted = data.map(x => ({ ...x, value: Math.abs(x.value) })).filter(x => x.value > 0).sort((a, b) => b.value - a.value);
-  const total = sorted.reduce((s, x) => s + x.value, 0);
-  let cum = 0;
-  return sorted.map(x => { cum += x.value; return { ...x, cum: total > 0 ? Math.min((cum / total) * 100, 100) : 0 }; });
-}
-
-// ─── Setup Step ───────────────────────────────────────────────────────────────
-
-// ─── Start screen ─────────────────────────────────────────────────────────────
-// Deliberately two choices and nothing else. Scope pickers, week counts and the
-// saved list all used to compete for attention here; they're one click away now.
-
-function StartScreen({ savedList, onNew, onLoad, onDeleteSave, loading }: {
-  savedList: SavedReportMeta[];
-  onNew: () => void;
-  onLoad: (id: number) => void;
-  onDeleteSave: (id: number) => void;
-  loading: boolean;
-}) {
-  const [picking, setPicking] = useState(false);
-  const hasSaves = savedList.length > 0;
-
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-8">
-      <FileSpreadsheet className="h-20 w-20 text-primary mb-7" strokeWidth={1.25} />
-
-      <h2 className="text-5xl font-semibold tracking-tight text-foreground">4Q Report</h2>
-      <p className="mt-3 text-sm text-muted-foreground">
-        Weekly OLE performance review — trend, loss Paretos, improvement plan.
-      </p>
-
-      {/* No card chrome: the icons ARE the affordance. Two choices, nothing else. */}
-      <div className="mt-12 flex items-start gap-12">
-        <button onClick={onNew} disabled={loading}
-          className="group flex flex-col items-center gap-2.5 disabled:opacity-50 transition-opacity">
-          <Plus className="h-11 w-11 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={2} />
-          <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">Create new</span>
-        </button>
-
-        <button onClick={() => setPicking(true)} disabled={loading || !hasSaves}
-          title={hasSaves ? 'Open a saved report' : 'No saved reports yet'}
-          className="group flex flex-col items-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">
-          <FolderOpen className="h-11 w-11 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={2} />
-          <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
-            Load saved
-            {hasSaves && (
-              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary/15 px-1.5 text-[11px] font-semibold text-primary">
-                {savedList.length}
-              </span>
-            )}
-          </span>
-        </button>
-      </div>
-
-      <Dialog open={picking} onOpenChange={setPicking}>
-        <DialogContent className="max-w-md">
-          <h3 className="text-base font-semibold mb-4">Saved reports</h3>
-          <div className="space-y-1.5 max-h-80 overflow-y-auto">
-            {savedList.map(s => (
-              <div key={s.id} className="flex items-center gap-2">
-                <button onClick={() => { setPicking(false); onLoad(s.id); }}
-                  className="flex-1 text-left px-3 py-2 rounded-lg border border-border hover:border-primary/60 hover:bg-primary/5 transition-colors">
-                  <div className="text-sm font-medium truncate">{s.name}</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    saved {s.updated_at?.slice(0, 16).replace('T', ' ')}
-                  </div>
-                </button>
-                <button onClick={() => onDeleteSave(s.id)} title="Delete"
-                  className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
 
 // ─── Scope dialog ─────────────────────────────────────────────────────────────
 // Replaces the old full-page setup step: picking a scope is a decision, not a
@@ -273,24 +164,9 @@ function ScopeDialog({ open, onOpenChange, plants, byPlant, generating, onConfir
     if (!picked.length && plants.length) setPicked(byPlant[plants[0]] ?? []);
   }, [open, plants]);           // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A plant's checkbox state is DERIVED from its workcells, never stored. So
-  // ticking a workcell can't leave the plant box disagreeing with the list,
-  // and un-ticking one silently turns a whole-plant pick into a custom one.
-  const plantState = (p: string): 'all' | 'some' | 'none' => {
-    const list = byPlant[p] ?? [];
-    const n = list.filter(w => picked.includes(w)).length;
-    return n === 0 ? 'none' : n === list.length ? 'all' : 'some';
-  };
-  const togglePlant = (p: string) => {
-    const list = byPlant[p] ?? [];
-    setPicked(plantState(p) === 'all'
-      ? picked.filter(w => !list.includes(w))
-      : [...new Set([...picked, ...list])]);
-  };
-  const toggleWc = (w: string) =>
-    setPicked(picked.includes(w) ? picked.filter(x => x !== w) : [...picked, w]);
-
-  const fullPlants = plants.filter(p => plantState(p) === 'all');
+  // Plant state is DERIVED from the picked workcells, never stored — see
+  // components/shared/ScopePicker.
+  const fullPlants = plants.filter(p => plantState(byPlant[p] ?? [], picked) === 'all');
   const coveredByPlants = fullPlants.flatMap(p => byPlant[p] ?? []);
   const isWholePlants = picked.length > 0 && picked.length === coveredByPlants.length;
 
@@ -303,16 +179,6 @@ function ScopeDialog({ open, onOpenChange, plants, byPlant, generating, onConfir
       name.trim() || defaultReportTitle(),
     );
   }
-
-  const Box = ({ on, partial = false }: { on: boolean; partial?: boolean }) => (
-    <span className={cn(
-      'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
-      on || partial ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40',
-    )}>
-      {on && <Check className="h-3 w-3" strokeWidth={3} />}
-      {partial && !on && <span className="h-0.5 w-2 rounded bg-primary-foreground" />}
-    </span>
-  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -332,37 +198,7 @@ function ScopeDialog({ open, onOpenChange, plants, byPlant, generating, onConfir
         </Label>
 
         <div className="mt-1.5 space-y-4 max-h-[26rem] overflow-y-auto pr-1">
-          {plants.map(p => {
-            const st = plantState(p);
-            return (
-              <div key={p}>
-                <button onClick={() => togglePlant(p)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-1 py-1.5 text-left hover:bg-muted/50 transition-colors">
-                  <Box on={st === 'all'} partial={st === 'some'} />
-                  <span className="text-sm font-semibold">{p}</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {(byPlant[p] ?? []).filter(w => picked.includes(w)).length}/{(byPlant[p] ?? []).length}
-                  </span>
-                </button>
-
-                <div className="mt-1.5 ml-6 grid grid-cols-2 gap-1.5 lg:grid-cols-3">
-                  {(byPlant[p] ?? []).map(w => {
-                    const on = picked.includes(w);
-                    return (
-                      <button key={w} onClick={() => toggleWc(w)}
-                        className={cn(
-                          'flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors',
-                          on ? 'border-primary/50 bg-primary/5' : 'border-border hover:bg-muted/50',
-                        )}>
-                        <Box on={on} />
-                        <span className="truncate">{w}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+          <ScopePicker plants={plants} byPlant={byPlant} picked={picked} onChange={setPicked} />
         </div>
 
         <div className="mt-4 flex items-center justify-between">
@@ -407,85 +243,12 @@ function Q1Chart({ trendData, fillHeight = false }: { trendData: TrendPoint[]; f
   );
 }
 
-// ─── Q2 SmallPareto ───────────────────────────────────────────────────────────
-
-const WrappedTick = ({ x, y, payload }: any) => {
-  const words: string[] = String(payload.value).split(' ');
-  const lines: string[] = []; let cur = '';
-  for (const w of words) { if (cur && (cur + ' ' + w).length >= 9) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; }
-  if (cur) lines.push(cur);
-  return (
-    <g transform={`translate(${x},${y + 2})`}>
-      {lines.slice(0, 2).map((line, i) => <text key={i} x={0} y={0} dy={i * 10} textAnchor="middle" fontSize={8.5} fill="hsl(var(--muted-foreground))">{line}</text>)}
-    </g>
-  );
-};
-
-function SmallPareto({ title, data, loading, height = 180, fillHeight = false }: { title: string; data: ParetoBar[]; loading: boolean; height?: number; fillHeight?: boolean }) {
-  if (loading) return <div className={cn('rounded-lg bg-muted/40 animate-pulse', fillHeight ? 'flex-1 min-h-0' : '')} style={fillHeight ? undefined : { height }} />;
-  if (!data.length) return <div className={cn('flex items-center justify-center border border-border rounded-lg text-xs text-muted-foreground', fillHeight ? 'flex-1 min-h-0' : '')} style={fillHeight ? undefined : { height }}>No data</div>;
-  return (
-    <div className={cn('border border-border rounded-lg flex flex-col', fillHeight ? 'flex-1 min-h-0 p-0 gap-0 bg-card' : 'p-2 gap-1 bg-card')}>
-      <p className={cn('text-[10px] font-semibold text-foreground flex-shrink-0', fillHeight ? 'px-1.5 pt-1' : '')}>{title}</p>
-      <div className={fillHeight ? 'flex-1 min-h-0' : ''} style={fillHeight ? undefined : { height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 20, right: 30, left: 4, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={24} tick={<WrappedTick />} />
-            <YAxis
-              yAxisId="left"
-              domain={[0, (max: number) => max * 1.2]}
-              tick={{ fontSize: 9 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={v => `${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)}`}
-              label={{ value: 'Hours', angle: -90, position: 'insideLeft', offset: 16, style: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' } }}
-            />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              domain={[0, 100]}
-              tick={{ fontSize: 9 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={v => `${v}%`}
-              label={{ value: 'Cumulative %', angle: 90, position: 'insideRight', offset: 8, style: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' } }}
-            />
-            <Tooltip
-              {...TT_PROPS}
-              formatter={(v: number, n: string) =>
-                n === 'Cumulative %'
-                  ? [`${Number(v).toFixed(1)}%`, n]
-                  : [`${Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`, n]
-              }
-            />
-            <Bar yAxisId="left" dataKey="value" name="Hours" radius={[3, 3, 0, 0]} maxBarSize={40}>
-              <LabelList
-                dataKey="value"
-                position="top"
-                offset={8}
-                formatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v.toFixed(0)}`}
-                style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
-              />
-              {data.map((_, i) => <Cell key={i} fill="hsl(var(--primary))" />)}
-            </Bar>
-            <Line yAxisId="right" type="monotone" dataKey="cum" name="Cumulative %" stroke="#ef4444" strokeWidth={1.5} dot={{ r: 3, fill: '#ef4444' }} connectNulls />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
 
 // ─── Q2 Section ──────────────────────────────────────────────────────────────
-// Derives directly from PAYNTER_CATS + buildPaynterRow -- same math as Q4.
-// Chart 1: avg of last 4 weeks Paynter values (same as the Avg column in Q4 table).
+// Reads mh_distribution, the same mart as Q4, so the two always agree.
+// Chart 1: avg hours/week per loss bucket over the last 4 weeks.
 // Chart 2: top 3 workcells by #1 loss category.
 // Chart 3: top 3 workcells by #2 loss category.
-
-function wcNameSeed(name: string): number {
-  return Math.abs(name.split('').reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 7)) % 52 + 1;
-}
 
 // Real Paynter buckets — match mh_distribution.parquet columns.
 // Order is display-only; pareto re-orders by value.
@@ -579,11 +342,11 @@ function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsC
     return (
       <div className="flex gap-2 h-full min-h-0">
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          <SmallPareto title="Man-hrs Loss Distribution (avg hrs/week)" data={pareto1} loading={false} fillHeight />
+          <ParetoChart title="Man-hrs Loss Distribution (avg hrs/week)" data={pareto1} loading={false} fillHeight />
         </div>
         <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
-          <SmallPareto title={`Top 3 Workcells - ${top1Cat || '#1 Loss'}`} data={pareto2} loading={false} fillHeight />
-          <SmallPareto title={`Top 3 Workcells - ${top2Cat || '#2 Loss'}`} data={pareto3} loading={false} fillHeight />
+          <ParetoChart title={`Top 3 Workcells - ${top1Cat || '#1 Loss'}`} data={pareto2} loading={false} fillHeight />
+          <ParetoChart title={`Top 3 Workcells - ${top2Cat || '#2 Loss'}`} data={pareto3} loading={false} fillHeight />
         </div>
       </div>
     );
@@ -591,10 +354,10 @@ function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsC
 
   return (
     <div className="space-y-2">
-      <SmallPareto title="Man-hrs Loss Distribution (avg hrs/week)" data={pareto1} loading={false} height={200} />
+      <ParetoChart title="Man-hrs Loss Distribution (avg hrs/week)" data={pareto1} loading={false} height={200} />
       <div className="grid grid-cols-2 gap-3">
-        <SmallPareto title={`Top 3 Workcells - ${top1Cat || '#1 Loss'}`} data={pareto2} loading={false} height={180} />
-        <SmallPareto title={`Top 3 Workcells - ${top2Cat || '#2 Loss'}`} data={pareto3} loading={false} height={180} />
+        <ParetoChart title={`Top 3 Workcells - ${top1Cat || '#1 Loss'}`} data={pareto2} loading={false} height={180} />
+        <ParetoChart title={`Top 3 Workcells - ${top2Cat || '#2 Loss'}`} data={pareto3} loading={false} height={180} />
       </div>
     </div>
   );
@@ -602,25 +365,16 @@ function Q2Section({ aggregateRows, weeklyRows, mhRows, compact = false, onCatsC
 
 // ─── Q4 Paynter Chart ────────────────────────────────────────────────────────
 
+/** Reference shares, shown in the Q2 editor panel as context for what a typical
+ *  split looks like. Display only — every number on screen comes from
+ *  mh_distribution. (An earlier build SYNTHESISED the Paynter rows from these
+ *  shares plus a seeded jitter; that generator is gone.) */
 const PAYNTER_CATS = [
   { key: 'lunch', label: 'Lunch, Break time', color: '#94a3b8', share: 0.136 },
   { key: 'mfg_manh', label: 'Mfg ManH. Lost', color: '#f59e0b', share: 0.383 },
   { key: 'nva_input', label: 'NVA Input', color: '#ef4444', share: 0.456 },
   { key: 'support_dt', label: 'Support DT', color: '#6366f1', share: 0.025 },
 ];
-
-function seededRand(seed: number, idx: number): number {
-  const x = Math.sin(seed * 9301 + idx * 49297 + 233) * 8393;
-  return x - Math.floor(x);
-}
-
-function buildPaynterRow(isoWeek: number, olePct: number | null): Record<string, number> {
-  const loss = olePct != null ? Math.max(0, 100 - olePct) : 0;
-  if (loss === 0) return Object.fromEntries(PAYNTER_CATS.map(c => [c.key, 0]));
-  const raw = PAYNTER_CATS.map((c, i) => c.share * (0.80 + seededRand(isoWeek, i) * 0.40));
-  const sum = raw.reduce((a, b) => a + b, 0);
-  return Object.fromEntries(PAYNTER_CATS.map((c, i) => [c.key, parseFloat(((raw[i] / sum) * loss).toFixed(2))]));
-}
 
 interface MhWeekData { week_label: string; values: Record<string, number>; total: number; }
 
@@ -732,72 +486,6 @@ function PaynterTable({ aggregateRows, weeklyRows, mhRows, isPrint = false }: {
   );
 }
 
-// ─── Q3 Improvement Plan ─────────────────────────────────────────────────────
-
-function ImprovementTable({ actions, isPrint = false, top1Cat = '', top2Cat = '' }: { actions: ActionItem[]; isPrint?: boolean; top1Cat?: string; top2Cat?: string }) {
-  const sz = isPrint ? 'text-[10px]' : 'text-xs';
-  const ph = isPrint ? 'px-1.5 py-1' : 'px-2 py-1.5';
-  const pd = isPrint ? 'px-1.5 py-1.5' : 'px-2 py-2';
-  const issueOrder: string[] = [];
-  [top1Cat, top2Cat].filter(Boolean).forEach(c => { if (!issueOrder.includes(c)) issueOrder.push(c); });
-  actions.forEach(a => { if (a.issue && !issueOrder.includes(a.issue)) issueOrder.push(a.issue); });
-  const groups = issueOrder.map(issue => ({ issue, rows: actions.filter(a => a.issue === issue) })).filter(g => g.rows.length > 0);
-  const ungrouped = actions.filter(a => !a.issue);
-  const sBadge = (s: string) => cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold border',
-    s?.toLowerCase() === 'open' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
-      s?.toLowerCase() === 'closed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-        s?.toLowerCase() === 'overdue' ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-muted text-muted-foreground border-border');
-  const COLS = [
-    { label: 'Issue', th: 'sticky left-0 bg-primary z-10 w-20 max-w-[80px]' },
-    { label: 'Problem Description', th: 'min-w-[100px]' }, { label: 'Root Cause', th: 'min-w-[90px]' },
-    { label: 'Containment Action', th: 'min-w-[90px]' }, { label: 'Corrective & Preventive Actions', th: 'min-w-[90px]' },
-    { label: 'Impact vs Overall', th: 'w-14 text-center' }, { label: 'ECN PCN NA', th: 'w-14 text-center' },
-    { label: 'FIA - NA', th: 'w-14 text-center' }, { label: 'Responsible', th: 'w-16' },
-    { label: 'Commit Date', th: 'w-16' }, { label: 'Status', th: 'w-14' },
-  ];
-  const renderDataCells = (a: ActionItem) => <>
-    <td className={cn(pd, 'border border-border min-w-[100px]')}>{a.problemDescription || '-'}</td>
-    <td className={cn(pd, 'border border-border min-w-[90px]')}>{a.rootCause || '-'}</td>
-    <td className={cn(pd, 'border border-border min-w-[90px]')}>{a.containmentAction || '-'}</td>
-    <td className={cn(pd, 'border border-border min-w-[90px]')}>{a.correctiveAction || '-'}</td>
-    <td className={cn(pd, 'border border-border text-center w-14')}>{a.impactPct || '-'}</td>
-    <td className={cn(pd, 'border border-border text-center w-14')}>{a.ecnPcn || '-'}</td>
-    <td className={cn(pd, 'border border-border text-center w-14')}>{a.fia || '-'}</td>
-    <td className={cn(pd, 'border border-border w-16')}>{a.responsible || '-'}</td>
-    <td className={cn(pd, 'border border-border font-mono w-16')}>{a.commitDate || '-'}</td>
-    <td className={cn(pd, 'border border-border w-14')}><span className={sBadge(a.status)}>{a.status || 'Open'}</span></td>
-  </>;
-  return (
-    <div className={cn('overflow-x-auto rounded-xl w-full', !isPrint && 'bg-card')}>
-      <table className={cn('w-full text-left border-collapse', sz)}>
-        <thead>
-          {isPrint && <tr><th colSpan={11} className="text-center py-1 text-[8px] font-bold uppercase text-primary-foreground bg-primary border-0">Third Quadrant - Improvement Plan</th></tr>}
-          <tr className="bg-primary text-primary-foreground uppercase">
-            {COLS.map(c => <th key={c.label} className={cn(ph, 'border border-primary/70 font-semibold leading-snug text-[8px]', c.th)}>{c.label}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {groups.length === 0 && ungrouped.length === 0
-            ? <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground text-xs italic">No actions added - use the editor panel to add corrective actions</td></tr>
-            : <>
-              {groups.map(({ issue, rows }) => rows.map((a, ri) => (
-                <tr key={a.id} className={cn('border-b border-border last:border-0 hover:bg-muted/40', ri % 2 === 1 && 'bg-muted/20')}>
-                  {ri === 0 && <td rowSpan={rows.length} className={cn(pd, 'border border-primary/70 font-semibold sticky left-0 bg-primary/10 z-10 w-20 max-w-[80px] align-middle leading-snug')}>{issue}</td>}
-                  {renderDataCells(a)}
-                </tr>
-              )))}
-              {ungrouped.map((a, ri) => (
-                <tr key={a.id} className={cn('border-b border-border last:border-0 hover:bg-muted/40', ri % 2 === 1 && 'bg-muted/20')}>
-                  <td className={cn(pd, 'border border-border sticky left-0 bg-card z-10 w-20')}>-</td>
-                  {renderDataCells(a)}
-                </tr>
-              ))}
-            </>}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN
@@ -833,54 +521,33 @@ export default function OLE4QReport() {
   // ── Saved Q3 plans ─────────────────────────────────────────────────────────
   // Only the Q3 improvement plan is persisted. Q1/Q2/Q4 always rebuild from the
   // live mart, so loading last month's plan shows it against THIS week's data.
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [savedList, setSavedList] = useState<SavedReportMeta[]>([]);
-  // The saved row's id — the identity. null = this report has never been saved.
-  const [loadedId, setLoadedId] = useState<number | null>(null);
-  // Read at save time rather than closed over: autosaves are serialised, and a
-  // queued one must see the id the previous one just created, or it inserts a
-  // SECOND row instead of updating the first.
-  const loadedIdRef = useRef<number | null>(null);
-  useEffect(() => { loadedIdRef.current = loadedId; }, [loadedId]);
-  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
-  const [autoState, setAutoState] = useState<'idle' | 'saving' | 'error'>('idle');
-  const [saveMsg, setSaveMsg] = useState('');
-  // Snapshot of the plan as last saved/loaded. Anything else means unsaved work.
-  // Compared as JSON because ActionItem is flat data — no need for a deep-equal
-  // helper, and field ORDER is stable since every row is built from one literal.
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleBeforeEdit, setTitleBeforeEdit] = useState('');
-  // Baseline for the dirty check: the plan as it was at the last save/load.
-  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify({ actions: [], title: defaultReportTitle() }));
+
+  // Fingerprint of the plan. Compared as JSON because ActionItem is flat data —
+  // no need for a deep-equal helper, and field ORDER is stable since every row
+  // is built from one literal. Deliberately NARROWER than the payload: `scope`
+  // is persisted but does not by itself mark the report unsaved.
   const planFingerprint = useMemo(() => JSON.stringify({ actions, title }), [actions, title]);
-  const dirty = planFingerprint !== savedSnapshot;
 
-  const refreshSaves = useCallback(async (u: UserInfo | null) => {
-    if (!u) return;
-    try {
-      setSavedList(await savedReportsApi.list('ole', '4q', u.userNtid));
-    } catch (e) {
-      console.error('saved reports list failed', e);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Null user is normal in dev (/userinfo lives on the server) — the report
-    // stays fully usable, only save/load is hidden.
-    fetchUserInfo().then(u => { setUser(u); refreshSaves(u); });
-  }, [refreshSaves]);
+  const saved = useSavedReport<SavedPlan>({
+    api: reportsApi,
+    name: title,
+    payload: { actions, scope: { mode, selectedPlants, selectedWorkcells }, title },
+    dirtyKey: planFingerprint,
+    autosave: tab === 'editor',
+  });
+  const { user, savedList, autoState, saveMsg, dirty, setSaveMsg, ensureUser } = saved;
 
   async function handleLoadSaved(id: number) {
-    const u = user ?? (await ensureUser());
-    if (!u) return;
     try {
-      const rec = await savedReportsApi.load<SavedPlan>(id, u.userNtid);
+      const rec = await saved.load(id);
+      if (!rec) return;
       const loadedActions = rec.payload?.actions ?? [];
       setActions(loadedActions);
       const loadedTitle = rec.payload?.title ?? title;
       if (rec.payload?.title) setTitle(rec.payload.title);
-      setSavedSnapshot(JSON.stringify({ actions: loadedActions, title: loadedTitle }));
-      setLoadedId(rec.id);
+      saved.markSaved(JSON.stringify({ actions: loadedActions, title: loadedTitle }));
 
       // Restore the scope the plan was written against, so loading is ONE click
       // — no "pick a plant first". Only the scope is restored; Q1/Q2/Q4 are
@@ -906,92 +573,8 @@ export default function OLE4QReport() {
     }
   }
 
-  /** Identity, asking for it once if the server couldn't tell us (dev). */
-  async function ensureUser(): Promise<UserInfo | null> {
-    if (user) return user;
-    const ntid = window.prompt(
-      'Could not identify you automatically (normal on a dev machine).\nEnter your NTID to save:',
-      '',
-    );
-    if (!ntid?.trim()) return null;
-    const u: UserInfo = { userNtid: ntid.trim(), userName: ntid.trim(), userEmail: '' };
-    setLocalUser(u);
-    setUser(u);
-    await refreshSaves(u);
-    return u;
-  }
-
-  /** Single write path — used by the Save button AND the create-time autosave,
-   *  so "Saved" can never be shown for a report that was never persisted. */
-  async function persistPlan(u: UserInfo, opts: {
-    id: number | null; title: string; actions: ActionItem[]; scope: ReportScope; announce: boolean;
-  }) {
-    const name = opts.title.trim() || defaultReportTitle();
-    const res = await savedReportsApi.save({
-      id: opts.id, module: 'ole', reportType: '4q', name, user: u,
-      payload: { actions: opts.actions, scope: opts.scope, title: opts.title } satisfies SavedPlan,
-    });
-    setLoadedId(res.id);
-    loadedIdRef.current = res.id;
-    setSavedSnapshot(JSON.stringify({ actions: opts.actions, title: opts.title }));
-    if (opts.announce) {
-      setSaveMsg(`Saved "${name}"`);
-      setTimeout(() => setSaveMsg(''), 4000);
-    }
-    await refreshSaves(u);
-    return res;
-  }
-
-  async function handleSavePlan() {
-    const u = await ensureUser();
-    if (!u) return;
-    // The title is the save's label, not its identity — `loadedId` is. So a
-    // rename just updates that row: it cannot duplicate, and it cannot clobber
-    // a different save that happens to share the title. null id = first save.
-    try {
-      await persistPlan(u, {
-        id: loadedId, title, actions,
-        scope: { mode, selectedPlants, selectedWorkcells }, announce: true,
-      });
-    } catch (e) {
-      console.error(e);
-      setSaveMsg(e instanceof Error ? e.message : 'Save failed');
-      setTimeout(() => setSaveMsg(''), 4000);
-    }
-  }
-
-  /* Autosave. Debounced, so typing a sentence is one write and not one per
-     keystroke. Runs only once we know who you are: on a dev machine saving
-     needs an NTID prompt, and a prompt fired by a timer would be an ambush, so
-     the manual button stays as the fallback there. */
-  useEffect(() => {
-    // 'saving' would otherwise schedule a second write on top of the one in
-    // flight, because dirty stays true until the snapshot lands.
-    if (!dirty || !user || tab !== 'editor' || autoState === 'saving') return;
-    // A failed autosave has to keep trying on its own. There is no button left
-    // to press, so giving up would quietly lose the work.
-    const timer = setTimeout(() => {
-      const snapshot = { title, actions,
-        scope: { mode, selectedPlants, selectedWorkcells }, announce: false };
-      setAutoState('saving');
-      saveChain.current = saveChain.current
-        .then(() => persistPlan(user, { ...snapshot, id: loadedIdRef.current }))
-        .then(() => setAutoState('idle'))
-        .catch(e => { console.error('autosave failed', e); setAutoState('error'); });
-    }, autoState === 'error' ? 5000 : 1000);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, planFingerprint, user, tab, autoState]);
-
-  async function handleDeleteSave(id: number) {
-    if (!user) return;
-    const rec = savedList.find(s => s.id === id);
-    if (!window.confirm(`Delete saved plan "${rec?.name ?? id}"?`)) return;
-    try {
-      await savedReportsApi.remove(id, user.userNtid);
-      await refreshSaves(user);
-    } catch (e) { console.error(e); }
-  }
+  const handleSavePlan = saved.save;
+  const handleDeleteSave = saved.remove;
 
   const scrollToSection = (t: string) => {
     const ids: Record<string, string> = { q1: 'q1-section', q2: 'q2-section', q3: 'q3-section', q4: 'q4-section' };
@@ -1071,60 +654,24 @@ export default function OLE4QReport() {
     const n = [...trendData]; const [moved] = n.splice(fromIdx, 1); n.splice(toIdx, 0, moved); setTrendData(n);
   }
 
-  const PreviewModal = () => {
-    const canvasRef = useRef<HTMLDivElement>(null);
-    const [downloading, setDownloading] = useState(false);
-    async function handleDownload() {
-      if (!canvasRef.current) return; setDownloading(true);
-      try {
-        const { toPng } = await import('html-to-image');
-        const dataUrl = await toPng(canvasRef.current, { cacheBust: true, pixelRatio: 2 });
-        const link = document.createElement('a'); link.download = `4Q-Report-${title.replace(/\s+/g, '-')}.png`; link.href = dataUrl; link.click();
-      } catch (e) { console.error('Download failed', e); } finally { setDownloading(false); }
-    }
-    return (
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="default" size="sm" className="gap-2"><Eye className="w-4 h-4" /> Preview Report</Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-[98vw] w-[98vw] h-[98vh] p-0 flex flex-col gap-0 border border-border bg-card shadow-2xl rounded-xl overflow-hidden">
-          <div className="bg-card border-b border-border px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
-            <Button onClick={handleDownload} disabled={downloading} size="sm" className="gap-2 flex-shrink-0 h-8 px-3">
-              <Download className="w-3.5 h-3.5" />{downloading ? 'Capturing...' : 'Download Image'}
-            </Button>
-            <div className="flex-1 min-w-0"><h2 className="font-semibold text-sm leading-tight">Report Preview</h2><p className="text-xs text-muted-foreground">PNG download at 2x resolution</p></div>
-            <div className="w-10 flex-shrink-0" />
-          </div>
-          <div className="flex-1 overflow-hidden bg-muted/40 min-h-0">
-            <div ref={canvasRef} className="bg-card text-foreground h-full w-full flex flex-col overflow-hidden" style={{ minWidth: 900 }}>
-              <div className="flex items-center justify-between flex-shrink-0 px-4 py-1.5">
-                <h1 className="text-sm font-bold uppercase tracking-wide">{title}</h1>
-                <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">JABIL 4Q REPORT</span>
-              </div>
-              <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 min-h-0 overflow-hidden">
-                <div className="border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
-                  <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0"><span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">First Quadrant - OLE Trend</span></div>
-                  <div className="flex-1 min-h-0"><Q1Chart trendData={trendData} fillHeight /></div>
-                </div>
-                <div className="border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
-                  <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0"><span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">Second Quadrant - Pareto Four Weeks</span></div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <Q2Section aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} compact onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }} />
-                  </div>
-                </div>
-                <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col items-start">
-                  <PaynterTable aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} isPrint />
-                </div>
-                <div className="border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col">
-                  <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} isPrint />
-                </div>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  };
+  // Slots 3 and 4 are bare — Paynter and Improvement each print their own banner
+  // — so those two headings only name the slots. The sheet reads Q1, Q2, then
+  // Paynter bottom-left and the plan bottom-right, the layout people know.
+  const preview = (
+    <FourQPreview
+      title={title}
+      headings={['First Quadrant - OLE Trend', 'Second Quadrant - Pareto Four Weeks',
+                 'Fourth Quadrant - Paynter Chart', 'Third Quadrant - Improvement Plan']}
+      frameClassName={['', '', 'items-start', '']}
+      quadrants={[
+        <Q1Chart trendData={trendData} fillHeight />,
+        <Q2Section aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} compact
+          onCatsChange={(c1, c2) => { setTop1Cat(c1); setTop2Cat(c2); }} />,
+        <PaynterTable aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} isPrint />,
+        <ImprovementTable actions={actions} issues={[top1Cat, top2Cat]} isPrint />,
+      ]}
+    />
+  );
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden relative">
@@ -1200,15 +747,19 @@ export default function OLE4QReport() {
                   className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-card" />}
               </div>
             )}
-            <PreviewModal />
+            {preview}
           </div>
         )}
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         {tab === 'start' && (
-          <StartScreen savedList={savedList} loading={generating}
-            onNew={() => { const t = defaultReportTitle(); setActions([]); setTitle(t); setSavedSnapshot(JSON.stringify({ actions: [], title: t })); setLoadedId(null); setScopeOpen(true); }}
+          <ReportStartScreen
+            icon={FileSpreadsheet}
+            title="4Q Report"
+            subtitle="Weekly OLE performance review — trend, loss Paretos, improvement plan."
+            savedList={savedList} loading={generating}
+            onNew={() => { const t = defaultReportTitle(); setActions([]); setTitle(t); saved.startNew(JSON.stringify({ actions: [], title: t })); setScopeOpen(true); }}
             onLoad={handleLoadSaved} onDeleteSave={handleDeleteSave} />
         )}
 
@@ -1217,7 +768,7 @@ export default function OLE4QReport() {
           plants={plants} byPlant={byPlant} generating={generating}
           onConfirm={async (scope, name) => {
             setTitle(name);
-            setSavedSnapshot(JSON.stringify({ actions: [], title: name }));
+            saved.markSaved(JSON.stringify({ actions: [], title: name }));
             setMode(scope.mode);
             setSelectedPlants(scope.selectedPlants);
             setSelectedWorkcells(scope.selectedWorkcells);
@@ -1229,7 +780,10 @@ export default function OLE4QReport() {
             // user — the button then honestly reads "Save".
             if (user) {
               try {
-                await persistPlan(user, { id: null, title: name, actions: [], scope, announce: false });
+                await saved.persist(user, {
+                  id: null, name, payload: { actions: [], scope, title: name },
+                  snapshot: JSON.stringify({ actions: [], title: name }), announce: false,
+                });
               } catch (e) { console.error('autosave failed', e); }
             }
           }} />
@@ -1261,7 +815,7 @@ export default function OLE4QReport() {
                     <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground text-sm font-bold shadow-sm">3</span>
                     <div><h2 className="text-sm font-bold uppercase tracking-widest text-primary">Third Quadrant - Improvement Plan</h2><p className="text-xs text-muted-foreground mt-0.5">Corrective actions and ownership</p></div>
                   </div>
-                  <ImprovementTable actions={actions} top1Cat={top1Cat} top2Cat={top2Cat} />
+                  <ImprovementTable actions={actions} issues={[top1Cat, top2Cat]} />
                 </section>
 
                 <section id="q4-section" className="space-y-3">
@@ -1338,104 +892,17 @@ export default function OLE4QReport() {
                         </div>
                       </TabsContent>
 
-                      <TabsContent value="q3" className="m-0 space-y-6">
-                        <p className="text-[11px] text-muted-foreground">Track corrective actions for top loss categories.</p>
-                        {[top1Cat, top2Cat].map((cat, catIdx) => (
-                          <div key={catIdx} className="space-y-3">
-                            <div className="flex items-center justify-between border-b border-border pb-1">
-                              <h3 className="text-xs font-bold uppercase text-primary flex items-center gap-2">
-                                <span className="w-5 h-5 rounded bg-primary text-primary-foreground flex items-center justify-center text-[10px]">{catIdx + 1}</span>
-                                {cat || `Top Loss Category ${catIdx + 1}`}
-                              </h3>
-                              <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary"
-                                onClick={() => setActions([...actions, { id: genId(), issue: cat, problemDescription: '', rootCause: '', containmentAction: '', correctiveAction: '', impactPct: '', ecnPcn: '', fia: '', responsible: '', commitDate: '', status: 'Open' }])}>
-                                <Plus className="w-3.5 h-3.5 mr-1" /> Add Action
-                              </Button>
-                            </div>
-                            <Accordion type="multiple" className="w-full space-y-2">
-                              {actions.filter(a => a.issue === cat).map(a => {
-                                const gi = actions.findIndex(x => x.id === a.id);
-                                const update = (fields: Partial<ActionItem>) => { const n = [...actions]; n[gi] = { ...n[gi], ...fields }; setActions(n); };
-                                return (
-                                  <AccordionItem key={a.id} value={a.id} className="border border-border rounded-xl bg-card overflow-hidden shadow-sm group/item">
-                                    <div className="flex items-center relative hover:bg-muted/20 transition-colors">
-                                      <AccordionTrigger className="hover:no-underline px-4 py-3 group flex-1 [&>svg]:order-first [&>svg]:mr-3 justify-start">
-                                        <div className="flex items-center gap-3 text-left flex-1 min-w-0">
-                                          <div className={cn('w-2 h-2 rounded-full flex-shrink-0', a.status === 'Closed' ? 'bg-emerald-500' : 'bg-amber-500')} />
-                                          <div className="flex flex-col min-w-0 flex-1">
-                                            <span className="text-xs font-bold text-foreground truncate">{a.problemDescription || 'New Action...'}</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{a.responsible || 'No Owner'} · {a.status}</span>
-                                          </div>
-                                        </div>
-                                      </AccordionTrigger>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 absolute right-2 top-1/2 -translate-y-1/2 z-20 opacity-0 group-hover/item:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); setActions(actions.filter(x => x.id !== a.id)); }}><Trash2 className="w-3.5 h-3.5" /></Button>
-                                    </div>
-                                    <AccordionContent className="px-4 pb-4 space-y-4 border-t border-border pt-4 bg-muted/20">
-                                      <div className="space-y-4">
-                                        <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Problem Description</Label><Input value={a.problemDescription} onChange={e => update({ problemDescription: e.target.value })} placeholder="New Problem..." className="h-7 text-xs bg-background" /></div>
-                                        <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Responsible</Label>
-                                          {a.responsible ? (
-                                            <div className="flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-2 text-xs">
-                                              <span className="truncate">{a.responsible}</span>
-                                              {a.responsibleNtid && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{a.responsibleNtid}</span>}
-                                              <button type="button" title="Clear owner" className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
-                                                onClick={() => update({ responsible: '', responsibleNtid: '', responsibleEmail: '' })}>
-                                                <X className="h-3 w-3" />
-                                              </button>
-                                            </div>
-                                          ) : (
-                                            /* ntid + email are carried alongside the name so the task can be emailed later. */
-                                            <PersonSearch placeholder="Search anyone by name or NTID..." onPick={pn => update({
-                                              responsible: pn.legalName ?? pn.ntid ?? '',
-                                              responsibleNtid: pn.ntid ?? '', responsibleEmail: pn.email ?? '',
-                                            })} />
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Root Cause</Label><textarea value={a.rootCause} onChange={e => update({ rootCause: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[40px]" /></div>
-                                      <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Containment Action</Label><textarea value={a.containmentAction} onChange={e => update({ containmentAction: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[40px]" /></div>
-                                      <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Corrective & Preventive Actions</Label><textarea value={a.correctiveAction} onChange={e => update({ correctiveAction: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px]" /></div>
-                                      <div className="grid grid-cols-3 gap-2">
-                                        <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Impact %</Label><Input value={a.impactPct} onChange={e => update({ impactPct: e.target.value })} placeholder="e.g. 15%" className="h-7 text-xs bg-background" /></div>
-                                        <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">ECN/PCN</Label><Input value={a.ecnPcn} onChange={e => update({ ecnPcn: e.target.value })} placeholder="N/A" className="h-7 text-xs bg-background" /></div>
-                                        <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">FIA</Label><Input value={a.fia} onChange={e => update({ fia: e.target.value })} placeholder="N/A" className="h-7 text-xs bg-background" /></div>
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-2">
-                                        <DatePickerField id={`cd-${a.id}`} label="Commit Date" value={a.commitDate} onChange={val => update({ commitDate: val })} />
-                                        <div className="space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Status</Label>
-                                          <select value={a.status} onChange={e => update({ status: e.target.value })} className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                                            <option value="Open">Open</option><option value="Closed">Closed</option>
-                                          </select>
-                                        </div>
-                                      </div>
-                                    </AccordionContent>
-                                  </AccordionItem>
-                                );
-                              })}
-                            </Accordion>
-                            {actions.filter(a => a.issue === cat).length === 0 && (
-                              <div className="py-4 border-2 border-dashed border-border rounded-xl flex items-center justify-center"><p className="text-[11px] text-muted-foreground">No actions for this category.</p></div>
-                            )}
-                          </div>
-                        ))}
+                      <TabsContent value="q3" className="m-0">
+                        <ImprovementEditor
+                          actions={actions} onChange={setActions}
+                          issues={[top1Cat, top2Cat]} />
                       </TabsContent>
 
                       <TabsContent value="q4" className="m-0 space-y-2">
-                        {/* <p className="text-[11px] text-muted-foreground">Derived from OLE% per week. Total = 100% - OLE%. Categories use seeded randomization calibrated to reference averages.</p>
-                        <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
-                          {PAYNTER_CATS.map(c => (
-                            <div key={c.key} className="flex items-center gap-2 text-xs">
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
-                              <span className="flex-1 text-muted-foreground">{c.label}</span>
-                              <span className="font-mono text-[10px] text-muted-foreground/60">{(c.share * 100).toFixed(0)}% avg share</span>
-                            </div>
-                          ))}
-                          <div className="border-t border-border pt-1.5 mt-1.5 text-xs font-semibold text-foreground flex items-center gap-2">
-                            <span className="w-2 h-2 flex-shrink-0" /><span className="flex-1">Total = 100% - OLE%</span>
-                            <span className="font-mono text-[10px] text-muted-foreground/60">always balances</span>
-                          </div>
-                        </div>
-                        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-[11px] text-blue-600">Numbers are seeded per week number - same values on every refresh.</div> */}
+                        <p className="text-[11px] text-muted-foreground">
+                          Per-week share of paid hours by loss bucket, straight from
+                          mh_distribution. Nothing to edit — fix the source data, not the table.
+                        </p>
                       </TabsContent>
 
                       <TabsContent value="settings" className="m-0 space-y-4 max-w-sm">

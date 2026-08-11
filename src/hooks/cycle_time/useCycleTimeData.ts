@@ -132,11 +132,17 @@ export function useCycleTimeCompletionDemand() {
   });
 }
 
-/** Weekly completion trend + loss breakdown — the 4Q tab. */
-export function useCycleTimeCompletionHistory(weeks = 13) {
+/** Weekly completion trend + loss breakdown — the 4Q report.
+ *
+ *  `workcells` scopes every quadrant to the report's picked scope. Undefined or
+ *  empty means all — the backend treats a missing param as unfiltered, so the
+ *  two agree without a sentinel. */
+export function useCycleTimeCompletionHistory(weeks = 13, workcells?: string[]) {
+  // Sorted + joined so the same set in a different pick order is one cache entry.
+  const key = workcells?.length ? [...workcells].sort().join(',') : '';
   return useQuery({
-    queryKey: [...ctKeys.all, 'completionHistory', weeks] as const,
-    queryFn:  () => cycleTimeApi.completion.history({ weeks }),
+    queryKey: [...ctKeys.all, 'completionHistory', weeks, key] as const,
+    queryFn:  () => cycleTimeApi.completion.history({ weeks, workcells: key || undefined }),
     staleTime: 30 * 60_000,
     retry: false,   // 503 until the first snapshot exists — retrying just delays the message
   });

@@ -15,6 +15,7 @@
  * Route: /cycle-time/completion
  */
 
+import { ScopeBox, ScopePicker } from '@/components/shared/ScopePicker';
 import { SortHeader } from '@/components/shared/SortHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,10 +23,10 @@ import { useCycleTimeCompletionDemand } from '@/hooks/cycle_time/useCycleTimeDat
 import { useSortable } from '@/hooks/shared/useSortable';
 import type { DemandCompletionModel } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
-import { Check, ChevronDown, Loader2, Search } from 'lucide-react';
+import { ArrowRight, ChevronDown, Loader2, Search } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import CompletionFourQuadrant from './CompletionFourQuadrant';
+import { Link } from 'react-router-dom';
 import { RouteComparisonDrawer } from './RouteComparisonDrawer';
 
 // Identity first (who/what/where), then schedule, then every number and
@@ -103,18 +104,6 @@ const ACCESSORS: Record<SortKey, (m: DemandCompletionModel) => string | number |
   last:     m => m.last_build ?? null,
 };
 
-function Box({ on, partial = false }: { on: boolean; partial?: boolean }) {
-  return (
-    <span className={cn(
-      'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
-      on || partial ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40',
-    )}>
-      {on && <Check className="h-3 w-3" strokeWidth={3} />}
-      {partial && !on && <span className="h-0.5 w-2 rounded bg-primary-foreground" />}
-    </span>
-  );
-}
-
 export default function DemandCompletionReport() {
   const { data, isLoading, error } = useCycleTimeCompletionDemand();
 
@@ -123,7 +112,6 @@ export default function DemandCompletionReport() {
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
-  const [view, setView] = useState<'table' | '4q'>('table');
   const [limit, setLimit] = useState(0);                // 0 = no cap
   const [open, setOpen] = useState<{ customer: string; assembly: string } | null>(null);
 
@@ -149,27 +137,13 @@ export default function DemandCompletionReport() {
   // making the user pick before seeing anything hides the headline.
   useEffect(() => { setPicked([]); }, [data?.as_of]);
 
-  const plantState = (p: string): 'all' | 'some' | 'none' => {
-    const list = scope?.plants[p] ?? [];
-    if (!picked.length) return 'all';                    // [] means all selected
-    const n = list.filter(w => picked.includes(w)).length;
-    return n === 0 ? 'none' : n === list.length ? 'all' : 'some';
-  };
-
   const effectivePicked = picked.length ? picked : allWorkcells;
 
-  const togglePlant = (p: string) => {
-    const list = scope?.plants[p] ?? [];
-    const base = picked.length ? picked : allWorkcells;
-    const on = list.every(w => base.includes(w));
-    const next = on ? base.filter(w => !list.includes(w)) : [...new Set([...base, ...list])];
+  /** ScopePicker deals in explicit lists; this page uses [] to mean "all". The
+   *  translation lives here so an empty array stays unambiguous on both sides. */
+  const setScope = (next: string[]) =>
     setPicked(next.length === allWorkcells.length ? [] : next);
-  };
-  const toggleWc = (w: string) => {
-    const base = picked.length ? picked : allWorkcells;
-    const next = base.includes(w) ? base.filter(x => x !== w) : [...base, w];
-    setPicked(next.length === allWorkcells.length ? [] : next);
-  };
+
   const toggleStatus = (s: string) =>
     setStatusFilter(statusFilter.includes(s) ? statusFilter.filter(x => x !== s) : [...statusFilter, s]);
 
@@ -251,18 +225,16 @@ export default function DemandCompletionReport() {
         )}
       </div>
 
-      {/* ── Tabs ─────────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 border-b">
-        {(['table', '4q'] as const).map(t => (
-          <button key={t} onClick={() => setView(t)}
-            className={cn('-mb-px border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
-              view === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
-            {t === 'table' ? 'Data Table' : '4Q'}
-          </button>
-        ))}
+      {/* The 4Q used to live here as a second tab. It is its own page now — two
+          views of the same number is how the route drawer and the completion
+          badge ended up disagreeing. One 4Q, one place. */}
+      <div className="flex items-center gap-1 border-b pb-1.5">
+        <span className="border-b-2 border-primary px-3 py-1.5 text-xs font-medium text-foreground">Data Table</span>
+        <Link to="/cycle-time/4q"
+          className="ml-auto flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+          Open the 4Q report <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
-
-      {view === '4q' ? <CompletionFourQuadrant /> : <>
 
       {/* ── Filters ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border bg-card">
@@ -286,40 +258,19 @@ export default function DemandCompletionReport() {
             <button onClick={() => setPicked([])}
               className={cn('flex items-center gap-2.5 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-muted/50',
                 picked.length === 0 && 'text-primary')}>
-              <Box on={picked.length === 0} />
+              <ScopeBox on={picked.length === 0} />
               <span className="text-sm font-semibold">All</span>
               <span className="text-[11px] text-muted-foreground">{allWorkcells.length} workcells</span>
             </button>
 
-            {plants.map(p => {
-              const st = plantState(p);
-              const list = scope?.plants[p] ?? [];
-              return (
-                <div key={p}>
-                  <button onClick={() => togglePlant(p)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-muted/50">
-                    <Box on={st === 'all'} partial={st === 'some'} />
-                    <span className="text-sm font-semibold">{plantLabel(p)}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {list.filter(w => effectivePicked.includes(w)).length}/{list.length}
-                    </span>
-                  </button>
-                  <div className="ml-6 mt-1.5 grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
-                    {list.map(w => {
-                      const on = effectivePicked.includes(w);
-                      return (
-                        <button key={w} onClick={() => toggleWc(w)}
-                          className={cn('flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors',
-                            on ? 'border-primary/50 bg-primary/5' : 'border-border hover:bg-muted/50')}>
-                          <Box on={on} />
-                          <span className="truncate">{w}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+            <ScopePicker
+              plants={plants}
+              byPlant={scope?.plants ?? {}}
+              picked={effectivePicked}
+              onChange={setScope}
+              labelPlant={plantLabel}
+              gridClassName="grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+            />
           </div>
         )}
       </div>
@@ -423,7 +374,6 @@ export default function DemandCompletionReport() {
           </div>
         </div>
       </div>
-      </>}
 
       {open && (
         <RouteComparisonDrawer
