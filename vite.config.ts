@@ -39,6 +39,27 @@ const APP_PUBLIC: Record<string, string[]> = {
   iebaseline: ['pdf.worker.min.mjs'],
 };
 
+/**
+ * Browser-tab title per app. One index.html serves every build, so the title is
+ * swapped at build time — renaming it in the HTML would rename every app's tab.
+ * Apps not listed keep the default in index.html.
+ */
+const APP_TITLES: Record<string, string> = {
+  ole: 'OLE - IE Tools',
+};
+
+/** Build-only: dev serves all modules at once, so there is no one right title. */
+function appTitle(appId: string, isCoreBuild: boolean): Plugin {
+  return {
+    name: 'app-title',
+    apply: 'build',
+    transformIndexHtml(html) {
+      const title = isCoreBuild ? undefined : APP_TITLES[appId];
+      return title ? html.replace(/<title>[\s\S]*?<\/title>/, `<title>${title}</title>`) : html;
+    },
+  };
+}
+
 /** After a per-module build, remove public/ entries the module doesn't use.
  *  Only entries that exist in public/ are candidates, so build outputs
  *  (assets/, index.html) are never touched. */
@@ -162,7 +183,7 @@ export default defineConfig(({ command, mode }) => {
         },
       },
     },
-    plugins: [react(), prunePublicAssets(appId, isCoreBuild)],
+    plugins: [react(), appTitle(appId, isCoreBuild), prunePublicAssets(appId, isCoreBuild)],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

@@ -84,11 +84,17 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.5" },
         },
+        // Draws the checkmark stroke on. Paired with strokeDasharray="30".
+        "tick-draw": {
+          from: { strokeDashoffset: "30" },
+          to: { strokeDashoffset: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "pulse-status": "pulse-status 2s ease-in-out infinite",
+        "tick-draw": "tick-draw 0.4s ease-out forwards",
       },
     },
   },

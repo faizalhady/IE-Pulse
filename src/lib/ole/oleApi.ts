@@ -129,6 +129,12 @@ export interface SmhStatus {
   last_seen_date: string;
   active_days: number;
   smh_status: 'OK' | 'NOT_IN_SMH_DB';
+  /** ACTIVE = built in the last 90 days or on the planner's 13-week horizon.
+   *  UPCOMING = planned, never built — no production row exists for it.
+   *  DORMANT = built once long ago, nothing planned. */
+  tier?: 'ACTIVE' | 'UPCOMING' | 'DORMANT';
+  next_build_date: string | null;
+  next_build_qty: number;
 }
 
 export interface OleWeeklyResult {

@@ -28,10 +28,26 @@ import {
   UserCheck,
   Wrench
 } from 'lucide-react';
+import { createElement } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'machine-mover' | 'tools';
+
+/** Bold "4Q" wordmark, drawn to the same 24×24 box as a lucide icon so it drops
+ *  straight into `navItems` and inherits the sidebar's colour and sizing.
+ *  createElement rather than JSX: this file is .ts, not .tsx. */
+const FourQ = ((props: { className?: string }) =>
+  createElement('svg', {
+    viewBox: '0 0 24 24', className: props.className, fill: 'none',
+  }, createElement('text', {
+    x: 12, y: 17.6, textAnchor: 'middle', fontSize: 19, fontWeight: 800,
+    fill: 'currentColor',
+    // textLength pins the glyphs to 21 units wide whatever the sidebar font's
+    // metrics are, so "Q" cannot spill past the 24-wide viewBox and get clipped.
+    // y leaves ~2.5 units under the baseline for Q's tail.
+    textLength: 21, lengthAdjust: 'spacingAndGlyphs',
+  }, '4Q'))) as unknown as LucideIcon;
 
 export interface NavItem {
   label: string;
@@ -92,7 +108,7 @@ export const APPS: AppConfig[] = [
     navItems: [
       { label: 'Map', to: '/ole/map', icon: MapPin },
       { label: 'Report', to: '/ole/report', icon: LineChart, exact: false },
-      { label: '4Q Generator', to: '/ole/4q', icon: FileSpreadsheet },
+      { label: '4Q Generator', to: '/ole/4q', icon: FourQ },
       { label: 'Analysis', to: '/ole/analysis', icon: Microscope },
       // { label: 'Home 0', to: '/ole', icon: TrendingUp },
       { label: 'Standard Man-Hour', to: '/ole/smh', icon: FlaskConical },
@@ -118,6 +134,7 @@ export const APPS: AppConfig[] = [
       { label: 'Home', to: '/cycle-time/workcells', icon: Home },
       // { label: 'Incompletion Report', to: '/cycle-time/incompletion', icon: ClipboardList },
       { label: 'Incompletion Report', to: '/cycle-time/completion', icon: ClipboardList },
+      { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
       { label: 'Plant Runners', to: '/cycle-time/plant-runners', icon: Building2 },
       // Hidden from the sidebar (routes still work):
       //  • Assemblies → now lives in the workcell Breakdown→Assemblies tab

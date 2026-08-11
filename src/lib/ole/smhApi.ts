@@ -5,9 +5,12 @@
  * parquet mart). SMH is the numerator of every OLE number, so writes are
  * restricted to an allowlist server-side.
  *
- * Identity comes from savedReportsApi's fetchUserInfo() — same NTID, same
- * X-User-Ntid header, same dev fallback. Deliberately not a second identity
- * mechanism.
+ * Identity comes from lib/shared/savedReportsApi's fetchUserInfo() — same NTID,
+ * same dev fallback. Deliberately not a second identity mechanism.
+ *
+ * NOTE: this client still sends X-User-Ntid; saved-reports no longer does. The
+ * backend reads the owner from the Bearer token in both cases, so the header is
+ * dead weight here too — dropping it is its own to-do item.
  *
  * ⚠️ A write does NOT change any OLE number until the next pipeline refresh.
  * Every write response carries `pending_refresh: true`; surface it, or users
@@ -79,7 +82,11 @@ export const smhApi = {
     const p = new URLSearchParams();
     if (params?.workcell && params.workcell !== 'all') p.set('workcell', params.workcell);
     if (params?.search) p.set('search', params.search);
-    return req<SmhRow[]>(`/smh${p.toString() ? `?${p}` : ''}`);
+    // Explicit: the SMH page overlays the whole table, and the server default
+    // used to truncate it — rows past the cut kept showing their stale mart
+    // value after a save, which reads as "the edit did not stick".
+    p.set('limit', '100000');
+    return req<SmhRow[]>(`/smh?${p}`);
   },
 
   history: (params?: { workcell?: string; assembly?: string; limit?: number }) => {
