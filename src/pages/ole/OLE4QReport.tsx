@@ -945,7 +945,11 @@ export default function OLE4QReport() {
                               </div>
                             </div>
                           )}
-                          <Button onClick={handleGenerate} disabled={generating || (mode === 'plant' && selectedPlants.length === 0) || (mode === 'workcell' && selectedWorkcells.length === 0)} className="w-full h-8 text-xs font-bold">
+                          {/* Wrapped, not passed directly: React hands an onClick
+                              handler a MouseEvent, which would land in `scope`. It
+                              happens to work because every scope?.x lookup misses
+                              and falls back — but only by luck. */}
+                          <Button onClick={() => handleGenerate()} disabled={generating || (mode === 'plant' && selectedPlants.length === 0) || (mode === 'workcell' && selectedWorkcells.length === 0)} className="w-full h-8 text-xs font-bold">
                             {generating ? 'Updating...' : 'Update Report Scope'}
                           </Button>
                         </div>
