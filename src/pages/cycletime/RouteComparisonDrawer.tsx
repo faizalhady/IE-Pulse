@@ -35,9 +35,13 @@ const MES_STATUS: Record<string, { label: string; row: string; pill: string }> =
   unmapped:    { label: 'unmapped',   row: 'bg-amber-500/5',   pill: 'bg-amber-500/15 text-amber-600' },
 };
 
-/** Step-order badge. Sky = MES (what the floor ran), violet = IEDB (the route
- *  on paper). Same shape both sides so the eye pairs them; colour says which
- *  list a number belongs to. */
+/** Position badge — simply 1..N down the list as shown. NOT the source `order`
+ *  field: IEDB's is a sparse routing rank (10, 20, 25…) and MES's restarts per
+ *  route, so both read as arbitrary next to a step you are counting through.
+ *
+ *  Sky = MES (what the floor ran), violet = IEDB (the route on paper). Same
+ *  shape both sides so the eye pairs them; colour says which list a number
+ *  belongs to. */
 function OrderDot({ n, side }: { n: number | null; side: 'mes' | 'iedb' }) {
   return (
     <span className={cn(
@@ -100,15 +104,16 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
   const mesShown = hideNoise ? mes.filter((s) => s.status !== 'non_iedb') : mes;
   const iedb = [...(data?.iedb ?? [])].sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9));
 
-  // alias CODE -> the IEDB step it points at, so a MES row can show WHICH step
-  // on the right it was judged against. First one wins, matching the backend:
-  // IEDB numbers a step per-model ("MA 1", "MA 2") but the code is the identity.
-  const byCode = new Map<string, number | null>();
-  for (const s of iedb) {
+  // alias CODE -> the POSITION of the IEDB step it points at, so a MES row can
+  // show WHICH row on the right it was judged against — 1..N, the number the
+  // reader can actually count to. First one wins, matching the backend: IEDB
+  // numbers a step per-model ("MA 1", "MA 2") but the code is the identity.
+  const byCode = new Map<string, number>();
+  iedb.forEach((s, i) => {
     const c = aliasCode(s.alias);
-    if (c && !byCode.has(c)) byCode.set(c, s.order);
-  }
-  const iedbOrderOf = (alias: string | null) => {
+    if (c && !byCode.has(c)) byCode.set(c, i + 1);
+  });
+  const iedbSeqOf = (alias: string | null) => {
     const c = aliasCode(alias);
     return c ? byCode.get(c) ?? null : null;
   };
@@ -135,10 +140,12 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
             // Fallback, not decoration: an unknown status used to read as
             // undefined and crash the whole drawer on `m.row`.
             const m = MES_STATUS[s.status] ?? MES_STATUS.unmapped;
-            const iedbOrder = iedbOrderOf(s.alias);
+            const iedbSeq = iedbSeqOf(s.alias);
             return (
               <div key={i} className={cn('grid grid-cols-[1.25rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0', m.row)}>
-                <OrderDot n={s.order} side="mes" />
+                {/* Numbered over the SHOWN rows, so "hide logistics" leaves
+                    1..N contiguous rather than a list full of gaps. */}
+                <OrderDot n={i + 1} side="mes" />
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-medium text-foreground">{s.step}</p>
                   {s.alias && (
@@ -146,7 +153,7 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
                       <span className="truncate">→ {s.alias}</span>
                       {/* Which IEDB step this one answers to. Absent = the alias
                           matched nothing in the route on the right. */}
-                      {iedbOrder != null && <OrderDot n={iedbOrder} side="iedb" />}
+                      {iedbSeq != null && <OrderDot n={iedbSeq} side="iedb" />}
                     </p>
                   )}
                 </div>
@@ -163,7 +170,9 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
         <div className="min-h-0 flex-1 overflow-auto">
           {iedb.map((s, i) => (
             <div key={i} className="grid grid-cols-[1.25rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0">
-              <OrderDot n={s.order} side="iedb" />
+              {/* Still SORTED by the source `order` — only the label is the
+                  position, so the route sequence is unchanged. */}
+              <OrderDot n={i + 1} side="iedb" />
               <div className="min-w-0">
                 <p className="truncate text-[12px] font-medium text-foreground">{s.process}</p>
                 {/* Alias, not sub_workcenter: the alias is what the MES side is
