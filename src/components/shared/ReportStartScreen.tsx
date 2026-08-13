@@ -17,6 +17,8 @@ export interface ReportStartScreenProps {
   /** Big mark above the title — the module's own icon. */
   icon: LucideIcon;
   title: string;
+  /** Optional status pill beside the title — e.g. "Testing Phase". */
+  badge?: string;
   subtitle: string;
   savedList: SavedReportMeta[];
   onNew: () => void;
@@ -26,7 +28,7 @@ export interface ReportStartScreenProps {
 }
 
 export function ReportStartScreen({
-  icon: Icon, title, subtitle, savedList, onNew, onLoad, onDeleteSave, loading = false,
+  icon: Icon, title, badge, subtitle, savedList, onNew, onLoad, onDeleteSave, loading = false,
 }: ReportStartScreenProps) {
   const [picking, setPicking] = useState(false);
   const hasSaves = savedList.length > 0;
@@ -35,7 +37,16 @@ export function ReportStartScreen({
     <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-8">
       <Icon className="h-20 w-20 text-primary mb-7" strokeWidth={1.25} />
 
-      <h2 className="text-5xl font-semibold tracking-tight text-foreground">{title}</h2>
+      {/* Badge sits on the baseline, not scaled with the 5xl title — a pill that
+          big stops reading as a note and starts competing with the name. */}
+      <h2 className="flex items-center gap-3 text-5xl font-semibold tracking-tight text-foreground">
+        {title}
+        {badge && (
+          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+            {badge}
+          </span>
+        )}
+      </h2>
       <p className="mt-3 text-sm text-muted-foreground">{subtitle}</p>
 
       {/* No card chrome: the icons ARE the affordance. Two choices, nothing else. */}

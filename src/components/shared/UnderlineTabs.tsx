@@ -30,6 +30,9 @@ export interface UnderlineTab<K extends string = string> {
   tip?: string;
   /** Optional count badge after the label (hidden when 0/undefined). */
   count?: number;
+  /** Optional text pill after the label — for a status like "Testing Phase".
+   *  Amber, so it reads as a warning rather than as part of the label. */
+  badge?: string;
 }
 
 export function UnderlineTabs<K extends string>({
@@ -42,7 +45,7 @@ export function UnderlineTabs<K extends string>({
 }) {
   return (
     <div className={cn('flex gap-0 -mb-px', className)}>
-      {tabs.map(({ key, label, icon: Icon, tip, count }) => (
+      {tabs.map(({ key, label, icon: Icon, tip, count, badge }) => (
         <button
           key={key}
           type="button"
@@ -60,6 +63,11 @@ export function UnderlineTabs<K extends string>({
           {count != null && count > 0 && (
             <span className="ml-1 text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
               {count.toLocaleString()}
+            </span>
+          )}
+          {badge && (
+            <span className="ml-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+              {badge}
             </span>
           )}
         </button>

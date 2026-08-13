@@ -26,7 +26,7 @@ import {
 } from '@/hooks/cycle_time/useCycleTimeData';
 
 import CycleTimeAssemblyFlow from './CycleTimeAssemblyFlow';
-import WorkcellIncompletionPanel from './WorkcellIncompletionPanel';
+import CompletionDataTable from './CompletionDataTable';
 
 const TABS = [
   { key: 'cycle',  label: 'Cycle Time', icon: Timer },
@@ -118,9 +118,10 @@ export default function CycleTimeWorkcell() {
         {tab === 'cycle' ? (
           <CycleTimeAssemblyFlow lockedCustomer={customer} />
         ) : (
-          <div className="h-full overflow-auto p-5">
-            <WorkcellIncompletionPanel customer={customer} />
-          </div>
+          // Same table as the Report page's Data Table tab, scoped to this
+          // workcell — one component, so a model can't read Complete here and
+          // Missing CT there.
+          <CompletionDataTable lockedWorkcell={customer} />
         )}
       </div>
     </div>
