@@ -64,6 +64,10 @@ import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
 import Reports from "@/pages/Reports";
 import ReportA from "@/pages/ReportA";
 import Settings from "@/pages/Settings";
+import VaNvaHome from "@/pages/vanva/VaNvaHome";
+import VaNvaUpload from "@/pages/vanva/VaNvaUpload";
+import VaNvaWorkcellDetail from "@/pages/vanva/VaNvaWorkcellDetail";
+import VaNvaWorkcells from "@/pages/vanva/VaNvaWorkcells";
 import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -184,6 +188,13 @@ function AppShell() {
               <Route path="/lbr/:workcell/config" element={<LBRWorkcellConfig />} />
               <Route path="/lbr/:workcell/:assembly" element={<LBRAssemblyDetail />} />
               <Route path="/lbr/:workcell/:assembly/:playbook" element={<LBRPlaybookDetail />} />
+            </>}
+
+            {includesApp('va-nva') && <>
+              <Route path="/va-nva" element={<VaNvaHome />} />
+              <Route path="/va-nva/workcells" element={<VaNvaWorkcells />} />
+              <Route path="/va-nva/wc/:id" element={<VaNvaWorkcellDetail />} />
+              <Route path="/va-nva/upload" element={<VaNvaUpload />} />
             </>}
 
             {includesApp('ebuild') && <>
