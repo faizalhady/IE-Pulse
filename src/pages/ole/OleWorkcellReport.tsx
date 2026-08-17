@@ -19,6 +19,7 @@ import {
   WORKCELL_LOGOS,
   dayName,
   fmtDate,
+  fmtPct,
   formatWeekLabel,
   getOleStatus, oleColor,
   shiftLabel,
@@ -474,7 +475,7 @@ export default function OleWorkcellReport() {
                 </div>
               </div>
               <p className="text-5xl font-mono font-black mt-3 leading-none" style={{ color: siteColor }}>
-                {siteOle.toFixed(1)}%
+                {fmtPct(siteOle)}%
               </p>
               <div className="mt-3 h-1 rounded-full bg-muted/40 overflow-hidden">
                 <div className="h-full rounded-full" style={{ width: `${Math.min(siteOle, 100)}%`, background: siteColor }} />
@@ -563,7 +564,7 @@ export default function OleWorkcellReport() {
                 >
                   <p className="text-xs font-semibold text-foreground truncate">{r.label}</p>
                   <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-12', r.color)}>
-                    {showPct ? `${pct.toFixed(1)}%` : '—'}
+                    {showPct ? `${fmtPct(pct)}%` : '—'}
                   </span>
                   <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-16', r.color)}>
                     {Math.abs(r.value) > 0.01 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
@@ -618,7 +619,7 @@ export default function OleWorkcellReport() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="w" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                   <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                  <Tooltip {...TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']} cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
+                  <Tooltip {...TT} formatter={(v: number) => [`${fmtPct(Number(v))}%`, 'OLE']} cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
                   <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
                   {selectedWeek !== null && (
                     <ReferenceLine
@@ -636,7 +637,7 @@ export default function OleWorkcellReport() {
                       const baseColor = d.ole >= OLE_TARGET ? '#22c55e' : d.ole >= OLE_WARNING ? '#f59e0b' : '#ef4444';
                       return (
                         <text x={x + width / 2} y={y - 4} textAnchor="middle" fontSize={15} fontFamily="monospace" fontWeight="bold" fill={baseColor} opacity={1} fillOpacity={1}>
-                          {Number(value).toFixed(1)}%
+                          {fmtPct(Number(value))}%
                         </text>
                       );
                     }}
@@ -712,7 +713,7 @@ export default function OleWorkcellReport() {
                           <div className={`px-3 ${TD} font-mono font-semibold text-foreground`}>{shiftLabel(row.shift)}</div>
                           <div className="px-3">
                             <span className={cn('text-sm font-mono font-bold', OLE_COLOR[status])}>
-                              {row.ole_pct !== null ? `${row.ole_pct}%` : '—'}
+                              {row.ole_pct !== null ? `${fmtPct(row.ole_pct)}%` : '—'}
                             </span>
                           </div>
                           <div className="px-3">

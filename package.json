@@ -15,6 +15,7 @@
     "build:ppqt": "vite build --mode ppqt",
     "build:ipk": "vite build --mode ipk",
     "build:lbr": "vite build --mode lbr",
+    "build:vanva": "vite build --mode va-nva",
     "build:machinemover": "vite build --mode machine-mover",
     "build:all": "node setup-pdfjs-worker.js && vite build --mode all",
     "build:dev": "vite build --mode development",

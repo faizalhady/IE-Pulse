@@ -6,6 +6,7 @@ import {
   MarkerPopup
 } from '@/components/ui/map';
 import { useOleWeekly, useOleWorkcells } from '@/hooks/ole/useOleData';
+import { fmtPct } from '@/lib/ole/oleConstants';
 import { ExternalLink, MapPin } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -71,7 +72,7 @@ export default function MapPage() {
     const rows = rawWeekly.filter(r => r.iso_week === latestIsoWeek);
     const smh = rows.reduce((s, r) => s + r.total_output_smh, 0);
     const hrs = rows.reduce((s, r) => s + r.total_input_hours, 0);
-    return hrs > 0 ? parseFloat(((smh / hrs) * 100).toFixed(1)) : null;
+    return hrs > 0 ? (smh / hrs) * 100 : null;
   }, [rawWeekly, latestIsoWeek]);
 
   // Per-plant OLE for latest week
@@ -84,7 +85,7 @@ export default function MapPage() {
       });
       const smh = rows.reduce((s, r) => s + r.total_output_smh, 0);
       const hrs = rows.reduce((s, r) => s + r.total_input_hours, 0);
-      const ole_pct = hrs > 0 ? parseFloat(((smh / hrs) * 100).toFixed(1)) : null;
+      const ole_pct = hrs > 0 ? (smh / hrs) * 100 : null;
       return { ...plant, ole_pct, ww: wwLabel };
     });
   }, [rawWeekly, workcellConfigs, latestIsoWeek, wwLabel]);
@@ -103,7 +104,7 @@ export default function MapPage() {
         >
           <p className="text-[13px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5">All Plants</p>
           <p className="text-[34px] font-mono font-bold leading-none mt-1 text-foreground">
-            {loading ? '...' : siteOle !== null ? `${siteOle}%` : 'N/A'}
+            {loading ? '...' : siteOle !== null ? `${fmtPct(siteOle)}%` : 'N/A'}
           </p>
           <p className="text-[10px] text-muted-foreground mt-1">
             OLE · {wwLabel}
@@ -115,7 +116,7 @@ export default function MapPage() {
                   {p.label.replace('Plant ', 'P')}
                 </span>
                 <span className="text-[11px] font-mono font-bold" style={{ color: p.ole_pct !== null ? p.color : undefined }}>
-                  {loading ? '...' : p.ole_pct !== null ? `${p.ole_pct}%` : 'N/A'}
+                  {loading ? '...' : p.ole_pct !== null ? `${fmtPct(p.ole_pct)}%` : 'N/A'}
                 </span>
               </div>
             ))}
@@ -139,7 +140,7 @@ export default function MapPage() {
               {plant.label}
             </p>
             <p className="text-2xl font-mono font-bold mt-0.5" style={{ color: plant.ole_pct !== null ? plant.color : undefined }}>
-              {loading ? '...' : plant.ole_pct !== null ? `${plant.ole_pct}%` : 'N/A'}
+              {loading ? '...' : plant.ole_pct !== null ? `${fmtPct(plant.ole_pct)}%` : 'N/A'}
             </p>
             <p className="text-[10px] text-muted-foreground mt-1">OLE · {plant.ww}</p>
           </div>
@@ -204,7 +205,7 @@ export default function MapPage() {
                     className="text-xs font-mono font-bold px-2 py-0.5 rounded"
                     style={{ background: `${plant.color}22`, color: plant.color }}
                   >
-                    OLE {plant.ole_pct !== null ? `${plant.ole_pct}%` : '--'}
+                    OLE {plant.ole_pct !== null ? `${fmtPct(plant.ole_pct)}%` : '--'}
                   </span>
                   <span className="text-[10px] text-muted-foreground">{plant.ww}</span>
                 </div>

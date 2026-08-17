@@ -17,7 +17,9 @@
 
 import {
   AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Columns3, Copy, Download, Loader2, Rows3,
+  ArrowUpRight,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -192,7 +194,7 @@ interface Routing {
 export type FlowVariant = 'detail' | 'matrix';
 
 // chevron · # · Assembly · SMH · Revisions · Workcenter
-const GRID = '28px 44px minmax(220px,0.5fr) 96px 100px minmax(160px,1fr)';
+const GRID = '28px 44px minmax(220px,0.5fr) 96px 100px minmax(160px,1fr) 34px';
 const HEADER_H = 34;
 const NUM = 'ct-num font-semibold text-[12px]';
 const PAGE_SIZE = 50;
@@ -402,6 +404,7 @@ interface ListProps {
 function FlowList({
   rows, customer, variant, aliasMap, loading, error, hasCustomer, open, onToggle, sort, onSort, pagination,
 }: ListProps) {
+  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const openRowRef = useRef<HTMLDivElement>(null);
 
@@ -447,6 +450,7 @@ function FlowList({
           <div className="text-right" title="Standard Manufacturing Hour — operator content per unit: (IMT + Hand) × S%, summed over the primary routing">SMH</div>
           <SortHead label="Revisions" k="revisions" sort={sort} onSort={onSort} align="center" />
           <div className="text-right">Workcenter</div>
+          <div />
         </div>
 
         {rows.map((a, idx) => {
@@ -459,11 +463,13 @@ function FlowList({
               ref={isOpen ? openRowRef : undefined}
               className="border-b border-border last:border-0"
             >
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => onToggle(a.assembly)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(a.assembly); } }}
                 className={cn(
-                  'grid w-full items-center text-left text-[11px] transition-colors [&>div]:px-2 [&>div]:py-2',
+                  'grid w-full cursor-pointer items-center text-left text-[11px] transition-colors [&>div]:px-2 [&>div]:py-2',
                   isOpen
                     ? 'sticky z-10 border-b border-border bg-background shadow-sm hover:bg-muted'
                     : 'bg-transparent hover:bg-muted/40',
@@ -477,6 +483,14 @@ function FlowList({
                 <div className="ct-num flex min-w-0 items-center gap-1 text-[12px] font-bold text-foreground">
                   <span className="truncate" title={a.assembly}>{a.assembly}</span>
                   <CopyButton text={a.assembly} />
+                  {/* IEDB has never priced this model, so every metric on the row
+                      is blank. Said plainly rather than left as a row of dashes. */}
+                  {a.has_cycle_time === false && (
+                    <span title="IEDB has no cycle time for this model"
+                      className="shrink-0 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-medium text-orange-600 dark:text-orange-400">
+                      No cycle time
+                    </span>
+                  )}
                 </div>
                 <div className={cn(NUM, 'text-right text-foreground')} title={a.smh == null ? 'No primary routing' : formatCycleHMS(a.smh)}>
                   {a.smh == null ? '—' : formatBuildDuration(a.smh)}
@@ -491,7 +505,19 @@ function FlowList({
                       </span>
                     ))}
                 </div>
-              </button>
+                {/* Opens the model's own page. stopPropagation so it does not
+                    also expand the row underneath it. */}
+                <div className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    title="Open this model"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/cycle-time/wc/${encodeURIComponent(customer)}/${encodeURIComponent(a.assembly)}`); }}
+                    className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
 
               {isOpen && (
                 <div className="border-t border-border bg-muted/10 px-2 py-3">

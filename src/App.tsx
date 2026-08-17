@@ -13,6 +13,9 @@ import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
 import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail";
 import PlantRunnerDashboard from "@/pages/cycletime/PlantRunnerDashboard";
+import ProcessRegistry from "@/pages/cycletime/ProcessRegistry";
+import WorkcellCoverage from "@/pages/cycletime/WorkcellCoverage";
+import CycleTimeModel from "@/pages/cycletime/CycleTimeModel";
 import Documents from "@/pages/Documents";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import FloorMap from "@/pages/FloorMap";
@@ -64,6 +67,10 @@ import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
 import Reports from "@/pages/Reports";
 import ReportA from "@/pages/ReportA";
 import Settings from "@/pages/Settings";
+import VaNvaHome from "@/pages/vanva/VaNvaHome";
+import VaNvaUpload from "@/pages/vanva/VaNvaUpload";
+import VaNvaWorkcellDetail from "@/pages/vanva/VaNvaWorkcellDetail";
+import VaNvaWorkcells from "@/pages/vanva/VaNvaWorkcells";
 import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -146,11 +153,14 @@ function AppShell() {
               <Route path="/cycle-time" element={<Navigate to="/cycle-time/workcells" replace />} />
               <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
               <Route path="/cycle-time/wc/:customer" element={<CycleTimeWorkcell />} />
+              <Route path="/cycle-time/wc/:customer/:assembly" element={<CycleTimeModel />} />
               <Route path="/cycle-time/completion" element={<DemandCompletionReport />} />
               <Route path="/cycle-time/4q" element={<CycleTime4QReport />} />
               <Route path="/cycle-time/incompletion" element={<IncompletionReport />} />
               <Route path="/cycle-time/incompletion/:customer" element={<IncompletionReportDetail />} />
               <Route path="/cycle-time/plant-runners" element={<PlantRunnerDashboard />} />
+              <Route path="/cycle-time/coverage" element={<WorkcellCoverage />} />
+              <Route path="/cycle-time/registry" element={<ProcessRegistry />} />
             </>}
 
             {includesApp('ppqt') && <>
@@ -184,6 +194,13 @@ function AppShell() {
               <Route path="/lbr/:workcell/config" element={<LBRWorkcellConfig />} />
               <Route path="/lbr/:workcell/:assembly" element={<LBRAssemblyDetail />} />
               <Route path="/lbr/:workcell/:assembly/:playbook" element={<LBRPlaybookDetail />} />
+            </>}
+
+            {includesApp('va-nva') && <>
+              <Route path="/va-nva" element={<VaNvaHome />} />
+              <Route path="/va-nva/workcells" element={<VaNvaWorkcells />} />
+              <Route path="/va-nva/wc/:id" element={<VaNvaWorkcellDetail />} />
+              <Route path="/va-nva/upload" element={<VaNvaUpload />} />
             </>}
 
             {includesApp('ebuild') && <>

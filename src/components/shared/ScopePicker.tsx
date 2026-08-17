@@ -95,9 +95,11 @@ export function ScopePicker({
               {list.map(w => {
                 const on = picked.includes(w);
                 return (
-                  <button key={w} onClick={() => toggleWc(w)}
+                  // title so a name that still truncates is at least hoverable —
+                  // "ARISTA NET…" twice is indistinguishable otherwise.
+                  <button key={w} onClick={() => toggleWc(w)} title={w}
                     className={cn(
-                      'flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors',
+                      'flex min-w-0 items-center gap-2 rounded-lg border px-2 py-2 text-left text-[11px] leading-tight transition-colors',
                       on ? 'border-primary/50 bg-primary/5' : 'border-border hover:bg-muted/50',
                     )}>
                     <ScopeBox on={on} />

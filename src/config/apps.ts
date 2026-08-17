@@ -22,9 +22,11 @@ import {
   MapPin,
   Microscope,
   Pencil,
+  Scale,
   TableProperties,
   Timer,
   Truck,
+  UploadCloud,
   UserCheck,
   Wrench
 } from 'lucide-react';
@@ -32,7 +34,7 @@ import { createElement } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'machine-mover' | 'tools';
+export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'va-nva' | 'machine-mover' | 'tools';
 
 /** Bold "4Q" wordmark, drawn to the same 24×24 box as a lucide icon so it drops
  *  straight into `navItems` and inherits the sidebar's colour and sizing.
@@ -132,13 +134,18 @@ export const APPS: AppConfig[] = [
     category: 'Analytics',
     navItems: [
       { label: 'Home', to: '/cycle-time/workcells', icon: Home },
-      // { label: 'Incompletion Report', to: '/cycle-time/incompletion', icon: ClipboardList },
-      { label: 'Incompletion Report', to: '/cycle-time/completion', icon: ClipboardList },
-      { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
-      { label: 'Plant Runners', to: '/cycle-time/plant-runners', icon: Building2 },
+      { label: 'Report', to: '/cycle-time/completion', icon: ClipboardList },
+      { label: 'Coverage', to: '/cycle-time/coverage', icon: Layers },
+      { label: 'Process Registry', to: '/cycle-time/registry', icon: BookOpen },
       // Hidden from the sidebar (routes still work):
+      //  • 4Q Report → reached from the Incompletion Report's "4Q Report" link
+      //  • Plant Runners → the older runner-based incompletion view
+      //  • Incompletion (old) → superseded by /cycle-time/completion
       //  • Assemblies → now lives in the workcell Breakdown→Assemblies tab
       //  • Data → still reachable directly at /cycle-time/data
+      // { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
+      // { label: 'Plant Runners', to: '/cycle-time/plant-runners', icon: Building2 },
+      // { label: 'Incompletion Report', to: '/cycle-time/incompletion', icon: ClipboardList },
       // { label: 'Assemblies', to: '/cycle-time/assemblies', icon: Boxes },
       // { label: 'Data', to: '/cycle-time/data', icon: Database },
     ],
@@ -191,6 +198,23 @@ export const APPS: AppConfig[] = [
     navItems: [
       { label: 'Home', to: '/ipk', icon: LayoutDashboard },
       { label: 'Workcells', to: '/ipk/workcells', icon: Factory },
+    ],
+  },
+  {
+    id: 'va-nva',
+    label: 'VA / NVA',
+    description: 'Value-add vs non-value-add direct labour',
+    icon: Scale,
+    color: 'text-teal-500',
+    iconBg: 'bg-teal-500/15',
+    basename: '/ietools/va-nva',
+    category: 'Analytics',
+    // Workcell-scoped pages are reached by drilling in from the league table,
+    // so the sidebar only carries always-valid static routes — same as IPK/LBR.
+    navItems: [
+      { label: 'Dashboard', to: '/va-nva', icon: LayoutDashboard },
+      { label: 'Workcells', to: '/va-nva/workcells', icon: Factory },
+      { label: 'Upload', to: '/va-nva/upload', icon: UploadCloud },
     ],
   },
   {

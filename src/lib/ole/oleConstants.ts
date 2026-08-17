@@ -192,3 +192,14 @@ export const QUALITY_BADGE: Record<string, string> = {
   OK: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
   PARTIAL_SMH: 'bg-amber-500/15  text-amber-400  border-amber-500/30',
 };
+
+/** OLE percentages, 2 decimal places — except an exact 100, which reads as
+ *  plain "100". Returns an em dash for null/NaN so call sites don't each
+ *  invent their own placeholder.
+ *
+ *  Display only. Never use for CSS widths (`width: ${pct}%`) — those want the
+ *  raw number, and a bar clamped by Math.min() is not a label. */
+export function fmtPct(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  return v === 100 ? '100' : v.toFixed(2);
+}

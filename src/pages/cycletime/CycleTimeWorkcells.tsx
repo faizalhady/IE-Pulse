@@ -15,6 +15,7 @@
  * forgotten. Sorted A–Z.
  */
 
+import { RegistrySearch } from '@/components/shared/RegistrySearch';
 import { SortHeader } from '@/components/shared/SortHeader';
 import { useCycleTimeCoverage, useCycleTimeCustomerPlants, useCycleTimeCustomers, useCycleTimeCustomerStatus } from '@/hooks/cycle_time/useCycleTimeData';
 import { useSortable } from '@/hooks/shared/useSortable';
@@ -154,6 +155,10 @@ export default function CycleTimeWorkcells() {
 
   return (
     <div className="p-5">
+      {/* One box for workcell / model / process. Someone arriving here knows a
+          part number OR a workcell OR a step name they read off a screen — and
+          should not have to know which before they can look for it. */}
+      <RegistrySearch className="mb-4 max-w-xl" />
       {/* overall summary — assemblies with data vs without */}
       {/* <div className="mb-4 rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-6">
         <div className="flex items-baseline gap-2">

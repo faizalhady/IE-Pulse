@@ -17,6 +17,7 @@ const APP_BASENAMES: Record<string, string> = {
   ppqt: '/ietools/ppqt/',
   ipk: '/ietools/ipkk/',
   lbr: '/ietools/lbr/',
+  'va-nva': '/ietools/va-nva/',
   'machine-mover': '/ietools/machine-mover/',
 };
 
@@ -33,6 +34,7 @@ const APP_PUBLIC: Record<string, string[]> = {
   ppqt: ['workcell logo'],
   ipk: ['workcell logo'],
   lbr: ['workcell logo'],
+  'va-nva': ['workcell logo'],
   pulse: ['workcell logo', 'floor-maps', 'layouts', 'world-countries.json', 'malaysia-peninsular.json', 'pdf.worker.min.mjs'],
   fsms: ['floor-maps', 'layouts', 'world-countries.json', 'pdf.worker.min.mjs'],
   ebuild: ['pdf.worker.min.mjs'],

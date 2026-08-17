@@ -16,6 +16,7 @@ import {
   OLE_WARNING,
   STATUS_BADGE, STATUS_LABEL,
   WORKCELL_LOGOS,
+  fmtPct,
   formatWeekLabel,
   getOleStatus, oleColor,
 } from '@/lib/ole/oleConstants';
@@ -261,7 +262,7 @@ export default function OlePlantReport() {
       ole_pct: r.ole_pct,
       severity: r.ole_pct < OLE_WARNING ? 'high' as const : 'medium' as const,
       message: r.ole_pct < OLE_WARNING ? 'OLE critically below target' : 'OLE below target',
-      value: `${r.ole_pct.toFixed(1)}%`,
+      value: `${fmtPct(r.ole_pct)}%`,
       flagged: r.flagged_shifts,
     }))
     , [workcellsSorted]);
@@ -369,7 +370,7 @@ export default function OlePlantReport() {
                         {plant} · {weekLabel}
                       </p>
                       <p className="text-5xl font-mono font-black mt-1 leading-none" style={{ color: siteColor }}>
-                        {siteOle.toFixed(1)}%
+                        {fmtPct(siteOle)}%
                       </p>
                     </div>
                     <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0', STATUS_BADGE[siteStatus])}>
@@ -429,7 +430,7 @@ export default function OlePlantReport() {
                         </div>
                       </div>
                       <span className="text-xl font-mono font-bold flex-shrink-0" style={{ color: clr }}>
-                        {data.ole_pct.toFixed(1)}%
+                        {fmtPct(data.ole_pct)}%
                       </span>
                     </div>
                   );
@@ -499,7 +500,7 @@ export default function OlePlantReport() {
                     >
                       <p className="text-xs font-semibold text-foreground truncate">{r.label}</p>
                       <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-12', r.color)}>
-                        {showPct ? `${pct.toFixed(1)}%` : '—'}
+                        {showPct ? `${fmtPct(pct)}%` : '—'}
                       </span>
                       <span className={cn('text-sm font-mono font-bold tabular-nums text-right w-16', r.color)}>
                         {Math.abs(r.value) > 0.01 ? r.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
@@ -645,7 +646,7 @@ export default function OlePlantReport() {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                       <XAxis dataKey="w" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                       <YAxis tickFormatter={v => `${v}%`} domain={[yMin, yMax]} tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                      <Tooltip {...TT} formatter={(v: number) => [`${Number(v).toFixed(1)}%`, 'OLE']}
+                      <Tooltip {...TT} formatter={(v: number) => [`${fmtPct(Number(v))}%`, 'OLE']}
                         cursor={{ fill: 'hsl(var(--primary) / 0.06)' }}
                       />
                       <ReferenceLine y={OLE_TARGET} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
@@ -675,7 +676,7 @@ export default function OlePlantReport() {
                               opacity={1}
                               fillOpacity={1}
                             >
-                              {Number(value).toFixed(1)}%
+                              {fmtPct(Number(value))}%
                             </text>
                           );
                         }}
@@ -759,7 +760,7 @@ export default function OlePlantReport() {
                         <div className="px-2 text-[9px] text-muted-foreground">{wcConf?.plant}</div>
                         <div className="px-2">
                           <span className={cn('text-sm font-mono font-bold block', OLE_COLOR[st])}>
-                            {wc.ole_pct.toFixed(1)}%
+                            {fmtPct(wc.ole_pct)}%
                           </span>
                           <div className="h-0.5 rounded-full bg-muted/40 overflow-hidden mt-0.5" style={{ width: 56 }}>
                             <div className="h-full rounded-full" style={{ width: `${Math.min(wc.ole_pct, 100)}%`, background: clr }} />

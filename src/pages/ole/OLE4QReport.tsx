@@ -145,6 +145,56 @@ function fmtWeekLabel(v: string): string {
 // highlight fall away on its own (a custom report) with no extra bookkeeping,
 // and no way for the two to disagree.
 
+/** Picked workcells → a ReportScope.
+ *
+ *  Whole plants become one query per plant; anything else goes per-workcell.
+ *  Shared by the launch dialog and the Settings tab so the two cannot classify
+ *  the same selection differently. */
+function deriveScope(plants: string[], byPlant: Record<string, string[]>, picked: string[]): ReportScope {
+  const full = plants.filter(p => plantState(byPlant[p] ?? [], picked) === 'all');
+  const covered = full.flatMap(p => byPlant[p] ?? []);
+  return picked.length > 0 && picked.length === covered.length
+    ? { mode: 'plant', selectedPlants: full, selectedWorkcells: [] }
+    : { mode: 'workcell', selectedPlants: [], selectedWorkcells: picked };
+}
+
+/** The scope block: tree, count, Clear. No chrome and no confirm button —
+ *  the dialog and the Settings tab supply their own. */
+function ScopeFields({ plants, byPlant, picked, onChange, maxH = 'max-h-[26rem]', gridClassName }: {
+  plants: string[];
+  byPlant: Record<string, string[]>;
+  picked: string[];
+  onChange: (next: string[]) => void;
+  maxH?: string;
+  /** Narrower containers need fewer columns — the drawer is half a dialog wide,
+   *  and at 3 columns "ARISTA NETWORKS PCA" and "…HLA" both truncate to the
+   *  same string. */
+  gridClassName?: string;
+}) {
+  return (
+    <>
+      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Report scope
+      </Label>
+
+      <div className={cn('mt-1.5 space-y-4 overflow-y-auto pr-1', maxH)}>
+        <ScopePicker plants={plants} byPlant={byPlant} picked={picked} onChange={onChange}
+          gridClassName={gridClassName} />
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">
+          {picked.length} workcell{picked.length === 1 ? '' : 's'} selected
+        </span>
+        <button onClick={() => onChange([])} disabled={!picked.length}
+          className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors">
+          Clear
+        </button>
+      </div>
+    </>
+  );
+}
+
 function ScopeDialog({ open, onOpenChange, plants, byPlant, generating, onConfirm }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -164,20 +214,8 @@ function ScopeDialog({ open, onOpenChange, plants, byPlant, generating, onConfir
     if (!picked.length && plants.length) setPicked(byPlant[plants[0]] ?? []);
   }, [open, plants]);           // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Plant state is DERIVED from the picked workcells, never stored — see
-  // components/shared/ScopePicker.
-  const fullPlants = plants.filter(p => plantState(byPlant[p] ?? [], picked) === 'all');
-  const coveredByPlants = fullPlants.flatMap(p => byPlant[p] ?? []);
-  const isWholePlants = picked.length > 0 && picked.length === coveredByPlants.length;
-
   function confirm() {
-    // Whole plants → one query per plant. Anything else → per-workcell.
-    onConfirm(
-      isWholePlants
-        ? { mode: 'plant', selectedPlants: fullPlants, selectedWorkcells: [] }
-        : { mode: 'workcell', selectedPlants: [], selectedWorkcells: picked },
-      name.trim() || defaultReportTitle(),
-    );
+    onConfirm(deriveScope(plants, byPlant, picked), name.trim() || defaultReportTitle());
   }
 
   return (
@@ -193,23 +231,7 @@ function ScopeDialog({ open, onOpenChange, plants, byPlant, generating, onConfir
             placeholder={defaultReportTitle()} className="h-9 text-sm" />
         </div>
 
-        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Report scope
-        </Label>
-
-        <div className="mt-1.5 space-y-4 max-h-[26rem] overflow-y-auto pr-1">
-          <ScopePicker plants={plants} byPlant={byPlant} picked={picked} onChange={setPicked} />
-        </div>
-
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {picked.length} workcell{picked.length === 1 ? '' : 's'} selected
-          </span>
-          <button onClick={() => setPicked([])} disabled={!picked.length}
-            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors">
-            Clear
-          </button>
-        </div>
+        <ScopeFields plants={plants} byPlant={byPlant} picked={picked} onChange={setPicked} />
 
         <Button onClick={confirm} disabled={!picked.length || generating} className="mt-3 w-full">
           {generating ? 'Loading data...' : 'Generate Report'}
@@ -591,6 +613,17 @@ export default function OLE4QReport() {
 
   useEffect(() => { oleApi.workcells.list().then(setWorkcellConfigs).catch(() => { }); }, []);
 
+  // The Settings tab edits a DRAFT, not the live scope — so half-made changes
+  // never move the report until "Update Report Scope" is pressed. Seeded from
+  // whatever the report currently covers, flattened to workcells because that
+  // is the one representation the picker understands.
+  const currentScope = useMemo(
+    () => (mode === 'plant' ? selectedPlants.flatMap(p => byPlant[p] ?? []) : selectedWorkcells),
+    [mode, selectedPlants, selectedWorkcells, byPlant],
+  );
+  const [scopeDraft, setScopeDraft] = useState<string[]>([]);
+  useEffect(() => { setScopeDraft(currentScope); }, [currentScope]);
+
   const aggregateRows = useMemo((): OleWeeklyResult[] => {
     const byWeek: Record<string, { smh: number; hrs: number; label: string; year: number; week: number; ws: string; we: string }> = {};
     weeklyRows.forEach(r => {
@@ -843,9 +876,10 @@ export default function OLE4QReport() {
                     <TabsList className="w-full flex-wrap justify-start rounded-none border-b border-border bg-transparent h-auto p-0 gap-x-4 gap-y-2 pb-2">
                       {[
                         { v: 'q1', label: 'Q1 Trend', cls: 'data-[state=active]:border-primary' },
-                        { v: 'q2', label: 'Q2 Pareto', cls: 'data-[state=active]:border-orange-500' },
+                        // Q2 Pareto and Q4 Paynter are generated, not edited — their
+                        // tabs held nothing to change. Panels stay mounted below so
+                        // scrollToSection and the printed report are unaffected.
                         { v: 'q3', label: 'Q3 Improvements', cls: 'data-[state=active]:border-emerald-500' },
-                        { v: 'q4', label: 'Q4 Paynter', cls: 'data-[state=active]:border-blue-500' },
                         { v: 'settings', label: 'Settings', cls: 'data-[state=active]:border-muted-foreground ml-auto' },
                       ].map(t => <TabsTrigger key={t.v} value={t.v} className={cn('rounded-none border-b-2 border-transparent data-[state=active]:bg-transparent px-1 py-1 shadow-none text-xs', t.cls)}>{t.label}</TabsTrigger>)}
                     </TabsList>
@@ -905,54 +939,31 @@ export default function OLE4QReport() {
                         </p>
                       </TabsContent>
 
-                      <TabsContent value="settings" className="m-0 space-y-4 max-w-sm">
-                        {/* Report Title moved to the header — click it to edit in place. */}
-                        <div className="space-y-4">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Report Scope</Label>
-                            <div className="flex rounded-lg border border-border overflow-hidden">
-                              {(['plant', 'workcell'] as SetupMode[]).map(m => (
-                                <button key={m} onClick={() => setMode(m)} className={cn('flex-1 py-2 text-[10px] font-medium transition-colors', mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50')}>{m === 'plant' ? 'By Plant' : 'By Workcell'}</button>
-                              ))}
-                            </div>
-                          </div>
-                          {mode === 'plant' && (
-                            <div className="space-y-2">
-                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Select Plants <span className="text-primary">({selectedPlants.length} selected)</span></Label>
-                              <div className="flex gap-2">
-                                {plants.map(p => (
-                                  <button key={p} onClick={() => setSelectedPlants(selectedPlants.includes(p) ? selectedPlants.filter(x => x !== p) : [...selectedPlants, p])}
-                                    className={cn('flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all', selectedPlants.includes(p) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>{p}</button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {mode === 'workcell' && (
-                            <div className="space-y-2">
-                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Select Workcells <span className="text-primary">({selectedWorkcells.length})</span></Label>
-                              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
-                                {plants.map(p => (
-                                  <div key={p} className="space-y-1">
-                                    <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">{p}</p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {byPlant[p]?.map(wc => (
-                                        <button key={wc} onClick={() => setSelectedWorkcells(selectedWorkcells.includes(wc) ? selectedWorkcells.filter(x => x !== wc) : [...selectedWorkcells, wc])}
-                                          className={cn('px-2 py-1 rounded-md border text-[10px] font-medium transition-all', selectedWorkcells.includes(wc) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground')}>{wc}</button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {/* Wrapped, not passed directly: React hands an onClick
-                              handler a MouseEvent, which would land in `scope`. It
-                              happens to work because every scope?.x lookup misses
-                              and falls back — but only by luck. */}
-                          <Button onClick={() => handleGenerate()} disabled={generating || (mode === 'plant' && selectedPlants.length === 0) || (mode === 'workcell' && selectedWorkcells.length === 0)} className="w-full h-8 text-xs font-bold">
-                            {generating ? 'Updating...' : 'Update Report Scope'}
-                          </Button>
-                        </div>
+                      {/* Same scope UI as the launch dialog, inline in the drawer —
+                          one component, so the two can't drift. Report title is not
+                          repeated here; it is edited in place in the header. */}
+                      <TabsContent value="settings" className="m-0">
+                        <ScopeFields plants={plants} byPlant={byPlant}
+                          picked={scopeDraft} onChange={setScopeDraft}
+                          maxH="max-h-[22rem]"
+                          gridClassName="grid-cols-1 sm:grid-cols-2" />
+
+                        <Button
+                          onClick={() => {
+                            const scope = deriveScope(plants, byPlant, scopeDraft);
+                            // Push the derived scope back into component state as
+                            // well as passing it: handleGenerate reads `scope ?? state`,
+                            // so state left untouched would go stale the moment
+                            // anything else called it without one.
+                            setMode(scope.mode);
+                            setSelectedPlants(scope.selectedPlants);
+                            setSelectedWorkcells(scope.selectedWorkcells);
+                            void handleGenerate(scope);
+                          }}
+                          disabled={generating || scopeDraft.length === 0}
+                          className="mt-3 w-full">
+                          {generating ? 'Updating...' : 'Update Report Scope'}
+                        </Button>
                       </TabsContent>
 
                     </div>

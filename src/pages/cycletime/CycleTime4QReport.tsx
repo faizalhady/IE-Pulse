@@ -59,7 +59,10 @@ function defaultReportTitle(): string {
   return `4Q Report ${p(d.getMonth() + 1)}-${p(d.getDate())}-${String(d.getFullYear()).slice(-2)}`;
 }
 
-export default function CycleTime4QReport() {
+/** `embedded` = rendered as a tab on the Incompletion Report, which already
+ *  carries the page title. Drops this page's own <h1> so the two do not stack;
+ *  the header row survives because it holds the report name and save state. */
+export default function CycleTime4QReport({ embedded = false }: { embedded?: boolean }) {
   const location = useLocation();
   const [tab, setTab] = useState<'start' | 'editor'>('start');
   // Re-navigating here (e.g. clicking the sidebar link while already on it)
@@ -223,7 +226,11 @@ export default function CycleTime4QReport() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-background">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="relative flex flex-shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
+      {/* Embedded + start screen has nothing to put here — the start screen says
+          it all — so the bar is dropped rather than rendered empty. */}
+      {!(embedded && tab === 'start') && (
+      <div className={cn('relative flex flex-shrink-0 items-center justify-between border-b border-border bg-card px-6',
+        embedded ? 'py-2.5' : 'py-4')}>
         <div className="flex items-center gap-3">
           {tab === 'editor' && (
             <button onClick={() => setTab('start')} title="Back to start"
@@ -232,8 +239,15 @@ export default function CycleTime4QReport() {
             </button>
           )}
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Cycle Time 4Q</h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            {!embedded && (
+              <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
+                Cycle Time 4Q
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                  Testing Phase
+                </span>
+              </h1>
+            )}
+            <p className={cn('text-xs text-muted-foreground', !embedded && 'mt-0.5')}>
               {tab === 'start' ? 'Create a new report or open a saved one'
                 : `Scope: ${picked.length ? `${picked.length} workcells` : 'All workcells'}`}
             </p>
@@ -293,12 +307,14 @@ export default function CycleTime4QReport() {
           </div>
         )}
       </div>
+      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {tab === 'start' && (
           <ReportStartScreen
             icon={FileSpreadsheet}
             title="Cycle Time 4Q"
+            badge="Testing Phase"
             subtitle="Completion against demand — trend, losses, improvement plan."
             savedList={savedList}
             onNew={() => {

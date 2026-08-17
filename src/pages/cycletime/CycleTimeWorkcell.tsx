@@ -10,7 +10,7 @@
  * flow view, locked to this customer — no customer Select in the filter bar.
  */
 
-import { ArrowLeft, ClipboardList, Loader2, Timer } from 'lucide-react';
+import { ArrowLeft, BookOpen, ClipboardList, Loader2, Timer } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
@@ -26,11 +26,15 @@ import {
 } from '@/hooks/cycle_time/useCycleTimeData';
 
 import CycleTimeAssemblyFlow from './CycleTimeAssemblyFlow';
-import WorkcellIncompletionPanel from './WorkcellIncompletionPanel';
+import { ProcessRegistryPanel } from './ProcessRegistry';
+import CompletionDataTable from './CompletionDataTable';
 
 const TABS = [
-  { key: 'cycle',  label: 'Cycle Time', icon: Timer },
-  { key: 'report', label: 'Report',     icon: ClipboardList },
+  { key: 'cycle',    label: 'Cycle Time', icon: Timer },
+  { key: 'report',   label: 'Report',     icon: ClipboardList,
+    tip: 'Every model in demand: its status, the gap behind it, and how fresh the inputs are' },
+  { key: 'registry', label: 'Processes',  icon: BookOpen,
+    tip: 'What this workcell runs, and what MES and IEDB each call it' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -48,7 +52,13 @@ export default function CycleTimeWorkcell() {
     return match?.customer ?? rawCustomer;
   }, [customerList, rawCustomer]);
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<TabKey>(searchParams.get('tab') === 'report' ? 'report' : 'cycle');
+  const urlTab = searchParams.get('tab');
+  // `?tab=status` was the old Status Report, now merged into Report. Links to it
+  // exist in chats and bookmarks, so it redirects rather than silently falling
+  // back to Cycle Time — the person clicking it wanted the completion numbers.
+  const [tab, setTab] = useState<TabKey>(
+    urlTab === 'status' ? 'report'
+      : urlTab === 'report' || urlTab === 'registry' ? urlTab : 'cycle');
   const { data } = useCycleTimeProfile(customer);
   const { data: statusRows = [], isLoading: statusLoading, isError: statusError } = useCycleTimeCustomerStatus();
 
@@ -117,10 +127,24 @@ export default function CycleTimeWorkcell() {
       <div className="flex-1 min-h-0">
         {tab === 'cycle' ? (
           <CycleTimeAssemblyFlow lockedCustomer={customer} />
+        ) : tab === 'report' ? (
+          // The ranked completion table, same component the global report page
+          // uses — one component, so a workcell's own page and the global report
+          // can never show a different verdict for the same model.
+          //
+          // This used to be two tabs. "Status Report" rendered the same verdicts
+          // from a second component, and for a while the two printed different
+          // Complete counts for the same workcell — which is the exact failure
+          // the shared component was meant to prevent, reintroduced one level up.
+          // Its two genuine additions (the split gap, the freshness banner) now
+          // live here instead. `modules/cycle_time/completion_report.py` still
+          // backs the Excel export.
+          <CompletionDataTable lockedWorkcell={customer} />
         ) : (
-          <div className="h-full overflow-auto p-5">
-            <WorkcellIncompletionPanel customer={customer} />
-          </div>
+          // Same panel as /cycle-time/registry, workcell locked. Its Answer /
+          // Browse are PILL tabs, not another underline row — two identical tab
+          // rows stacked and you cannot tell which level you are on.
+          <div className="p-6"><ProcessRegistryPanel workcell={customer} /></div>
         )}
       </div>
     </div>
