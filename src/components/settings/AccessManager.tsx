@@ -340,6 +340,11 @@ export function AccessManager({ currentNtid }: { currentNtid?: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: u.name, email: u.email, level: u.level, apps: u.apps,
+          // position/customer must be sent on EVERY save, not just the first.
+          // The backend upserts `position = excluded.position`, so omitting
+          // them here doesn't leave the stored values alone — Pydantic defaults
+          // them to None and the save wipes what headcount gave us.
+          position: u.position, customer: u.customer,
           workcells: u.workcells, primary_workcell: u.primary_workcell,
           notifications: u.notifications, added_by: currentNtid ?? null,
         }),
