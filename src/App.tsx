@@ -13,6 +13,9 @@ import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
 import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail";
 import PlantRunnerDashboard from "@/pages/cycletime/PlantRunnerDashboard";
+import ProcessRegistry from "@/pages/cycletime/ProcessRegistry";
+import WorkcellCoverage from "@/pages/cycletime/WorkcellCoverage";
+import CycleTimeModel from "@/pages/cycletime/CycleTimeModel";
 import Documents from "@/pages/Documents";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import FloorMap from "@/pages/FloorMap";
@@ -150,11 +153,14 @@ function AppShell() {
               <Route path="/cycle-time" element={<Navigate to="/cycle-time/workcells" replace />} />
               <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
               <Route path="/cycle-time/wc/:customer" element={<CycleTimeWorkcell />} />
+              <Route path="/cycle-time/wc/:customer/:assembly" element={<CycleTimeModel />} />
               <Route path="/cycle-time/completion" element={<DemandCompletionReport />} />
               <Route path="/cycle-time/4q" element={<CycleTime4QReport />} />
               <Route path="/cycle-time/incompletion" element={<IncompletionReport />} />
               <Route path="/cycle-time/incompletion/:customer" element={<IncompletionReportDetail />} />
               <Route path="/cycle-time/plant-runners" element={<PlantRunnerDashboard />} />
+              <Route path="/cycle-time/coverage" element={<WorkcellCoverage />} />
+              <Route path="/cycle-time/registry" element={<ProcessRegistry />} />
             </>}
 
             {includesApp('ppqt') && <>

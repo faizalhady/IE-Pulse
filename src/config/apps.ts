@@ -135,6 +135,8 @@ export const APPS: AppConfig[] = [
     navItems: [
       { label: 'Home', to: '/cycle-time/workcells', icon: Home },
       { label: 'Report', to: '/cycle-time/completion', icon: ClipboardList },
+      { label: 'Coverage', to: '/cycle-time/coverage', icon: Layers },
+      { label: 'Process Registry', to: '/cycle-time/registry', icon: BookOpen },
       // Hidden from the sidebar (routes still work):
       //  • 4Q Report → reached from the Incompletion Report's "4Q Report" link
       //  • Plant Runners → the older runner-based incompletion view

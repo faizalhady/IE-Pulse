@@ -28,7 +28,7 @@ import { useCycleTimeCompletionDemand } from '@/hooks/cycle_time/useCycleTimeDat
 import { useSortable } from '@/hooks/shared/useSortable';
 import type { DemandCompletionModel } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Loader2, Search } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Loader2, Search } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { RouteComparisonDrawer } from './RouteComparisonDrawer';
@@ -40,9 +40,9 @@ import { RouteComparisonDrawer } from './RouteComparisonDrawer';
  *  single line of text, so measuring per-row would buy nothing. */
 const ROW_H = 34;
 
-const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  7rem 4.5rem 4.5rem';
+const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  7.5rem 3.25rem 4.75rem  4.5rem 4.5rem';
 /** Workcell column dropped when it is the same value on every row. */
-const GRID_LOCKED = '2.75rem minmax(8rem,1.4fr) 4.5rem  6.5rem 6.5rem  7rem 4.5rem 4.5rem';
+const GRID_LOCKED = '2.75rem minmax(8rem,1.4fr) 4.5rem  6.5rem 6.5rem  7.5rem 3.25rem 4.75rem  4.5rem 4.5rem';
 
 /** Status → label + colour. Ordered worst-first so the legend reads as a
  *  priority list: what needs creating, then fixing, then nothing. */
@@ -50,11 +50,33 @@ const STATUS_META: Record<string, { label: string; cls: string; hint: string }> 
   incomplete:  { label: 'Missing CT', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', hint: 'In IEDB with cycle times, but gaps against what the floor actually runs' },
   no_cycle_time: { label: 'No cycle time', cls: 'bg-orange-500/15 text-orange-600 dark:text-orange-400', hint: 'Model EXISTS in IEDB, but not one cycle time has been entered' },
   not_in_iedb: { label: 'Not in IEDB', cls: 'bg-red-500/15 text-red-600 dark:text-red-400', hint: 'Model does not exist in IEDB at all — it has to be created first' },
-  not_in_mes:  { label: 'Not in MES', cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', hint: 'No MES production found — not built yet, or the workcell is not on MES' },
+  not_built:   { label: 'Not built yet', cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', hint: 'MES has no production record in the window. Nothing to do but wait for the build' },
+  cannot_check: { label: 'Cannot be checked', cls: 'bg-muted text-muted-foreground', hint: 'This workcell is not on MES, so no scan will ever arrive. Waiting is pointless — 470 LAMMEC models read as "not built yet" until this was split out' },
   not_checked: { label: 'Not checked', cls: 'bg-muted text-muted-foreground', hint: 'The completion run has not reached this model yet' },
-  complete:    { label: 'Complete', cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', hint: 'Every step MES ran has a cycle time' },
+  complete:    { label: 'Complete', cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', hint: 'Every step MES ran was named AND has a cycle time' },
 };
-const STATUS_ORDER = ['incomplete', 'no_cycle_time', 'not_in_iedb', 'not_in_mes', 'not_checked', 'complete'];
+const STATUS_ORDER = ['incomplete', 'no_cycle_time', 'not_in_iedb', 'not_built',
+                      'cannot_check', 'not_checked', 'complete'];
+
+/** Compatibility shim, and nothing more.
+ *
+ *  The server now sends the corrected verdict from `model_universe`, which owns
+ *  BOTH corrections (a `complete` carrying a gap is demoted; `not_in_mes` is
+ *  split into "not built yet" vs "no scan will ever come"). That used to happen
+ *  here, and separately in the report, and not at all in the demand endpoint —
+ *  which is why one workcell reported 279, 236 and 208 complete models on three
+ *  screens at once.
+ *
+ *  What is left runs only against an OLDER backend that still sends the raw
+ *  mart status — prod, until this deploys. Against a current backend every
+ *  branch below is a no-op, which is exactly the intended end state: delete it
+ *  once prod is on this code. */
+export const dstatus = (m: DemandCompletionModel) => {
+  if (m.status === 'not_in_mes')
+    return m.reason === 'workcell_not_on_mes' ? 'cannot_check' : 'not_built';
+  if (m.status === 'complete' && (m.no_ct || m.not_in_iedb || m.unmapped)) return 'incomplete';
+  return m.status;
+};
 
 /** Plant keys as the backend sends them (`_PLANT_REGION` in api/routers/cycle_time.py),
  *  in site order with the names people actually use. The key stays the raw code —
@@ -79,7 +101,16 @@ const REASON_LABEL: Record<string, string> = {
   no_production: 'not built yet', workcell_not_on_mes: 'workcell not on MES',
 };
 
-type SortKey = 'rank' | 'customer' | 'assembly' | 'status' | 'lbr' | 'ipk' | 'next' | 'last';
+type SortKey = 'rank' | 'customer' | 'assembly' | 'status' | 'lbr' | 'ipk' | 'next' | 'last'
+             | 'gap' | 'unmapped';
+
+/** IEDB's gap: a step the floor runs that IEDB either never timed (`no_ct`) or
+ *  does not carry on its route at all (`not_in_iedb`). Kept apart from
+ *  `unmapped`, which is OURS — the naming bridge could not identify the step, so
+ *  we cannot honestly claim IEDB is missing anything. Folding the two into one
+ *  number blames IEDB for our own mapping holes; ~6% of LAM RESEARCH's gap was. */
+const gapOf = (m: DemandCompletionModel) =>
+  m.no_ct == null && m.not_in_iedb == null ? null : (m.no_ct ?? 0) + (m.not_in_iedb ?? 0);
 
 /** The workcell page routes on the IEDB spelling ('Nokia Optics'); demand rows
  *  carry MES's ('NOKIA OPTICS'). Match on a normalised key, never the raw string. */
@@ -107,7 +138,9 @@ const ACCESSORS: Record<SortKey, (m: DemandCompletionModel) => string | number |
   customer: m => m.customer,
   assembly: m => m.assembly,
   // Sort by severity, not alphabetically — "what needs work" first.
-  status:   m => STATUS_ORDER.indexOf(m.status),
+  status:   m => STATUS_ORDER.indexOf(dstatus(m)),
+  gap:      m => gapOf(m),
+  unmapped: m => m.unmapped ?? null,
   lbr:      m => m.lbr ?? null,
   ipk:      m => m.ipk_trolleys ?? null,
   next:     m => m.next_build ?? null,
@@ -187,7 +220,7 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
     let r = scopedRows;
     if (statusFilter.length) {
       const wanted = new Set(statusFilter);
-      r = r.filter(m => wanted.has(m.status));
+      r = r.filter(m => wanted.has(dstatus(m)));
     }
     return limit ? r.slice(0, limit) : r;
   }, [scopedRows, statusFilter, limit]);
@@ -209,7 +242,7 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    scopedRows.forEach(m => { c[m.status] = (c[m.status] ?? 0) + 1; });
+    scopedRows.forEach(m => { const s = dstatus(m); c[s] = (c[s] ?? 0) + 1; });
     return c;
   }, [scopedRows]);
 
@@ -226,8 +259,30 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
     </div>;
   }
 
+  const stale = (data.freshness ?? []).filter(f => (f.days_old ?? 0) > 14);
+
   return (
     <div className="h-full max-w-full space-y-4 overflow-y-auto overflow-x-hidden p-4 md:p-6">
+      {/* Stale inputs, ABOVE the numbers rather than in a footnote. A stale mart
+          distorts every verdict below and the statuses themselves look completely
+          normal — `assembly_catalog` sat five weeks old and silently turned real
+          models into "Not in IEDB" with nobody able to see why. */}
+      {stale.length > 0 && (
+        <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="min-w-0 text-sm">
+            <div className="font-medium text-amber-700 dark:text-amber-500">
+              These verdicts rest on data that has not been refreshed
+            </div>
+            {stale.map(f => (
+              <div key={f.mart} className="text-[11px] text-muted-foreground">
+                <span className="font-mono">{f.mart}</span> — {f.days_old} days old · {f.drives}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Filters ──────────────────────────────────────────────────────── */}
       {/* Scoped to one workcell already — a picker here would only let you pick
           your way out of the page you are on. */}
@@ -323,6 +378,9 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
           <SortHeader label="Next build" active={sort?.key === 'next'} dir={sort?.dir} onClick={() => toggle('next')} />
           <SortHeader label="Last build" active={sort?.key === 'last'} dir={sort?.dir} onClick={() => toggle('last')} />
           <SortHeader label="Status" active={sort?.key === 'status'} dir={sort?.dir} onClick={() => toggle('status')} />
+          {/* Two gaps, never one number: theirs, then ours. */}
+          <SortHeader label="Gap" active={sort?.key === 'gap'} dir={sort?.dir} onClick={() => toggle('gap')} className="justify-end" />
+          <SortHeader label="Unmapped" active={sort?.key === 'unmapped'} dir={sort?.dir} onClick={() => toggle('unmapped')} className="justify-end" />
           <SortHeader label="LBR" active={sort?.key === 'lbr'} dir={sort?.dir} onClick={() => toggle('lbr')} className="justify-end" />
           <SortHeader label="IPK" active={sort?.key === 'ipk'} dir={sort?.dir} onClick={() => toggle('ipk')} className="justify-end" />
         </div>
@@ -340,7 +398,8 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
           <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
           {rowVirtualizer.getVirtualItems().map(v => {
             const m = sorted[v.index];
-            const meta = STATUS_META[m.status] ?? STATUS_META.not_checked;
+            const meta = STATUS_META[dstatus(m)] ?? STATUS_META.not_checked;
+            const gap = gapOf(m);
             return (
               <button key={`${m.customer}|${m.assembly}`}
                 onClick={() => setOpen({ customer: m.customer, assembly: m.assembly })}
@@ -367,6 +426,16 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
                     <span title="Verdict from #21 batch counts — a customer-level aggregate that can drag in rework and other variants"
                       className="text-[10px] text-amber-500">⚠</span>
                   )}
+                </span>
+                {/* IEDB's gap, then ours. Zero prints as a dash: the eye should
+                    land only on rows that owe someone work. */}
+                <span className="text-right font-medium tabular-nums"
+                  title={gap ? `${m.no_ct ?? 0} step(s) with no cycle time · ${m.not_in_iedb ?? 0} step(s) not on the IEDB route` : undefined}>
+                  {gap ? <span className="text-rose-600 dark:text-rose-400">{gap}</span> : <span className="text-muted-foreground">—</span>}
+                </span>
+                <span className="text-right tabular-nums text-muted-foreground"
+                  title={m.unmapped ? 'Steps OUR naming bridge could not identify — our gap, not IEDB’s' : undefined}>
+                  {m.unmapped ? m.unmapped : '—'}
                 </span>
                 <span className={cn('text-right tabular-nums', lbrTone(m.lbr))}>
                   {m.lbr != null ? `${Math.round(m.lbr)}%` : '—'}

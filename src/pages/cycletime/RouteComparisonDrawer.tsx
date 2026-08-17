@@ -97,7 +97,7 @@ export function RouteComparisonDrawer({
 }
 
 // ─── Route tab (MES ‖ IEDB) ──────────────────────────────────────────────────
-function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> }) {
+export function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> }) {
   const [hideNoise, setHideNoise] = useState(true);
   const data = q.data;
   const mes = data?.mes ?? [];
@@ -189,7 +189,7 @@ function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSteps> })
 }
 
 // ─── LBR tab — per-line Yamazumi with balance line ───────────────────────────
-function LbrView({ lm }: { lm: LineMetrics }) {
+export function LbrView({ lm }: { lm: LineMetrics }) {
   return (
     <div className="min-h-0 flex-1 space-y-5 overflow-auto p-4">
       <p className="text-xs text-muted-foreground">
@@ -250,7 +250,7 @@ function LineYamazumi({ line }: { line: LineMetricsLine }) {
 }
 
 // ─── IPK tab — full per-line flow: every process + UPH, trolley gap between each ──
-function IpkView({ lm }: { lm: LineMetrics }) {
+export function IpkView({ lm }: { lm: LineMetrics }) {
   const ipkLines = lm.ipk_lines ?? [];
   return (
     <div className="min-h-0 flex-1 space-y-5 overflow-auto p-4">
@@ -273,36 +273,43 @@ function IpkLineFlow({ line }: { line: IpkLine }) {
           <span className={cn('font-bold', line.trolleys > 0 ? 'text-amber-600' : 'text-emerald-600')}>{line.trolleys}</span> trolley{line.trolleys === 1 ? '' : 's'}
         </span>
       </div>
-      {/* vertical flow: every station (UPH) → gap → next station */}
-      <div className="mx-auto max-w-md">
-        {line.stations.map((s, i) => (
-          <div key={i}>
-            <div className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-1.5">
-              <span className="text-[12px] font-medium text-foreground">{s.step}</span>
-              <span className="ct-num tabular-nums text-[11px] text-muted-foreground">{s.uph} UPH</span>
-            </div>
-            {i < line.buffers.length && (
-              <div className="flex items-center gap-2 py-1 pl-3 text-[11px] text-muted-foreground">
-                <span className="text-lg leading-none">↓</span>
-                {line.buffers[i].trolleys > 0 ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-600">
-                    <ShoppingCart className="h-3 w-3" /> {line.buffers[i].trolleys} trolley{line.buffers[i].trolleys > 1 ? 's' : ''}
-                    <span className="font-normal text-amber-600/70">({line.buffers[i].ipk_units} boards)</span>
-                  </span>
-                ) : (
-                  <span className="text-emerald-600/70">balanced — no buffer</span>
-                )}
+      {/* HORIZONTAL flow: station (UPH) → gap → next station.
+          It was vertical, which meant a 20-station line was 20 rows of scrolling
+          for what is physically a straight line on the floor. Left-to-right
+          matches how the board actually travels, and a whole line now fits on
+          one screen. Overflow scrolls INSIDE this box, so the page itself never
+          scrolls sideways. */}
+      <div className="overflow-x-auto pb-1">
+        <div className="flex min-w-max items-stretch gap-1">
+          {line.stations.map((s, i) => (
+            <div key={i} className="flex items-stretch gap-1">
+              <div className="flex min-w-[7.5rem] max-w-[11rem] flex-col justify-center rounded-md border border-border bg-card px-2.5 py-1.5">
+                <span className="truncate text-[12px] font-medium text-foreground" title={s.step}>{s.step}</span>
+                <span className="ct-num tabular-nums text-[10px] text-muted-foreground">{s.uph} UPH</span>
               </div>
-            )}
-          </div>
-        ))}
+              {i < line.buffers.length && (
+                <div className="flex flex-col items-center justify-center px-0.5 text-[10px] leading-tight">
+                  {line.buffers[i].trolleys > 0 ? (
+                    <span title={`${line.buffers[i].ipk_units} boards waiting`}
+                      className="inline-flex flex-col items-center gap-0.5 rounded-md bg-amber-500/15 px-1.5 py-1 font-semibold text-amber-600">
+                      <ShoppingCart className="h-3 w-3" />
+                      <span className="tabular-nums">{line.buffers[i].trolleys}</span>
+                    </span>
+                  ) : (
+                    <span title="balanced — no buffer" className="text-emerald-600/60">→</span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-function MetricsGate({ q, children }: { q: ReturnType<typeof useCycleTimeLineMetrics>; children: (m: LineMetrics) => React.ReactNode }) {
+export function MetricsGate({ q, children }: { q: ReturnType<typeof useCycleTimeLineMetrics>; children: (m: LineMetrics) => React.ReactNode }) {
   if (q.isLoading) return <Center><Loader2 className="h-5 w-5 animate-spin" /></Center>;
   if (q.isError || !q.data) return <Center><span className="text-sm text-muted-foreground">No LBR/IPK — needs complete cycle-time data.</span></Center>;
   return <>{children(q.data)}</>;

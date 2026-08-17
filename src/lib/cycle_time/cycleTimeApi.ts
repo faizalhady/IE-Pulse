@@ -43,6 +43,23 @@ async function post<T>(path: string, params?: Record<string, string | number | u
   return res.json() as Promise<T>;
 }
 
+/** POST with a JSON body. `post` above only carries query params, and a
+ *  process decision has to send the MES step name byte-exact — trailing and
+ *  double spaces are the evidence, and a query string is the wrong place for
+ *  them. */
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`CycleTime API ${path} → ${res.status} ${detail.slice(0, 200)}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 // ─── Response shapes ─────────────────────────────────────────────────────────
 
 export interface CycleTimeHealthMart {
@@ -272,6 +289,13 @@ export interface CycleTimeAssemblyAgg {
 /** Lightweight per-assembly LIST row — collapsed rows on the Assemblies page. */
 export interface CycleTimeAssemblyListRow {
   assembly: string;
+  /** False = IEDB has never priced this model, so every metric below is null.
+   *  These rows used to be absent entirely: the list is built FROM cycle times,
+   *  so a model nobody timed had nothing to appear as — and an untimed model is
+   *  exactly the one somebody needs to go and time. */
+  has_cycle_time?: boolean;
+  /** Completion verdict when we have one, else null. */
+  verdict?: string | null;
   family: string | null;
   builds: number;
   /** Distinct revisions for this assembly (Assemblies table column). */
@@ -523,6 +547,12 @@ export interface DemandCompletionModel {
   units: number;
   /** Which demand source(s) saw it: "mes", "planner" or "mes+planner". */
   sources: string;
+  /** False = checked, but no longer inside the 13-week planner window. Shown
+   *  anyway — the verdict is just as real, it simply has no forward demand. */
+  has_demand?: boolean;
+  /** When the completion run last judged this model. Null for rows graded before
+   *  the column existed (2026-08-17) — an unknown date, not a fresh one. */
+  graded_on?: string | null;
   status: DemandCompletionStatus;
   reason?: DemandCompletionReason | null;
   /** How the verdict was reached: "serial" (#132, strong) | "batch" (#21, weak) | "none". */
@@ -567,6 +597,9 @@ export interface DemandCompletionResponse {
   counts: Record<string, number>;
   /** How many of `total` the completion run has not covered yet. */
   unchecked: number;
+  /** Age of every mart behind these verdicts. A stale verdict looks exactly like
+   *  a fresh one, so the age is shown rather than assumed. */
+  freshness?: CompletionReportFreshness[];
   scope: DemandCompletionScope;
   models: DemandCompletionModel[];
 }
@@ -678,9 +711,231 @@ export interface CompletionSteps {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+/* ── Process registry ──────────────────────────────────────────────────────
+ * MES and IEDB name the same process differently and neither name is
+ * controlled. The registry lines them up per workcell. A residue cannot be
+ * derived — matching by name is 38% right, by neighbouring scan 27%, by bay
+ * 55% — so those go to the engineer who works the line. */
+
+export interface RegistryWorkcell {
+  workcell: string;
+  processes: number;
+  agreed: number;          // both systems know it
+  iedb_only: number;       // IEDB prices it, not seen in the scan window
+  gap: number;             // the floor runs it, IEDB never priced it
+  questions_total: number;
+  questions_left: number;
+}
+
+export interface RegistryProcess {
+  process_key: string;
+  process_family: string;
+  process_name: string;
+  workcenter: string;
+  /** both · iedb_only · mes_only (the gap) · mes_non_iedb (rework/handling) */
+  source: string;
+  iedb_aliases: string;    // every IEDB spelling, ' | ' separated
+  mes_steps: string;       // every MES spelling
+  iedb_models: number;
+  mes_models: number;
+  mes_scans: number;
+  review: string;
+}
+
+export interface RegistryQuestion {
+  workcell: string;
+  /** byte-exact, spaces included — it is the key */
+  mes_step: string;
+  models: number;
+  scans: number;
+  bay: string;
+  /** e.g. "FVT#2(1035) HLA#3(7)" — what was scanned just before, and how often */
+  scanned_before: string;
+  scanned_after: string;
+  candidates: string[];
+  suggestion: string;
+  /** position+name · position only · name only · nothing */
+  confidence: string;
+  answered: boolean;
+  prior_answer?: string | null;
+  prior_alias?: string | null;
+  prior_by?: string | null;
+}
+
+export interface RegistryStep {
+  workcell: string;
+  mes_step: string;
+  process_key: string;
+  answer: string;
+  models: number;
+  scans: number;
+  /** decision = an engineer said so · workbook = the Excel sheet ·
+   *  auto = plant-wide id (weakest) · none = nothing maps it */
+  source: 'decision' | 'workbook' | 'auto' | 'none';
+  iedb_alias: string;
+  decided_by: string;
+  decided_on: string;
+}
+
+export interface RegistrySearch {
+  query: string;
+  workcells: { workcell: string }[];
+  models: { workcell: string; assembly: string; revision: string;
+            description: string; has_data: boolean }[];
+  processes: { workcell: string; process_key: string; process_name: string;
+               source: string; iedb_aliases: string; mes_steps: string;
+               mes_scans: number }[];
+}
+
+/** The completion report — SAME module the Excel builder uses, so the screen
+ *  and the file can never disagree. */
+export interface CompletionReportSummary {
+  status: string; models: number; planner_units: number; edash_units: number;
+  gap_steps: number; unmapped_steps: number; pct: number;
+}
+export interface CompletionReportFreshness {
+  mart: string; built: string | null; days_old: number | null; drives: string;
+}
+export interface CompletionReportRow {
+  assembly: string; status: string; why: string;
+  planner_units: number; edash_units: number;
+  mes_steps: number | null; matched: number | null;
+  /** IEDB's gap: it knows the step, no time entered */
+  missing_ct: number | null;
+  /** IEDB's gap: the floor ran a step its route lacks */
+  not_in_route: number | null;
+  /** OUR gap: the naming bridge could not identify the step */
+  unmapped: number | null;
+  gap: number | null; iedb_route_steps: number | null;
+  upcoming_build: string; last_build: string;
+}
+export interface CompletionReport {
+  workcell: string; models: number;
+  summary: CompletionReportSummary[];
+  freshness: CompletionReportFreshness[];
+  rows: CompletionReportRow[];
+}
+
+// ─── Model universe — every model, not just the ones in demand ───────────────
+
+/** One workcell's coverage. `models` is the DENOMINATOR the completion mart
+ *  cannot supply on its own: it only holds models somebody ran a check on. */
+export interface UniverseWorkcell {
+  workcell: string;
+  /** Every distinct model, deduped across IEDB + MES + demand. */
+  models: number;
+  in_iedb: number;
+  built_24mo: number;
+  in_demand: number;
+  /** Judged with a status the current code can still read. */
+  graded: number;
+  ungraded: number;
+  pct_graded: number;
+  /** Complete as a share of GRADED, not of models — else "3% complete" really
+   *  means "97% unchecked", which is a different problem with a different owner. */
+  pct_complete_of_graded: number | null;
+  complete: number;
+  incomplete: number;
+  no_cycle_time: number;
+  not_in_iedb: number;
+  not_built: number;
+  cannot_check: number;
+  /** IEDB's OWN assembly count for this workcell, from its CustomerStatus report.
+   *  DIFFERENT UNIT to `in_iedb`: IEDB counts assembly+revision, we count models
+   *  with revisions collapsed — so ours is expected to be smaller. Comparing the
+   *  two as if they were the same unit is what made every workcell look short. */
+  iedb_assembly_ids?: number | null;
+}
+/** One model in a workcell's full list. Metrics are null when IEDB never
+ *  priced it — null, never zero, because zero reads as "takes no work". */
+export interface UniverseModelRow {
+  assembly: string;
+  verdict: string | null;
+  has_cycle_time: boolean | null;
+  in_iedb_catalog: boolean | null;
+  in_mes_history: boolean | null;
+  in_demand: boolean | null;
+  units: number | null;
+  next_build: string | null;
+  last_build: string | null;
+}
+export interface UniverseWorkcellModels {
+  workcell: string; models: number; rows: UniverseModelRow[];
+}
+
+/** One IEDB process, BOTH of its names. The alias is the identifier and what
+ *  gets stored; `process` is IEDB's display name and is often the only readable
+ *  half — `BIRTH 1` is IEDB's `Label 1`, which no one could see before. Never a
+ *  match key (it is free text), but as evidence it is what makes the alias
+ *  legible to the person answering. */
+export interface RegistryAlias {
+  alias: string;
+  /** IEDB's display name(s). Several joined by ' / ' when models disagree —
+   *  that disagreement is itself worth seeing. */
+  process: string;
+  models: number;
+}
+
+export interface UniverseSummary {
+  workcells: UniverseWorkcell[];
+  statuses: string[];
+  totals: Record<string, number>;
+  freshness: CompletionReportFreshness[];
+  /** Rows deliberately not counted as models, and why. Surfaced rather than
+   *  filtered silently — 1,813 MES job records vanishing with no trace is how a
+   *  total becomes unexplainable. */
+  excluded: { rows: number; why: Record<string, number> };
+}
+
+export type RegistryAnswer = 'mapped' | 'non_iedb' | 'unknown';
+
 export const cycleTimeApi = {
   health: {
     get: () => get<CycleTimeHealth>('/health'),
+  },
+  report: {
+    /** The completion report for one workcell. Replaces the per-workcell Excel. */
+    get: (workcell: string) => get<CompletionReport>('/report', { workcell }),
+  },
+  universe: {
+    /** Per-workcell coverage: how many models exist vs how many we have judged. */
+    summary: () => get<UniverseSummary>('/universe/summary'),
+    /** EVERY model one workcell has — not the demand slice, not the judged slice. */
+    workcell: (workcell: string) =>
+      get<UniverseWorkcellModels>('/universe/workcell', { workcell }),
+  },
+  registry: {
+    /** Every workcell with a registry, most unanswered first. */
+    workcells: () => get<RegistryWorkcell[]>('/registry/workcells'),
+    /** The browse view — every process, both systems' names. Worst first. */
+    processes: (workcell: string) =>
+      get<RegistryProcess[]>('/registry/processes', { workcell }),
+    /** The queue — steps nothing maps, sorted by scans DESCENDING. Answering
+     *  the top 20 covers most of the volume; alphabetical would not. */
+    questions: (workcell: string, includeAnswered = false) =>
+      get<RegistryQuestion[]>('/registry/questions', {
+        workcell, include_answered: includeAnswered ? 'true' : 'false',
+      }),
+    /** One box, three kinds of answer — workcell, model, process. Nobody
+     *  should have to know which one they are looking for before they type. */
+    search: (q: string, limit = 8) =>
+      get<RegistrySearch>('/registry/search', { q, limit }),
+    /** EVERY MES step, mapped or not, with where its mapping came from.
+     *  `questions` only serves the unmapped, which left a wrong mapping
+     *  permanent — a mapping is a decision, and decisions get revised. */
+    steps: (workcell: string, q = '') =>
+      get<RegistryStep[]>('/registry/steps', { workcell, q }),
+    /** This workcell's own IEDB names — the pick-list. Scoped on purpose:
+     *  `MA 1` is Mech Assy at ARISTA and Deposition OPT 10 at LAM GAS BOX. */
+    aliases: (workcell: string) => get<RegistryAlias[]>('/registry/aliases', { workcell }),
+    /** Record one answer. Re-deciding replaces. */
+    decide: (body: {
+      workcell: string; mes_step: string; answer: RegistryAnswer;
+      iedb_alias?: string; evidence?: string;
+    }) => postJson<{ workcell: string; mes_step: string; answer: string }>(
+      '/registry/decision', body),
+    /** Write answers to process_decision.csv for the registry generators. */
+    export: () => post<{ exported: number }>('/registry/export'),
   },
   customers: {
     list: () => get<CycleTimeCustomer[]>('/customers'),
