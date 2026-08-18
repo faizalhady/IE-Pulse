@@ -825,6 +825,20 @@ export interface UniverseWorkcell {
   /** Every distinct model, deduped across IEDB + MES + demand. */
   models: number;
   in_iedb: number;
+  /** THE THREE BUCKETS — mutually exclusive, exhaustive, and known for 100% of
+   *  models because they come from IEDB alone. No MES call, no completion run.
+   *  has_ct + no_ct + not_iedb === models, asserted server-side per workcell.
+   *
+   *  Lead with these. complete/incomplete need the MES comparison and cover
+   *  only ~10% of models, so a percentage built on them is a share of what we
+   *  happened to check. */
+  has_ct: number;
+  /** In IEDB, nobody timed it. An IE task: go time it. */
+  no_ct: number;
+  /** Not in IEDB at all. A data-creation task: create it first. Deliberately
+   *  NOT merged with no_ct — different people, different work. */
+  not_iedb: number;
+  pct_has_ct: number;
   built_24mo: number;
   in_demand: number;
   /** Judged with a status the current code can still read. */

@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 
 const GRID =
-  'minmax(9rem,1.4fr) 5rem 5rem 5.5rem 5.5rem 5.5rem  5rem 5.5rem  5rem 5.5rem 5rem 5.5rem 5rem 5.5rem 5.5rem';
+  'minmax(8.5rem,1.2fr) 4.75rem  5rem 5rem 5.5rem 7rem  5rem 5.5rem  4.75rem 5.25rem 4.75rem 5.25rem 4.75rem 5.5rem';
 
 const n = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : Number(v).toLocaleString();
@@ -49,6 +49,25 @@ const TONE: Record<string, string> = {
   not_built: 'text-sky-600 dark:text-sky-400',
   cannot_check: 'text-muted-foreground',
 };
+
+/** The three buckets as one stacked bar. Reading three numbers and forming a
+ *  ratio in your head is the thing a chart is for, and these three always sum to
+ *  the row's model count so the bar is always full. */
+function Buckets({ has, no, absent }: { has: number; no: number; absent: number }) {
+  const total = has + no + absent || 1;
+  const seg = (n: number, cls: string, label: string) =>
+    n === 0 ? null : (
+      <span className={cn('block h-full', cls)} style={{ width: `${(n / total) * 100}%` }}
+            title={`${label}: ${n.toLocaleString()} (${Math.round((n / total) * 100)}%)`} />
+    );
+  return (
+    <span className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+      {seg(has, 'bg-emerald-500', 'Has cycle time')}
+      {seg(no, 'bg-orange-500', 'In IEDB, not timed')}
+      {seg(absent, 'bg-red-500', 'Not in IEDB')}
+    </span>
+  );
+}
 
 /** A coverage bar, because 3% and 61% are hard to compare as digits in a column. */
 function Bar({ pct, tone }: { pct: number | null; tone: string }) {
@@ -138,13 +157,44 @@ export default function WorkcellCoverage() {
         </div>
       )}
 
-      {/* Headline. `graded` and `complete` are deliberately separate tiles: one
-          is how much we looked at, the other is what we found. */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      {/* THE THREE BUCKETS lead, because they are known for every model. The
+          completion tiles below them are a share of the ~10% we have checked,
+          and putting those first invited reading them as a share of everything. */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { k: 'models', label: 'Models', hint: 'Deduped across every source' },
-          { k: 'graded', label: 'Judged', hint: 'Has a verdict we can still read' },
-          { k: 'ungraded', label: 'Not looked at', hint: 'No verdict, or a verdict from code that no longer exists' },
+          { k: 'models', label: 'Models', hint: 'Every model, deduped across IEDB, MES and demand' },
+          { k: 'has_ct', label: 'Has cycle time', hint: 'IEDB has priced it' },
+          { k: 'no_ct', label: 'No cycle time', hint: 'In IEDB, nobody timed it — an IE task' },
+          { k: 'not_iedb', label: 'Not in IEDB', hint: 'IEDB has never heard of it — create it first' },
+        ].map(c => (
+          <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
+            <div className={cn('text-xl font-semibold tabular-nums',
+              c.k === 'has_ct' && TONE.complete, c.k === 'no_ct' && TONE.no_cycle_time,
+              c.k === 'not_iedb' && TONE.not_in_iedb)}>
+              {n(t[c.k])}
+            </div>
+            {c.k !== 'models' && t.models > 0 && (
+              <div className="mt-0.5 text-[10px] text-muted-foreground">
+                {Math.round((t[c.k] / t.models) * 100)}% of all models
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Second row, clearly labelled as the checked subset. */}
+      <div className="text-[11px] text-muted-foreground">
+        Below: the MES comparison. It has only run on{' '}
+        <span className="font-medium text-foreground">
+          {n(t.graded)} of {n(t.models)}
+        </span>{' '}
+        models, so these are a share of what we checked — not of everything.
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { k: 'graded', label: 'Checked', hint: 'The MES comparison has run on it' },
+          { k: 'ungraded', label: 'Not checked', hint: 'No verdict, or one from code that no longer exists' },
           { k: 'complete', label: 'Complete', hint: 'Every MES step named AND timed' },
           { k: 'in_demand', label: 'In demand', hint: 'Planner 13wk or eDash ~4wk' },
         ].map(c => (
@@ -168,51 +218,44 @@ export default function WorkcellCoverage() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border bg-card">
-        <div className="grid min-w-[82rem] items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+        <div className="grid min-w-[84rem] items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
              style={{ gridTemplateColumns: GRID }}>
           {head('Workcell', 'workcell', 'justify-start')}
           {head('Models', 'models')}
-          {head('In IEDB', 'in_iedb')}
-          {head('IEDB says', 'iedb_assembly_ids')}
-          {head('Built 24mo', 'built_24mo')}
-          {head('In demand', 'in_demand')}
-          {head('Judged', 'graded')}
+          {/* THE THREE BUCKETS. 100% coverage, straight from IEDB. */}
+          {head('Has CT', 'has_ct')}
+          {head('No CT', 'no_ct')}
+          {head('Not in IEDB', 'not_iedb')}
+          <div className="text-center">Split</div>
+          {/* Everything right of here is a share of what we CHECKED, not of all. */}
+          {head('Checked', 'graded')}
           {head('Coverage', 'pct_graded')}
           {head('Complete', 'complete')}
           {head('Incomplete', 'incomplete')}
-          {head('No CT', 'no_cycle_time')}
-          {head('Not IEDB', 'not_in_iedb')}
           {head('Unbuilt', 'not_built')}
           {head("Can't check", 'cannot_check')}
-          {head('Of judged', 'pct_complete_of_graded')}
+          {head('Built 24mo', 'built_24mo')}
+          {head('Of checked', 'pct_complete_of_graded')}
         </div>
 
         {sorted.map(w => (
           <button key={w.workcell}
             onClick={() => navigate(`/cycle-time/wc/${encodeURIComponent(w.workcell)}?tab=report`)}
-            className="grid min-w-[82rem] w-full items-center gap-2 border-b px-4 py-1.5 text-left text-xs last:border-0 hover:bg-muted/30"
+            className="grid min-w-[84rem] w-full items-center gap-2 border-b px-4 py-1.5 text-left text-xs last:border-0 hover:bg-muted/30"
             style={{ gridTemplateColumns: GRID }}>
             <span className="truncate font-medium" title={w.workcell}>{w.workcell}</span>
             <span className="text-right font-medium tabular-nums">{n(w.models)}</span>
-            <span className="text-right tabular-nums text-muted-foreground">{n(w.in_iedb)}</span>
-            {/* IEDB's own count. Different UNIT - it counts assembly+revision,
-                we count models - so ours being smaller is normal, not a gap.
-                Only ours being BIGGER would mean our copy holds something IEDB
-                does not list. */}
-            <span className="text-right tabular-nums text-muted-foreground/70"
-                  title="IEDB's own assembly count (assembly + revision). We count models with revisions collapsed, so ours is expected to be smaller.">
-              {n(w.iedb_assembly_ids)}
-            </span>
-            <span className="text-right tabular-nums text-muted-foreground">{n(w.built_24mo)}</span>
-            <span className="text-right tabular-nums text-muted-foreground">{n(w.in_demand)}</span>
+            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.has_ct)}</span>
+            <span className={cn('text-right tabular-nums', TONE.no_cycle_time)}>{n(w.no_ct)}</span>
+            <span className={cn('text-right tabular-nums', TONE.not_in_iedb)}>{n(w.not_iedb)}</span>
+            <span className="px-1"><Buckets has={w.has_ct} no={w.no_ct} absent={w.not_iedb} /></span>
             <span className="text-right tabular-nums">{n(w.graded)}</span>
             <Bar pct={w.pct_graded} tone="bg-sky-500" />
             <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.complete)}</span>
             <span className={cn('text-right tabular-nums', TONE.incomplete)}>{n(w.incomplete)}</span>
-            <span className={cn('text-right tabular-nums', TONE.no_cycle_time)}>{n(w.no_cycle_time)}</span>
-            <span className={cn('text-right tabular-nums', TONE.not_in_iedb)}>{n(w.not_in_iedb)}</span>
             <span className={cn('text-right tabular-nums', TONE.not_built)}>{n(w.not_built)}</span>
             <span className={cn('text-right tabular-nums', TONE.cannot_check)}>{n(w.cannot_check)}</span>
+            <span className="text-right tabular-nums text-muted-foreground">{n(w.built_24mo)}</span>
             <Bar pct={w.pct_complete_of_graded} tone="bg-emerald-500" />
           </button>
         ))}
