@@ -24,13 +24,17 @@ import { ScopeBox, ScopePicker } from '@/components/shared/ScopePicker';
 import { SortHeader } from '@/components/shared/SortHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useCycleTimeCompletionDemand } from '@/hooks/cycle_time/useCycleTimeData';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useCycleTimeAssemblyList, useCycleTimeCompletionDemand } from '@/hooks/cycle_time/useCycleTimeData';
 import { useSortable } from '@/hooks/shared/useSortable';
-import type { DemandCompletionModel } from '@/lib/cycle_time/cycleTimeApi';
+import { cycleTimeApi, formatBuildDuration, formatCycleHMS } from '@/lib/cycle_time/cycleTimeApi';
+import type { CycleTimeAssemblyListRow, DemandCompletionModel, UniverseModelRow } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, ChevronDown, Loader2, Search } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronDown, ChevronsUpDown, Loader2, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { RouteComparisonDrawer } from './RouteComparisonDrawer';
 
 // Identity first (who/what/where), then schedule, then every number and
@@ -40,20 +44,27 @@ import { RouteComparisonDrawer } from './RouteComparisonDrawer';
  *  single line of text, so measuring per-row would buy nothing. */
 const ROW_H = 34;
 
-const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  7.5rem 3.25rem 4.75rem  4.5rem 4.5rem';
+const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  4.5rem 7.5rem 3.25rem 4.75rem  4.5rem 4.5rem  2rem';
 /** Workcell column dropped when it is the same value on every row. */
-const GRID_LOCKED = '2.75rem minmax(8rem,1.4fr) 4.5rem  6.5rem 6.5rem  7.5rem 3.25rem 4.75rem  4.5rem 4.5rem';
+/** The workcell view carries five more columns than the global report, because
+ *  `/assembly-list` answers for ONE workcell at a time — In IEDB, Cycle time,
+ *  SMH, Rev and Workcenter simply have no source when every workcell is on
+ *  screen at once. They are added rather than swapped in: the report and the
+ *  workcell page must still describe a model the same way. */
+const GRID_LOCKED = '2.75rem minmax(8rem,1.4fr) 4.5rem  6.5rem 6.5rem  4.5rem 5.5rem  4.5rem 7.5rem 3.25rem 4.75rem  5rem 3.5rem  4.5rem 4.5rem  9rem  2rem';
+/** Locked view is wider than most screens — scroll it, never squash it. */
+const MIN_W_LOCKED = '100.5rem';
 
 /** Status → label + colour. Ordered worst-first so the legend reads as a
  *  priority list: what needs creating, then fixing, then nothing. */
-const STATUS_META: Record<string, { label: string; cls: string; hint: string }> = {
-  incomplete:  { label: 'Missing CT', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', hint: 'In IEDB with cycle times, but gaps against what the floor actually runs' },
-  no_cycle_time: { label: 'No cycle time', cls: 'bg-orange-500/15 text-orange-600 dark:text-orange-400', hint: 'Model EXISTS in IEDB, but not one cycle time has been entered' },
-  not_in_iedb: { label: 'Not in IEDB', cls: 'bg-red-500/15 text-red-600 dark:text-red-400', hint: 'Model does not exist in IEDB at all — it has to be created first' },
-  not_built:   { label: 'Not built yet', cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', hint: 'MES has no production record in the window. Nothing to do but wait for the build' },
-  cannot_check: { label: 'Cannot be checked', cls: 'bg-muted text-muted-foreground', hint: 'This workcell is not on MES, so no scan will ever arrive. Waiting is pointless — 470 LAMMEC models read as "not built yet" until this was split out' },
-  not_checked: { label: 'Not checked', cls: 'bg-muted text-muted-foreground', hint: 'The completion run has not reached this model yet' },
-  complete:    { label: 'Complete', cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', hint: 'Every step MES ran was named AND has a cycle time' },
+const STATUS_META: Record<string, { label: string; cls: string; dot: string; hint: string }> = {
+  incomplete:  { label: 'Missing CT', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', dot: 'bg-amber-500', hint: 'In IEDB with cycle times, but gaps against what the floor actually runs' },
+  no_cycle_time: { label: 'No cycle time', cls: 'bg-orange-500/15 text-orange-600 dark:text-orange-400', dot: 'bg-orange-500', hint: 'Model EXISTS in IEDB, but not one cycle time has been entered' },
+  not_in_iedb: { label: 'Not in IEDB', cls: 'bg-red-500/15 text-red-600 dark:text-red-400', dot: 'bg-red-500', hint: 'Model does not exist in IEDB at all — it has to be created first' },
+  not_built:   { label: 'Not built yet', cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', dot: 'bg-sky-500', hint: 'MES has no production record in the window. Nothing to do but wait for the build' },
+  cannot_check: { label: 'Cannot be checked', cls: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground/40', hint: 'This workcell is not on MES, so no scan will ever arrive. Waiting is pointless — 470 LAMMEC models read as "not built yet" until this was split out' },
+  not_checked: { label: 'Not checked', cls: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground/40', hint: 'The completion run has not reached this model yet' },
+  complete:    { label: 'Complete', cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500', hint: 'Every step MES ran was named AND has a cycle time' },
 };
 const STATUS_ORDER = ['incomplete', 'no_cycle_time', 'not_in_iedb', 'not_built',
                       'cannot_check', 'not_checked', 'complete'];
@@ -102,19 +113,75 @@ const REASON_LABEL: Record<string, string> = {
 };
 
 type SortKey = 'rank' | 'customer' | 'assembly' | 'status' | 'lbr' | 'ipk' | 'next' | 'last'
-             | 'gap' | 'unmapped';
+             | 'gap' | 'unmapped' | 'iedb' | 'ct' | 'checked' | 'smh' | 'rev';
 
 /** IEDB's gap: a step the floor runs that IEDB either never timed (`no_ct`) or
  *  does not carry on its route at all (`not_in_iedb`). Kept apart from
  *  `unmapped`, which is OURS — the naming bridge could not identify the step, so
  *  we cannot honestly claim IEDB is missing anything. Folding the two into one
  *  number blames IEDB for our own mapping holes; ~6% of LAM RESEARCH's gap was. */
-const gapOf = (m: DemandCompletionModel) =>
+const gapOf = (m: Row) =>
   m.no_ct == null && m.not_in_iedb == null ? null : (m.no_ct ?? 0) + (m.not_in_iedb ?? 0);
 
 /** The workcell page routes on the IEDB spelling ('Nokia Optics'); demand rows
  *  carry MES's ('NOKIA OPTICS'). Match on a normalised key, never the raw string. */
 const wcKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** A model the workcell owns but nothing has ordered, dressed as a table row.
+ *
+ *  It is DELIBERATELY thin. `/universe/workcell` knows the verdict and the dates
+ *  and nothing else — no rank (there is no demand to rank by), no split gap, no
+ *  LBR, no IPK. Those columns render as em-dashes, and that is the honest
+ *  reading: nobody has checked this model, so there is no number to show. Zero
+ *  would read as "checked, found nothing", which is a different claim.
+ *
+ *  `verdict` is already the final six-word vocabulary — the same one `dstatus`
+ *  produces — so it passes straight through with no second translation. */
+/** A table row: the demand verdict, plus the per-assembly facts that only
+ *  `/assembly-list` knows. Merged ONTO the row rather than looked up at render
+ *  time, so the sort accessors stay module-level and stable. */
+type Row = DemandCompletionModel & Partial<Pick<CycleTimeAssemblyListRow,
+  'has_smt' | 'has_th' | 'has_be' | 'smh' | 'revisions' | 'in_iedb' | 'has_cycle_time'>>;
+
+/** Workcenter dot colours — the flow table's, so a stage is one colour
+ *  everywhere. */
+const WC_DOT: Record<string, string> = { SMT: 'bg-emerald-500', TH: 'bg-sky-500', BE: 'bg-violet-500' };
+const WC_LABEL: Record<string, string> = { SMT: 'Surface Mount', TH: 'Through Hole', BE: 'Backend' };
+const WORKCENTERS = ['SMT', 'TH', 'BE'] as const;
+const stagesOf = (m: Row) =>
+  [m.has_smt && 'SMT', m.has_th && 'TH', m.has_be && 'BE'].filter(Boolean) as string[];
+
+/** YES / NO / — . Null is NOT "no": it means the assembly list has not answered
+ *  for this model, which is a different claim from "IEDB does not have it". */
+function YesNo({ v, yes, no }: { v?: boolean | null; yes: string; no: string }) {
+  if (v == null) return <span className="text-muted-foreground/50">—</span>;
+  return (
+    <span title={v ? yes : no}
+      className={cn('text-[11px] font-semibold',
+        v ? 'text-emerald-600 dark:text-emerald-400' : 'text-orange-600 dark:text-orange-400')}>
+      {v ? 'YES' : 'NO'}
+    </span>
+  );
+}
+
+const fromUniverse = (r: UniverseModelRow, customer: string, plant: string): Row => ({
+  // null, not 0: `useSortable` sorts nulls last, so un-ranked models never
+  // jump above the demand list when you sort by rank.
+  rank: null as unknown as number,
+  plant,
+  region: '',
+  customer,
+  assembly: r.assembly,
+  units: r.units ?? 0,
+  sources: '',
+  has_demand: false,
+  status: (r.verdict ?? 'not_checked') as DemandCompletionModel['status'],
+  next_build: r.next_build,
+  last_build: r.last_build,
+  in_iedb: r.in_iedb_catalog,
+  has_cycle_time: r.has_cycle_time,
+  checked: r.checked ?? false,
+});
 
 /** "6 Aug" — the year is noise when everything sits inside a 13-week window. */
 function fmtDate(v?: string | null): string {
@@ -133,7 +200,13 @@ const lbrTone = (v?: number | null) =>
 
 // Module-level: useSortable memoises on `accessors`, so rebuilding this object
 // every render would defeat the memo and re-sort on each keystroke.
-const ACCESSORS: Record<SortKey, (m: DemandCompletionModel) => string | number | null> = {
+const ACCESSORS: Record<SortKey, (m: Row) => string | number | null> = {
+  // Booleans sort as 0/1 so "NO first" is one click — that is the actionable end.
+  iedb:     m => m.in_iedb == null ? null : m.in_iedb ? 1 : 0,
+  ct:       m => m.has_cycle_time == null ? null : m.has_cycle_time ? 1 : 0,
+  checked:  m => m.checked ? 1 : 0,
+  smh:      m => m.smh ?? null,
+  rev:      m => m.revisions ?? null,
   rank:     m => m.rank,
   customer: m => m.customer,
   assembly: m => m.assembly,
@@ -147,9 +220,102 @@ const ACCESSORS: Record<SortKey, (m: DemandCompletionModel) => string | number |
   last:     m => m.last_build ?? null,
 };
 
-export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell?: string }) {
+/** The workcenter picker from CycleTimeFilters, made to serve two lists.
+ *
+ *  Multi-select, and "Default" means NOTHING is ticked rather than everything —
+ *  the same shape as the workcenter dropdown, so the two read as one control
+ *  used twice instead of two controls that happen to look alike.
+ *
+ *  Status used to be a row of chips here. The chips carried their counts on
+ *  screen, so the counts moved INTO the rows rather than being dropped. */
+function MultiPicker({ placeholder, options, selected, onToggle, onClear, width = 'w-[200px]' }: {
+  placeholder: string;
+  options: { key: string; label: string; dot?: string; count?: number; hint?: string }[];
+  selected: string[];
+  onToggle: (key: string) => void;
+  onClear: () => void;
+  width?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const picked = options.filter(o => selected.includes(o.key));
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button"
+          className={cn('flex h-8 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-xs',
+            'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', width)}>
+          <span className="flex min-w-0 items-center gap-1.5 truncate">
+            {picked.length === 0 ? (
+              <span className="text-muted-foreground">{placeholder}</span>
+            ) : (
+              picked.map(o => (
+                <span key={o.key} className="flex items-center gap-1 whitespace-nowrap">
+                  {o.dot && <span className={cn('h-2 w-2 rounded-full', o.dot)} />}{o.label}
+                </span>
+              ))
+            )}
+          </span>
+          <ChevronsUpDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className={cn('p-1', width)} align="start">
+        <PickerRow label="Default" selected={selected.length === 0} onClick={onClear} />
+        <div className="my-1 h-px bg-border" />
+        {options.map(o => (
+          <PickerRow key={o.key} label={o.label} dot={o.dot} count={o.count} hint={o.hint}
+            selected={selected.includes(o.key)} onClick={() => onToggle(o.key)} />
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** One row. The popover stays open on click — these are multi-selects. */
+function PickerRow({ label, dot, count, hint, selected, onClick }: {
+  label: string; dot?: string; count?: number; hint?: string; selected: boolean; onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} title={hint}
+      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted">
+      <Check className={cn('h-4 w-4 flex-shrink-0 text-emerald-500', selected ? 'opacity-100' : 'opacity-0')} />
+      {dot ? <span className={cn('h-2 w-2 flex-shrink-0 rounded-full', dot)} /> : <span className="w-2 flex-shrink-0" />}
+      <span className="flex-1 truncate font-medium">{label}</span>
+      {count != null && <span className="tabular-nums text-xs text-muted-foreground">{count.toLocaleString()}</span>}
+    </button>
+  );
+}
+
+export default function CompletionDataTable({ lockedWorkcell, universeToggle }: {
+  lockedWorkcell?: string;
+  /** Offer "In demand / All models". Only meaningful with `lockedWorkcell` —
+   *  the universe endpoint answers one workcell at a time. Off by default, so
+   *  every existing call site renders exactly what it rendered before. */
+  universeToggle?: boolean;
+}) {
   const { data, isLoading, error } = useCycleTimeCompletionDemand();
   const locked = !!lockedWorkcell;
+  const [scopeMode, setScopeMode] = useState<'demand' | 'all'>('demand');
+  const showToggle = locked && !!universeToggle;
+
+  // Same query key the model page uses, so walking table -> model -> back costs
+  // one request in total. Only fetched once "All models" is actually asked for:
+  // it is the whole workcell, and most visits never leave the demand list.
+  const universe = useQuery({
+    queryKey: ['ct-universe-workcell', lockedWorkcell],
+    queryFn: () => cycleTimeApi.universe.workcell(lockedWorkcell!),
+    staleTime: 1000 * 60 * 10,
+    enabled: showToggle && scopeMode === 'all' && !!lockedWorkcell,
+  });
+
+  // Per-assembly facts IEDB knows and the demand endpoint does not: which
+  // workcenters the model runs, whether IEDB carries it, its SMH and how many
+  // revisions exist. Same query key the flow table uses, so it is already warm.
+  const alist = useCycleTimeAssemblyList(locked ? lockedWorkcell : undefined);
+  const alistBy = useMemo(() => {
+    const map = new Map<string, CycleTimeAssemblyListRow>();
+    (alist.data ?? []).forEach(r => map.set(wcKey(r.assembly), r));
+    return map;
+  }, [alist.data]);
 
   // null = "nothing chosen yet", which shows everything. An explicit list means
   // exactly those workcells — INCLUDING the empty list. The two used to be the
@@ -157,6 +323,7 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
   // never off: unticking it produced [], and [] meant all.
   const [picked, setPicked] = useState<string[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [stageFilter, setStageFilter] = useState<string[]>([]);
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -192,13 +359,53 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
 
   const toggleStatus = (s: string) =>
     setStatusFilter(statusFilter.includes(s) ? statusFilter.filter(x => x !== s) : [...statusFilter, s]);
+  const toggleStage = (s: string) =>
+    setStageFilter(stageFilter.includes(s) ? stageFilter.filter(x => x !== s) : [...stageFilter, s]);
 
   // Everything EXCEPT the status filter. The chip counts read from this, so each
   // chip always shows how many models it holds in the current workcell/search
   // scope. Counting post-status-filter meant picking one status zeroed every
   // other chip, and the numbers only appeared on whatever was selected.
+  // Demand rows first, then every model the workcell owns that nothing has
+  // ordered. The demand row WINS on collision — it carries the split gap and the
+  // LBR/IPK the universe row does not have, so preferring it never loses detail.
+  const sourceRows = useMemo<Row[]>(() => {
+    const demand: Row[] = data?.models ?? [];
+    if (!showToggle || scopeMode !== 'all' || !universe.data || !lockedWorkcell) return demand;
+    const want = wcKey(lockedWorkcell);
+    const mine = demand.filter(m => wcKey(m.customer) === want);
+    // Plant is a property of the workcell, not the model, so any demand row of
+    // this workcell carries it. Blank only when the workcell has no demand at all.
+    const plant = mine[0]?.plant ?? '';
+    const seen = new Set(mine.map(m => wcKey(m.assembly)));
+    const extra = universe.data.rows
+      .filter(r => !seen.has(wcKey(r.assembly)))
+      .map(r => fromUniverse(r, lockedWorkcell, plant));
+    return [...demand, ...extra];
+  }, [data, universe.data, showToggle, scopeMode, lockedWorkcell]);
+
+  // Merged once, here — not read inside the row renderer. The virtualiser
+  // remounts rows constantly, and a Map lookup per cell per scroll frame is the
+  // kind of thing that made this table feel stuck before it was virtualised.
+  const enriched = useMemo<Row[]>(() => {
+    if (!locked || alistBy.size === 0) return sourceRows;
+    return sourceRows.map(m => {
+      const a = alistBy.get(wcKey(m.assembly));
+      if (!a) return m;
+      return {
+        ...m,
+        has_smt: a.has_smt, has_th: a.has_th, has_be: a.has_be,
+        smh: a.smh, revisions: a.revisions,
+        // The assembly list is the richer answer where it has one; the universe
+        // row's own value stands in when the model is not on that list.
+        in_iedb: a.in_iedb ?? m.in_iedb,
+        has_cycle_time: a.has_cycle_time ?? m.has_cycle_time,
+      };
+    });
+  }, [sourceRows, alistBy, locked]);
+
   const scopedRows = useMemo(() => {
-    let r = data?.models ?? [];
+    let r = enriched;
     // Sets, not arrays: .includes() on every one of ~3,900 rows was a linear
     // scan per row for both filters.
     if (lockedWorkcell) {
@@ -213,8 +420,14 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
       const s = qDebounced.trim().toLowerCase();
       r = r.filter(m => m.assembly.toLowerCase().includes(s) || m.customer.toLowerCase().includes(s));
     }
+    // ANY of the picked workcenters, not the exact set. Ticking SMT means "show
+    // me the models that run SMT" — the flow table read it as "runs SMT and
+    // nothing else", which quietly hid every mixed-stage model.
+    if (stageFilter.length) {
+      r = r.filter(m => stageFilter.some(w => stagesOf(m).includes(w)));
+    }
     return r;
-  }, [data, lockedWorkcell, picked, qDebounced]);
+  }, [enriched, lockedWorkcell, picked, qDebounced, stageFilter]);
 
   const rows = useMemo(() => {
     let r = scopedRows;
@@ -225,7 +438,7 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
     return limit ? r.slice(0, limit) : r;
   }, [scopedRows, statusFilter, limit]);
 
-  const { sorted, sort, toggle } = useSortable<DemandCompletionModel, SortKey>(rows, ACCESSORS,
+  const { sorted, sort, toggle } = useSortable<Row, SortKey>(rows, ACCESSORS,
     { key: 'rank', dir: 'asc' });
 
   // Virtualised: the demand list is ~3,900 rows x 10 cells. Rendering them all
@@ -247,6 +460,7 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
   }, [scopedRows]);
 
   const grid = locked ? GRID_LOCKED : GRID;
+  const minW = locked ? MIN_W_LOCKED : undefined;
 
   if (isLoading) {
     return <div className="flex h-64 items-center justify-center">
@@ -259,29 +473,15 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
     </div>;
   }
 
-  const stale = (data.freshness ?? []).filter(f => (f.days_old ?? 0) > 14);
-
   return (
     <div className="h-full max-w-full space-y-4 overflow-y-auto overflow-x-hidden p-4 md:p-6">
-      {/* Stale inputs, ABOVE the numbers rather than in a footnote. A stale mart
-          distorts every verdict below and the statuses themselves look completely
-          normal — `assembly_catalog` sat five weeks old and silently turned real
-          models into "Not in IEDB" with nobody able to see why. */}
-      {stale.length > 0 && (
-        <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="min-w-0 text-sm">
-            <div className="font-medium text-amber-700 dark:text-amber-500">
-              These verdicts rest on data that has not been refreshed
-            </div>
-            {stale.map(f => (
-              <div key={f.mart} className="text-[11px] text-muted-foreground">
-                <span className="font-mono">{f.mart}</span> — {f.days_old} days old · {f.drives}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* The freshness banner was pulled on 18 Aug 2026: it ate a third of the
+          screen AND was crying about `mes_process_map.parquet`, which the grader
+          stopped reading when the bridge moved to the registry. A warning that
+          is both large and wrong is worse than none.
+          `data.freshness` still arrives on the wire — put it back small (a dot
+          by the row count) once FRESHNESS_FILES in completion_report.py watches
+          the registry instead. */}
 
       {/* ── Filters ──────────────────────────────────────────────────────── */}
       {/* Scoped to one workcell already — a picker here would only let you pick
@@ -328,7 +528,7 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
       </div>
       )}
 
-      {/* ── Search + status chips ────────────────────────────────────────── */}
+      {/* ── Search + the two pickers ─────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -336,60 +536,111 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
             placeholder={locked ? 'Search model' : 'Search model or workcell'}
             className="h-8 w-56 pl-8 text-xs" />
         </div>
+
+        {/* Both pickers sit straight after the search box, in the order you
+            narrow: where it runs, then what is wrong with it. */}
+        {locked && (
+          <MultiPicker
+            placeholder="Select workcenter"
+            options={WORKCENTERS.map(w => ({ key: w, label: w, dot: WC_DOT[w], hint: WC_LABEL[w] }))}
+            selected={stageFilter}
+            onToggle={toggleStage}
+            onClear={() => setStageFilter([])}
+          />
+        )}
+
+        <MultiPicker
+          placeholder="Select status"
+          width="w-[240px]"
+          options={STATUS_ORDER
+            .filter(k => (counts[k] ?? 0) > 0 || statusFilter.includes(k))
+            .map(k => ({ key: k, label: STATUS_META[k].label, dot: STATUS_META[k].dot,
+                         count: counts[k] ?? 0, hint: STATUS_META[k].hint }))}
+          selected={statusFilter}
+          onToggle={toggleStatus}
+          onClear={() => setStatusFilter([])}
+        />
+
         {!locked && (
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setLimit(limit ? 0 : 500)}>
             {limit ? 'Show all' : 'Top 500 only'}
           </Button>
         )}
-        {/* Chips sit right; ml-auto on the FIRST one so they stay one group. */}
-        {STATUS_ORDER.filter(s => (counts[s] ?? 0) > 0 || statusFilter.includes(s)).map((s, i) => {
-          const m = STATUS_META[s];
-          const on = statusFilter.includes(s);
-          return (
-            <button key={s} onClick={() => toggleStatus(s)} title={m.hint}
-              className={cn('rounded-full px-2.5 py-1 text-[11px] font-medium transition-all',
-                i === 0 && 'ml-auto',
-                m.cls, on ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : 'opacity-80 hover:opacity-100')}>
-              {m.label} <span className="tabular-nums">{counts[s] ?? 0}</span>
-            </button>
-          );
-        })}
-        {statusFilter.length > 0 && (
-          <button onClick={() => setStatusFilter([])}
-            className="text-[11px] text-muted-foreground transition-colors hover:text-foreground">Clear</button>
+        {/* Two scopes, one table. The workcell's model list used to live in a
+            second component with a second look, which is how the same model
+            could be described two ways on one page. */}
+        {showToggle && (
+          <div className="ml-auto flex items-center rounded-lg border bg-card p-0.5">
+            {([
+              ['demand', 'In demand', 'Ordered in the next 13 weeks — the planner window UNION eDash'],
+              ['all', 'All models', 'Every model this workcell owns, from IEDB, MES and demand combined'],
+            ] as const).map(([k, label, hint]) => (
+              <button key={k} onClick={() => setScopeMode(k)} title={hint}
+                className={cn('rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  scopeMode === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                {label}
+                {k === 'all' && universe.data && (
+                  <span className="ml-1 tabular-nums opacity-70">{universe.data.models.toLocaleString()}</span>
+                )}
+              </button>
+            ))}
+            {universe.isFetching && <Loader2 className="mx-1.5 h-3 w-3 animate-spin text-muted-foreground" />}
+          </div>
         )}
       </div>
 
       <div className="text-xs text-muted-foreground">
         {sorted.length.toLocaleString()} model{sorted.length === 1 ? '' : 's'}
         {!locked && sorted.length !== data.total && <> of {data.total.toLocaleString()}</>}
-        {locked && ' in demand for this workcell'}
+        {locked && (scopeMode === 'all' ? ' owned by this workcell' : ' in demand for this workcell')}
       </div>
 
       {/* ── Table ────────────────────────────────────────────────────────── */}
       <div className="overflow-x-auto rounded-xl border bg-card">
         <div className="grid items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-          style={{ gridTemplateColumns: grid }}>
-          <SortHeader label="#" active={sort?.key === 'rank'} dir={sort?.dir} onClick={() => toggle('rank')} />
+          style={{ gridTemplateColumns: grid, minWidth: minW }}>
+          {/* Position in the list as it is currently shown, not a stored rank.
+              It used to print the demand rank, which meant the column read
+              1, 2, 3 … then a run of em-dashes the moment a model without
+              demand appeared — and the numbers no longer matched the rows you
+              were counting. The list is still ordered by demand by default, so
+              the top of the column means the same thing it always did. */}
+          <span>#</span>
           {!locked && <SortHeader label="Workcell" active={sort?.key === 'customer'} dir={sort?.dir} onClick={() => toggle('customer')} />}
           <SortHeader label="Model" active={sort?.key === 'assembly'} dir={sort?.dir} onClick={() => toggle('assembly')} />
           <span>Plant</span>
           <SortHeader label="Next build" active={sort?.key === 'next'} dir={sort?.dir} onClick={() => toggle('next')} />
           <SortHeader label="Last build" active={sort?.key === 'last'} dir={sort?.dir} onClick={() => toggle('last')} />
+          {/* Before the verdict, because they are what the verdict is built ON:
+              a model IEDB never heard of cannot be graded, and one nobody timed
+              can only fail. Reading the status first invites explaining it. */}
+          {locked && <SortHeader label="In IEDB" active={sort?.key === 'iedb'} dir={sort?.dir} onClick={() => toggle('iedb')} className="justify-center" />}
+          {locked && <SortHeader label="Cycle time" active={sort?.key === 'ct'} dir={sort?.dir} onClick={() => toggle('ct')} className="justify-center" />}
+          {/* Did we look — separate from what we found. Folded into Status, one
+              cell was answering two questions and the reader could not tell
+              "we have not run the check" from "the check found nothing wrong". */}
+          <SortHeader label="Checked" active={sort?.key === 'checked'} dir={sort?.dir} onClick={() => toggle('checked')} className="justify-center" />
           <SortHeader label="Status" active={sort?.key === 'status'} dir={sort?.dir} onClick={() => toggle('status')} />
           {/* Two gaps, never one number: theirs, then ours. */}
           <SortHeader label="Gap" active={sort?.key === 'gap'} dir={sort?.dir} onClick={() => toggle('gap')} className="justify-end" />
           <SortHeader label="Unmapped" active={sort?.key === 'unmapped'} dir={sort?.dir} onClick={() => toggle('unmapped')} className="justify-end" />
+          {locked && <SortHeader label="SMH" active={sort?.key === 'smh'} dir={sort?.dir} onClick={() => toggle('smh')} className="justify-end" />}
+          {locked && <SortHeader label="Rev" active={sort?.key === 'rev'} dir={sort?.dir} onClick={() => toggle('rev')} className="justify-end" />}
           <SortHeader label="LBR" active={sort?.key === 'lbr'} dir={sort?.dir} onClick={() => toggle('lbr')} className="justify-end" />
           <SortHeader label="IPK" active={sort?.key === 'ipk'} dir={sort?.dir} onClick={() => toggle('ipk')} className="justify-end" />
+          {locked && <span className="text-right">Workcenter</span>}
+          {/* the open-page arrow — no label, the icon says it */}
+          <span />
         </div>
 
         <div ref={scrollRef} className="max-h-[62vh] overflow-y-auto">
           {sorted.length === 0 && (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
               {locked && !qDebounced && !statusFilter.length
-                ? 'No demand for this workcell — nothing on the MES plan or the planner forecast.'
+                ? scopeMode === 'all'
+                  ? 'No models found for this workcell in IEDB, MES or demand.'
+                  : 'No demand for this workcell — nothing on the MES plan or the planner forecast. Try "All models".'
                 : !locked && picked?.length === 0
                 ? 'No workcells selected. Tick "All", or pick a plant.'
                 : 'Nothing matches the current filters.'}
@@ -401,11 +652,23 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
             const meta = STATUS_META[dstatus(m)] ?? STATUS_META.not_checked;
             const gap = gapOf(m);
             return (
-              <button key={`${m.customer}|${m.assembly}`}
+              // A div, not a button: the row carries a LINK in its last cell,
+              // and a link inside a button is invalid HTML — browsers recover
+              // from it differently and keyboard focus order breaks. Same
+              // role/tabIndex/onKeyDown pattern the flow table already uses.
+              <div key={`${m.customer}|${m.assembly}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => setOpen({ customer: m.customer, assembly: m.assembly })}
-                className="absolute left-0 top-0 grid w-full items-center gap-2 border-b px-4 text-left text-xs hover:bg-muted/30"
-                style={{ gridTemplateColumns: grid, height: ROW_H, transform: `translateY(${v.start}px)` }}>
-                <span className="tabular-nums text-muted-foreground">{m.rank}</span>
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setOpen({ customer: m.customer, assembly: m.assembly });
+                  }
+                }}
+                className="absolute left-0 top-0 grid w-full cursor-pointer items-center gap-2 border-b px-4 text-left text-xs hover:bg-muted/30 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary"
+                style={{ gridTemplateColumns: grid, height: ROW_H, minWidth: minW, transform: `translateY(${v.start}px)` }}>
+                <span className="tabular-nums text-muted-foreground">{v.index + 1}</span>
                 {!locked && <span className="truncate font-medium" title={m.customer}>{m.customer}</span>}
                 <span className="truncate font-mono text-[11px]" title={m.assembly}>{m.assembly}</span>
                 <span className="truncate text-muted-foreground">{m.plant}</span>
@@ -417,6 +680,30 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
                     : '—'}
                 </span>
                 <span className="tabular-nums text-muted-foreground">{fmtDate(m.last_build)}</span>
+
+                {locked && (
+                  <span className="text-center">
+                    <YesNo v={m.in_iedb} yes="IEDB carries this model" no="IEDB has never heard of it — it has to be created first" />
+                  </span>
+                )}
+                {locked && (
+                  <span className="text-center">
+                    <YesNo v={m.has_cycle_time} yes="IEDB has a cycle time for this model" no="In IEDB, but nobody has timed it" />
+                  </span>
+                )}
+
+                {/* Checked — did the completion run judge this model. Grey NO,
+                    not orange: an unchecked model is work we have not done, not
+                    a fault in the model. */}
+                <span className="text-center">
+                  <span title={m.checked
+                        ? 'The completion check has run on this model'
+                        : 'The completion check has not run on this model yet'}
+                    className={cn('text-[11px] font-semibold',
+                      m.checked ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                    {m.checked ? 'YES' : 'NO'}
+                  </span>
+                </span>
 
                 <span className="flex items-center gap-1">
                   <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-medium', meta.cls)}
@@ -437,13 +724,61 @@ export default function CompletionDataTable({ lockedWorkcell }: { lockedWorkcell
                   title={m.unmapped ? 'Steps OUR naming bridge could not identify — our gap, not IEDB’s' : undefined}>
                   {m.unmapped ? m.unmapped : '—'}
                 </span>
+                {/* Operator content per unit — the size of the model, and the
+                    reason a 4-second gap on one and a 4-second gap on another
+                    are not the same problem. */}
+                {locked && (
+                  <span className="text-right tabular-nums text-muted-foreground"
+                    title={m.smh == null ? 'No primary routing' : formatCycleHMS(m.smh)}>
+                    {m.smh == null ? '—' : formatBuildDuration(m.smh)}
+                  </span>
+                )}
+                {locked && (
+                  <span className="text-right tabular-nums text-muted-foreground"
+                    title={m.revisions ? `${m.revisions} revision(s) in IEDB — a step on one may not exist on another` : undefined}>
+                    {m.revisions ?? '—'}
+                  </span>
+                )}
+
                 <span className={cn('text-right tabular-nums', lbrTone(m.lbr))}>
                   {m.lbr != null ? `${Math.round(m.lbr)}%` : '—'}
                 </span>
                 <span className="text-right tabular-nums text-muted-foreground">
                   {m.ipk_trolleys != null ? Math.round(m.ipk_trolleys) : '—'}
                 </span>
-              </button>
+
+                {/* Which stages the model actually runs. A dot per workcenter
+                    beats three YES/NO columns — the shape of the route is the
+                    thing you read, not each flag separately. */}
+                {locked && (() => {
+                  const stages = stagesOf(m);
+                  return (
+                    <span className="flex flex-wrap items-center justify-end gap-2">
+                      {stages.length === 0
+                        ? <span className="text-muted-foreground/50">—</span>
+                        : stages.map(w => (
+                          <span key={w} title={WC_LABEL[w]}
+                            className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                            <span className={cn('h-2.5 w-2.5 rounded-full', WC_DOT[w])} />{w}
+                          </span>
+                        ))}
+                    </span>
+                  );
+                })()}
+
+                {/* Straight to the model's own page, skipping the drawer.
+                    The drawer answers "why is this flagged"; this answers
+                    "show me everything". stopPropagation, or the click would
+                    also open the drawer it is meant to bypass. */}
+                <Link
+                  to={`/cycle-time/wc/${encodeURIComponent(m.customer)}/${encodeURIComponent(m.assembly)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Open ${m.assembly}`}
+                  className="flex items-center justify-center rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
             );
           })}
           </div>

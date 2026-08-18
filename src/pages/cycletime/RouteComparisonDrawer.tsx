@@ -14,8 +14,9 @@ import { useCycleTimeCompletionSteps, useCycleTimeLineMetrics } from '@/hooks/cy
 import { formatCycleSecondsLabel } from '@/lib/cycle_time/cycleTimeApi';
 import type { CompletionMesStep, IpkLine, LineMetrics, LineMetricsLine } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
-import { Loader2, ShoppingCart } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Loader2, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const LBR_TARGET = 85;
@@ -73,18 +74,32 @@ export function RouteComparisonDrawer({
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-3xl">
         <div className="border-b border-border px-5 py-3 pr-12">
           <h2 className="truncate text-sm font-bold text-foreground">{assembly}</h2>
-          <p className="text-[11px] text-muted-foreground">{customer}</p>
-          <div className="mt-2 flex gap-1">
-            {(['route', 'lbr', 'ipk'] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={cn('rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors',
-                  tab === t ? 'bg-emerald-500/15 text-emerald-600' : 'text-muted-foreground hover:text-foreground')}
-              >
-                {t === 'route' ? 'Route' : t.toUpperCase()}
-              </button>
-            ))}
+          <p className="truncate text-[11px] text-muted-foreground">{customer}</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="flex gap-1">
+              {(['route', 'lbr', 'ipk'] as Tab[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={cn('rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors',
+                    tab === t ? 'bg-emerald-500/15 text-emerald-600' : 'text-muted-foreground hover:text-foreground')}
+                >
+                  {t === 'route' ? 'Route' : t.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            {/* The drawer was a dead end: everything it showed was un-linkable,
+                un-bookmarkable, and impossible to send to the engineer who owns
+                the model. The same three views live on the model page, which
+                has a URL — so the drawer is a preview OF that page.
+                Solid, not a text link: the way OUT of a drawer has to be as
+                findable as the tabs inside it, or nobody finds it at all. */}
+            <Link
+              to={`/cycle-time/wc/${encodeURIComponent(customer)}/${encodeURIComponent(assembly)}`}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+            >
+              Open full page <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </div>
 
@@ -103,6 +118,11 @@ export function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSt
   const mes = data?.mes ?? [];
   const mesShown = hideNoise ? mes.filter((s) => s.status !== 'non_iedb') : mes;
   const iedb = [...(data?.iedb ?? [])].sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9));
+  // The backend tags a step `iedb:<assembly>` when resolve() fell back to another
+  // model's route — K_CTEC AE3649-66500EV10 has no IEDB rows of its own and was
+  // handed AE3649-66500's 13 timed steps. Rendering those unlabelled is how a
+  // model nobody ever timed gets signed off as priced.
+  const borrowedFrom = iedb.find((s) => s.source?.startsWith('iedb:'))?.source?.slice(5) ?? null;
 
   // alias CODE -> the POSITION of the IEDB step it points at, so a MES row can
   // show WHICH row on the right it was judged against — 1..N, the number the
@@ -167,6 +187,15 @@ export function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSt
         <div className="border-b border-border bg-muted/40 px-4 py-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">IEDB route (cycle time) · {iedb.length}</span>
         </div>
+        {borrowedFrom && (
+          <div className="flex items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2">
+            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-500">
+              Borrowed route — these steps belong to <span className="font-semibold">{borrowedFrom}</span>, not this model.
+              This model has no cycle time of its own in IEDB. Do not sign it off on these numbers.
+            </p>
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-auto">
           {iedb.map((s, i) => (
             <div key={i} className="grid grid-cols-[1.25rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0">

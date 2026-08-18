@@ -193,8 +193,9 @@ interface Routing {
  *  'matrix' — transposed: processes as columns (ordered left→right), one cycle-time value row. */
 export type FlowVariant = 'detail' | 'matrix';
 
-// chevron · # · Assembly · SMH · Revisions · Workcenter
-const GRID = '28px 38px minmax(175px,0.85fr) 4.25rem 4.75rem 7.5rem 3.75rem 5.25rem 5.5rem 5.5rem 70px 52px minmax(105px,0.6fr) 34px';
+// chevron · # · Model · In IEDB · Cycle time · Checked · Status · Gap · Demand ·
+// Last seen · Next build · SMH · Rev · Workcenter · open
+const GRID = '28px 38px minmax(175px,0.85fr) 4.25rem 4.75rem 4.5rem 7.5rem 3.75rem 5.25rem 5.5rem 5.5rem 70px 52px minmax(105px,0.6fr) 34px';
 const HEADER_H = 34;
 
 /** Same six answers, same colours, as the Coverage page and the Report tab. A
@@ -495,7 +496,9 @@ function FlowList({
           {/* State first — known for every model, no MES needed. */}
           <div className="text-center" title="Does IEDB know this model at all?">In IEDB</div>
           <div className="text-center" title="Has anyone entered a cycle time for it?">Cycle time</div>
-          <div title="Has the MES comparison run, and what did it find?">Status</div>
+          {/* Did we look, and what did we find — two questions, two columns. */}
+          <div className="text-center" title="Has the MES step-by-step comparison run on this model?">Checked</div>
+          <div title="Where this model stands. Four of the six answers come from IEDB and the build history, so they are known without any comparison.">Status</div>
           {/* The gap, split: IEDB's, then ours. */}
           <div className="text-right" title="IEDB's gap: steps with no cycle time, plus steps not on its route">Gap</div>
           {/* "Units" read as "units produced". It is FORWARD demand. */}
@@ -566,18 +569,33 @@ function FlowList({
                   </span>
                 </div>
 
-                {/* Status — but only after saying whether we CHECKED. An
-                    unchecked model has no verdict, and showing one would be a
-                    claim we cannot back. */}
+                {/* Checked — did the MES comparison run. Its own column now,
+                    because folding it into Status made one cell answer two
+                    different questions: "did we look?" and "what did we find?".
+                    The reader could not tell which one they were being given. */}
+                <div className="flex items-center justify-center">
+                  <span title={a.checked
+                        ? 'The MES step-by-step comparison has run on this model'
+                        : 'The MES comparison has not run — Status below is derived from IEDB and the build history'}
+                        className={cn('text-[11px] font-medium', a.checked
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-muted-foreground')}>
+                    {a.checked ? 'YES' : 'NO'}
+                  </span>
+                </div>
+
+                {/* Status — always answerable, checked or not. Only Complete and
+                    Incomplete need the route walked step by step; Not in IEDB,
+                    No CT, Unbuilt and Can't check fall out of the catalogue and
+                    the build history, which we hold for every model. Saying
+                    "not checked" to all 51,459 hid a true answer for 44,102. */}
                 <div className="min-w-0">
-                  {!a.checked ? (
-                    <span className="text-[11px] text-muted-foreground/70"
-                          title="The MES comparison has not run on this model">not checked</span>
-                  ) : (() => {
+                  {(() => {
                     const v = VERDICT[a.verdict ?? ''] ?? null;
                     return v
                       ? <span className={cn('truncate text-[11px] font-medium', v.cls)} title={v.hint}>{v.short}</span>
-                      : <span className="text-[11px] text-muted-foreground">—</span>;
+                      : <span className="text-[11px] text-muted-foreground/70"
+                              title="Timed and built, but the route has never been compared — only a check can say complete or incomplete">—</span>;
                   })()}
                 </div>
 

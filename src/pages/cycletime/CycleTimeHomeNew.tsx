@@ -33,7 +33,7 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Loader2, Search } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { SortHeader } from '@/components/shared/SortHeader';
@@ -43,8 +43,10 @@ import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 
+// Workcell · Models | Has CT · No CT · Not in IEDB · Split | Checked · Coverage
+// · Complete · Incomplete · Unbuilt · Built 24mo
 const GRID =
-  'minmax(15rem,1.5fr) 4.75rem  5rem 5rem 5.5rem 7rem  5rem 5.5rem  4.75rem 5.25rem 4.75rem 5.25rem 4.75rem 5.5rem';
+  'minmax(15rem,1.5fr) 4.75rem  5rem 5rem 5.5rem 7rem  5rem 5.5rem  4.75rem 5.25rem 4.75rem 5.5rem';
 
 const n = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : Number(v).toLocaleString();
@@ -131,7 +133,10 @@ export default function CycleTimeHomeNew() {
   }
 
   const t = data.totals;
-  const stale = (data.freshness ?? []).filter(f => (f.days_old ?? 0) > 14);
+  // The remainder of the timed set: MES had no production to compare against in
+  // the window. Derived by subtraction so the four cards ALWAYS reconcile — a
+  // hand-summed version would drift the day a new verdict is added.
+  const noRecentBuild = (t.has_ct ?? 0) - (t.complete ?? 0) - (t.incomplete ?? 0);
   const head = (label: string, k: SortKey, cls = 'justify-end') => (
     <SortHeader label={label} active={sort?.key === k} dir={sort?.dir}
                 onClick={() => toggle(k)} className={cls} />
@@ -146,25 +151,6 @@ export default function CycleTimeHomeNew() {
           deduplicated. Pick a workcell to go into its models.
         </p>
       </div>
-
-      {/* Stale inputs, above the numbers. This is the page most likely to be
-          screenshotted and sent upward, and a stale verdict looks exactly like a
-          fresh one. */}
-      {stale.length > 0 && (
-        <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="min-w-0 text-sm">
-            <div className="font-medium text-amber-700 dark:text-amber-500">
-              These numbers rest on data that has not been refreshed
-            </div>
-            {stale.map(f => (
-              <div key={f.mart} className="text-[11px] text-muted-foreground">
-                <span className="font-mono">{f.mart}</span> — {f.days_old} days old · {f.drives}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* THE THREE BUCKETS lead, because they are known for every model. The
           completion tiles below them are a share of the ~10% we have checked,
@@ -192,27 +178,48 @@ export default function CycleTimeHomeNew() {
         ))}
       </div>
 
-      {/* Second row, clearly labelled as the checked subset. */}
+      {/* Second row: ONE population — the models IEDB has a cycle time for —
+          split into what the check found. Everything here is a share of
+          `has_ct`, and the three outcomes add back up to it exactly.
+
+          It used to mix populations: "Checked" counted 42,177 models (the timed
+          ones plus 2,718 untimed ones graded by earlier demand-scoped runs)
+          while "Complete" counted only timed ones, so the percentages were
+          against a denominator that was not on the card. `not_in_iedb` is left
+          out on purpose — only 205 of the 39,459 land there, and every one is a
+          disagreement between assembly_catalog and raw.parquet, not a real
+          state. They sit inside "No recent build" with the rest.
+
+          "No recent build" is NOT "dead". The check window is 120 days, so a
+          model last built six months ago counts here. That is why it is the
+          biggest number on the page, and why the label says recent. */}
       <div className="text-[11px] text-muted-foreground">
-        Below: the MES comparison. It has only run on{' '}
-        <span className="font-medium text-foreground">
-          {n(t.graded)} of {n(t.models)}
-        </span>{' '}
-        models, so these are a share of what we checked — not of everything.
+        Below: the{' '}
+        <span className="font-medium text-foreground">{n(t.has_ct)}</span>{' '}
+        models IEDB has a cycle time for. All of them have been checked against
+        MES. The other {n(t.models - t.has_ct)} have no cycle time to check.
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { k: 'graded', label: 'Checked', hint: 'The MES comparison has run on it' },
-          { k: 'ungraded', label: 'Not checked', hint: 'No verdict, or one from code that no longer exists' },
-          { k: 'complete', label: 'Complete', hint: 'Every MES step named AND timed' },
-          { k: 'in_demand', label: 'In demand', hint: 'Planner 13wk or eDash ~4wk' },
+          { k: 'ct', label: 'Cycle times checked', tone: '', v: t.has_ct, pct: false,
+            hint: 'Every model IEDB has priced, compared step by step against what MES actually ran' },
+          { k: 'complete', label: 'Complete', tone: TONE.complete, v: t.complete, pct: true,
+            hint: 'Every step the floor ran is named in IEDB and has a cycle time' },
+          { k: 'partial', label: 'Partial', tone: TONE.incomplete, v: t.incomplete, pct: true,
+            hint: 'Built recently, but a step is missing a cycle time or our naming '
+                + 'bridge could not identify it. This is the fix list' },
+          { k: 'nomes', label: 'No recent build', tone: 'text-muted-foreground', v: noRecentBuild, pct: true,
+            hint: 'MES found no production in the last 120 days, so there was nothing to '
+                + 'compare the cycle time against. Not dead — just not running lately' },
         ].map(c => (
           <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
-            <div className={cn('text-xl font-semibold tabular-nums',
-              c.k === 'complete' && TONE.complete, c.k === 'ungraded' && 'text-muted-foreground')}>
-              {n(t[c.k])}
-            </div>
+            <div className={cn('text-xl font-semibold tabular-nums', c.tone)}>{n(c.v)}</div>
+            {c.pct && t.has_ct > 0 && (
+              <div className="mt-0.5 text-[10px] text-muted-foreground">
+                {Math.round((c.v / t.has_ct) * 100)}% of timed models
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -242,14 +249,12 @@ export default function CycleTimeHomeNew() {
           {head('Complete', 'complete')}
           {head('Incomplete', 'incomplete')}
           {head('Unbuilt', 'not_built')}
-          {head("Can't check", 'cannot_check')}
           {head('Built 24mo', 'built_24mo')}
-          {head('Of checked', 'pct_complete_of_graded')}
         </div>
 
         {sorted.map(w => (
           <button key={w.workcell}
-            onClick={() => navigate(`/cycle-time/wc/${encodeURIComponent(w.workcell)}?tab=report`)}
+            onClick={() => navigate(`/cycle-time/models/${encodeURIComponent(w.workcell)}`)}
             className="grid min-w-[90rem] w-full items-center gap-2 border-b px-4 py-1.5 text-left text-xs last:border-0 hover:bg-muted/30"
             style={{ gridTemplateColumns: GRID }}>
             {/* Logo, name, plant — the same identity block the workcell page
@@ -284,9 +289,7 @@ export default function CycleTimeHomeNew() {
             <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.complete)}</span>
             <span className={cn('text-right tabular-nums', TONE.incomplete)}>{n(w.incomplete)}</span>
             <span className={cn('text-right tabular-nums', TONE.not_built)}>{n(w.not_built)}</span>
-            <span className={cn('text-right tabular-nums', TONE.cannot_check)}>{n(w.cannot_check)}</span>
             <span className="text-right tabular-nums text-muted-foreground">{n(w.built_24mo)}</span>
-            <Bar pct={w.pct_complete_of_graded} tone="bg-emerald-500" />
           </button>
         ))}
       </div>

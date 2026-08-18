@@ -576,6 +576,8 @@ export interface DemandCompletionModel {
    *  the column existed (2026-08-17) — an unknown date, not a fresh one. */
   graded_on?: string | null;
   status: DemandCompletionStatus;
+  /** Has the completion check run on this model. */
+  checked?: boolean;
   reason?: DemandCompletionReason | null;
   /** How the verdict was reached: "serial" (#132, strong) | "batch" (#21, weak) | "none". */
   source?: string | null;
@@ -722,6 +724,10 @@ export interface CompletionIedbStep {
   /** IEDB step sequence — sort by this so it aligns with the MES route order. */
   order: number | null;
   cycle_time: number | null;
+  /** "iedb" = this model's own route. "iedb:<assembly>" = BORROWED — the backend
+   *  resolved the model to another assembly's route (suffix match) because this
+   *  one has no IEDB rows of its own. Must be shown, never rendered as fact. */
+  source?: string | null;
 }
 /** MES route vs IEDB route for one model (the side-by-side). */
 export interface CompletionSteps {
@@ -890,6 +896,9 @@ export interface UniverseWorkcell {
 export interface UniverseModelRow {
   assembly: string;
   verdict: string | null;
+  /** Has the completion check run on this model. Separate from `verdict`:
+   *  the verdict says what is true, this says whether a check established it. */
+  checked?: boolean;
   has_cycle_time: boolean | null;
   in_iedb_catalog: boolean | null;
   in_mes_history: boolean | null;

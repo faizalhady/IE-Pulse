@@ -17,6 +17,7 @@ import ProcessRegistry from "@/pages/cycletime/ProcessRegistry";
 import WorkcellCoverage from "@/pages/cycletime/WorkcellCoverage";
 import CycleTimeHomeNew from "@/pages/cycletime/CycleTimeHomeNew";
 import CycleTimeModel from "@/pages/cycletime/CycleTimeModel";
+import CycleTimeWorkcellModels from "@/pages/cycletime/CycleTimeWorkcellModels";
 import Documents from "@/pages/Documents";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
 import FloorMap from "@/pages/FloorMap";
@@ -155,6 +156,8 @@ function AppShell() {
               <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
               <Route path="/cycle-time/wc/:customer" element={<CycleTimeWorkcell />} />
               <Route path="/cycle-time/wc/:customer/:assembly" element={<CycleTimeModel />} />
+              {/* candidate — one table, two scopes. Judged against the wc page. */}
+              <Route path="/cycle-time/models/:customer" element={<CycleTimeWorkcellModels />} />
               <Route path="/cycle-time/completion" element={<DemandCompletionReport />} />
               <Route path="/cycle-time/4q" element={<CycleTime4QReport />} />
               <Route path="/cycle-time/incompletion" element={<IncompletionReport />} />
