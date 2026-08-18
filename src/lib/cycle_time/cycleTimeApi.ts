@@ -296,6 +296,28 @@ export interface CycleTimeAssemblyListRow {
   has_cycle_time?: boolean;
   /** Completion verdict when we have one, else null. */
   verdict?: string | null;
+  /** Has the MES comparison run on this model? A verdict without this is a
+   *  verdict from code that no longer exists. */
+  checked?: boolean;
+  /** IEDB's gap: steps with no cycle time + steps not on its route. */
+  gap?: number | null;
+  /** OUR gap: the naming bridge could not identify the step. Never folded into
+   *  `gap` — that would blame IEDB for our own mapping holes. */
+  unmapped?: number | null;
+  /** Forward demand units. The best default sort: volume is concentrated, so
+   *  a broken model nobody builds is not urgent. */
+  units?: number | null;
+  next_build?: string | null;
+  /** The DAY a board of this model was last SCANNED on the line (YYYY-MM-DD),
+   *  from the #21 scan cache. Current to today, so `last_scan === today` means
+   *  it is on the floor right now. Null when the model has not been scanned
+   *  inside the cache window (from 2026-03-31) or its workcell is not cached. */
+  last_scan?: string | null;
+  /** Fallback: when a JOB last closed, from 24 months of history. Coarser — a
+   *  job can close days after the last board walked the line. Used only when
+   *  `last_scan` is null. */
+  last_build?: string | null;
+  in_iedb?: boolean | null;
   family: string | null;
   builds: number;
   /** Distinct revisions for this assembly (Assemblies table column). */
@@ -822,6 +844,9 @@ export interface CompletionReport {
  *  cannot supply on its own: it only holds models somebody ran a check on. */
 export interface UniverseWorkcell {
   workcell: string;
+  /** Home plant — where most of this workcell's demand sits. A few genuinely
+   *  run in two (INFINERA is JBK and Plant 1), so this is dominant, not only. */
+  plant?: string | null;
   /** Every distinct model, deduped across IEDB + MES + demand. */
   models: number;
   in_iedb: number;

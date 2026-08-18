@@ -194,8 +194,53 @@ interface Routing {
 export type FlowVariant = 'detail' | 'matrix';
 
 // chevron · # · Assembly · SMH · Revisions · Workcenter
-const GRID = '28px 44px minmax(220px,0.5fr) 96px 100px minmax(160px,1fr) 34px';
+const GRID = '28px 38px minmax(175px,0.85fr) 4.25rem 4.75rem 7.5rem 3.75rem 5.25rem 5.5rem 5.5rem 70px 52px minmax(105px,0.6fr) 34px';
 const HEADER_H = 34;
+
+/** Same six answers, same colours, as the Coverage page and the Report tab. A
+ *  status must mean one thing platform-wide or the reader has to learn it twice. */
+const VERDICT: Record<string, { short: string; cls: string; hint: string }> = {
+  complete:      { short: 'Complete',   cls: 'text-emerald-600 dark:text-emerald-400', hint: 'Every MES step was named AND has a cycle time' },
+  incomplete:    { short: 'Incomplete', cls: 'text-amber-700 dark:text-amber-400',     hint: 'At least one step has no cycle time, or we could not name it' },
+  no_cycle_time: { short: 'No CT',      cls: 'text-orange-600 dark:text-orange-400',   hint: 'Model is in IEDB, nobody has timed it' },
+  not_in_iedb:   { short: 'Not in IEDB',cls: 'text-red-600 dark:text-red-400',         hint: 'Model does not exist in IEDB — it has to be created first' },
+  not_built:     { short: 'Unbuilt',    cls: 'text-sky-600 dark:text-sky-400',         hint: 'MES has no production record in the window. Wait for the build' },
+  cannot_check:  { short: "Can't check",cls: 'text-muted-foreground',                  hint: 'This workcell is not on MES, so no scan will ever arrive' },
+};
+
+/** "6 Aug" — the year is noise inside a 13-week window. */
+const shortDate = (v?: string | null) => {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};
+
+const todayISO = () => new Date().toLocaleDateString('sv-SE');   // YYYY-MM-DD, local
+
+/** When was a board of this model last on the line?
+ *
+ *  Prefers the SCAN day over the job-completion date. A job can close days after
+ *  the last board walked the line, and a model being built right now has no
+ *  completed job at all — so "last completed" answers a different question than
+ *  the one people ask, which is "was this on the floor today?".
+ *
+ *  Scanned today renders as "TODAY" — the column is "last seen", so the answer
+ *  to "when?" is a date, and today is just the most recent one. */
+function lastSeen(a: CycleTimeAssemblyListRow) {
+  if (a.last_scan) {
+    return a.last_scan === todayISO()
+      ? { text: 'TODAY', cls: 'text-emerald-600 dark:text-emerald-400 font-medium',
+          title: `scanned today (${a.last_scan})` }
+      : { text: shortDate(a.last_scan), cls: 'text-foreground',
+          title: `last scanned ${a.last_scan}` };
+  }
+  if (a.last_build) {
+    return { text: shortDate(a.last_build), cls: 'text-muted-foreground/70',
+             title: `no scan on record — showing when a job last closed (${new Date(a.last_build).toLocaleDateString()})` };
+  }
+  return { text: '—', cls: 'text-muted-foreground/50',
+           title: 'no scan and no completed job in the window' };
+}
 const NUM = 'ct-num font-semibold text-[12px]';
 const PAGE_SIZE = 50;
 
@@ -446,9 +491,19 @@ function FlowList({
         >
           <div />
           <div className="text-center">#</div>
-          <SortHead label="Assembly" k="assembly" sort={sort} onSort={onSort} />
+          <SortHead label="Model" k="assembly" sort={sort} onSort={onSort} />
+          {/* State first — known for every model, no MES needed. */}
+          <div className="text-center" title="Does IEDB know this model at all?">In IEDB</div>
+          <div className="text-center" title="Has anyone entered a cycle time for it?">Cycle time</div>
+          <div title="Has the MES comparison run, and what did it find?">Status</div>
+          {/* The gap, split: IEDB's, then ours. */}
+          <div className="text-right" title="IEDB's gap: steps with no cycle time, plus steps not on its route">Gap</div>
+          {/* "Units" read as "units produced". It is FORWARD demand. */}
+          <div className="text-right" title="Forward demand — planner 13wk + eDash ~4wk. NOT what was produced. The list is sorted by this.">Demand</div>
+          <div className="text-right" title="The day a board of this model was last scanned on the line. Scanned today shows as TODAY.">Last seen</div>
+          <div className="text-right" title="Next planned build from today onward">Next build</div>
           <div className="text-right" title="Standard Manufacturing Hour — operator content per unit: (IMT + Hand) × S%, summed over the primary routing">SMH</div>
-          <SortHead label="Revisions" k="revisions" sort={sort} onSort={onSort} align="center" />
+          <SortHead label="Rev" k="revisions" sort={sort} onSort={onSort} align="center" />
           <div className="text-right">Workcenter</div>
           <div />
         </div>
@@ -483,19 +538,74 @@ function FlowList({
                 <div className="ct-num flex min-w-0 items-center gap-1 text-[12px] font-bold text-foreground">
                   <span className="truncate" title={a.assembly}>{a.assembly}</span>
                   <CopyButton text={a.assembly} />
-                  {/* IEDB has never priced this model, so every metric on the row
-                      is blank. Said plainly rather than left as a row of dashes. */}
-                  {a.has_cycle_time === false && (
-                    <span title="IEDB has no cycle time for this model"
-                      className="shrink-0 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-medium text-orange-600 dark:text-orange-400">
-                      No cycle time
-                    </span>
-                  )}
                 </div>
+                {/* Two independent questions, two columns. They used to be one
+                    tri-state badge, which made the reader decode a label instead
+                    of reading an answer — and hid that they are different jobs:
+                    NO in IEDB means somebody creates the record, NO cycle time
+                    means somebody times it. Both are known without any MES call,
+                    so neither is ever blank. */}
+                <div className="flex items-center justify-center">
+                  <span title={a.in_iedb === false
+                        ? 'IEDB has never heard of this model — it has to be created first'
+                        : 'IEDB knows this model'}
+                        className={cn('text-[11px] font-medium', a.in_iedb === false
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-emerald-600 dark:text-emerald-400')}>
+                    {a.in_iedb === false ? 'NO' : 'YES'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-center">
+                  <span title={a.has_cycle_time === false
+                        ? 'Nobody has entered a cycle time for this model'
+                        : 'IEDB has a cycle time for this model'}
+                        className={cn('text-[11px] font-medium', a.has_cycle_time === false
+                          ? 'text-orange-600 dark:text-orange-400'
+                          : 'text-emerald-600 dark:text-emerald-400')}>
+                    {a.has_cycle_time === false ? 'NO' : 'YES'}
+                  </span>
+                </div>
+
+                {/* Status — but only after saying whether we CHECKED. An
+                    unchecked model has no verdict, and showing one would be a
+                    claim we cannot back. */}
+                <div className="min-w-0">
+                  {!a.checked ? (
+                    <span className="text-[11px] text-muted-foreground/70"
+                          title="The MES comparison has not run on this model">not checked</span>
+                  ) : (() => {
+                    const v = VERDICT[a.verdict ?? ''] ?? null;
+                    return v
+                      ? <span className={cn('truncate text-[11px] font-medium', v.cls)} title={v.hint}>{v.short}</span>
+                      : <span className="text-[11px] text-muted-foreground">—</span>;
+                  })()}
+                </div>
+
+                {/* Gap — IEDB's. Zero prints as a dash so the eye lands only on
+                    rows that owe someone work. `unmapped` rides in the tooltip:
+                    it is OUR gap and does not belong in IEDB's number. */}
+                <div className={cn(NUM, 'text-right')}
+                     title={a.unmapped ? `${a.unmapped} step(s) our naming bridge could not identify` : undefined}>
+                  {a.gap ? <span className="text-rose-600 dark:text-rose-400">{a.gap}</span>
+                         : <span className="text-muted-foreground/50">—</span>}
+                  {a.unmapped ? <span className="ml-1 text-[10px] text-muted-foreground">+{a.unmapped}</span> : null}
+                </div>
+
+                <div className={cn(NUM, 'text-right text-muted-foreground')}>
+                  {a.units ? Math.round(a.units).toLocaleString() : '—'}
+                </div>
+                {/* History, then plan. Side by side they answer "is this
+                    alive?" — a model on the line today and one last seen in June
+                    are different problems at the same demand. */}
+                {(() => { const l = lastSeen(a); return (
+                  <div className={cn(NUM, 'text-right', l.cls)} title={l.title}>{l.text}</div>
+                ); })()}
+                <div className={cn(NUM, 'text-right text-muted-foreground')}>{shortDate(a.next_build)}</div>
+
                 <div className={cn(NUM, 'text-right text-foreground')} title={a.smh == null ? 'No primary routing' : formatCycleHMS(a.smh)}>
                   {a.smh == null ? '—' : formatBuildDuration(a.smh)}
                 </div>
-                <div className={cn(NUM, 'text-center text-muted-foreground')}>{a.revisions}</div>
+                <div className={cn(NUM, 'text-center text-muted-foreground')}>{a.revisions ?? '—'}</div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {stages.length === 0
                     ? <span className="text-muted-foreground/50">—</span>

@@ -15,6 +15,7 @@ import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail
 import PlantRunnerDashboard from "@/pages/cycletime/PlantRunnerDashboard";
 import ProcessRegistry from "@/pages/cycletime/ProcessRegistry";
 import WorkcellCoverage from "@/pages/cycletime/WorkcellCoverage";
+import CycleTimeHomeNew from "@/pages/cycletime/CycleTimeHomeNew";
 import CycleTimeModel from "@/pages/cycletime/CycleTimeModel";
 import Documents from "@/pages/Documents";
 import EBuildPlan from "@/pages/ebuild/eBuildPlan";
@@ -160,6 +161,8 @@ function AppShell() {
               <Route path="/cycle-time/incompletion/:customer" element={<IncompletionReportDetail />} />
               <Route path="/cycle-time/plant-runners" element={<PlantRunnerDashboard />} />
               <Route path="/cycle-time/coverage" element={<WorkcellCoverage />} />
+              {/* TEMP: candidate landing page. One of these two goes. */}
+              <Route path="/cycle-time/home2" element={<CycleTimeHomeNew />} />
               <Route path="/cycle-time/registry" element={<ProcessRegistry />} />
             </>}
 
