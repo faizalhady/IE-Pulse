@@ -28,7 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useCycleTimeAssemblyList, useCycleTimeCompletionDemand } from '@/hooks/cycle_time/useCycleTimeData';
 import { useSortable } from '@/hooks/shared/useSortable';
 import { cycleTimeApi, formatBuildDuration, formatCycleHMS } from '@/lib/cycle_time/cycleTimeApi';
-import type { CycleTimeAssemblyListRow, DemandCompletionModel, UniverseModelRow } from '@/lib/cycle_time/cycleTimeApi';
+import type { CycleTimeAssemblyListRow, DemandCompletionModel } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import { ArrowUpRight, Check, ChevronDown, ChevronsUpDown, Loader2, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -44,6 +44,11 @@ import { RouteComparisonDrawer } from './RouteComparisonDrawer';
  *  single line of text, so measuring per-row would buy nothing. */
 const ROW_H = 34;
 
+/** Numeric header. row-reverse, not justify-end: the sort icon goes to the LEFT
+ *  of the label so the label's right edge sits on the column edge — exactly
+ *  where the right-aligned numbers under it sit. */
+const NUM_HEAD = 'flex-row-reverse';
+
 const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5rem  4.5rem 7.5rem 3.25rem 4.75rem  4.5rem 4.5rem  2rem';
 /** Workcell column dropped when it is the same value on every row. */
 /** The workcell view carries five more columns than the global report, because
@@ -51,9 +56,17 @@ const GRID = '2.75rem minmax(6.5rem,0.9fr) minmax(8rem,1.2fr) 4.5rem  6.5rem 6.5
  *  SMH, Rev and Workcenter simply have no source when every workcell is on
  *  screen at once. They are added rather than swapped in: the report and the
  *  workcell page must still describe a model the same way. */
-const GRID_LOCKED = '2.75rem minmax(8rem,1.4fr) 4.5rem  6.5rem 6.5rem  4.5rem 5.5rem  4.5rem 7.5rem 3.25rem 4.75rem  5rem 3.5rem  4.5rem 4.5rem  9rem  2rem';
-/** Locked view is wider than most screens — scroll it, never squash it. */
-const MIN_W_LOCKED = '100.5rem';
+// Locked = one workcell, so Workcell AND Plant are both constant down the whole
+// column. Workcell was already dropped; Plant was still there, costing 4.5rem of
+// a table that did not fit, to print the same word 1,700 times.
+// Every track is minmax(floor, fr) or a width that already fits its own header,
+// and there is no minWidth on the grid: the 16 columns share whatever the
+// window gives and the table fits in one view. It used to be pinned at 96rem —
+// wider than the screen it is read on, so Workcenter fell off the right edge.
+// The floors are sized to the HEADER, not the value: "UNMAPPED" is wider than
+// any count under it, and a header that overflows its track is what made
+// everything from Gap rightwards look crooked.
+const GRID_LOCKED = '2.25rem minmax(8rem,1.6fr) minmax(5.5rem,0.8fr) minmax(5.5rem,0.8fr)  4.5rem 5.75rem  4.5rem minmax(6.5rem,1fr) 3.25rem 4.75rem  4.75rem 3.25rem  3.5rem 3.5rem  minmax(8rem,1fr)  1.75rem';
 
 /** Status → label + colour. Ordered worst-first so the legend reads as a
  *  priority list: what needs creating, then fixing, then nothing. */
@@ -164,25 +177,6 @@ function YesNo({ v, yes, no }: { v?: boolean | null; yes: string; no: string }) 
   );
 }
 
-const fromUniverse = (r: UniverseModelRow, customer: string, plant: string): Row => ({
-  // null, not 0: `useSortable` sorts nulls last, so un-ranked models never
-  // jump above the demand list when you sort by rank.
-  rank: null as unknown as number,
-  plant,
-  region: '',
-  customer,
-  assembly: r.assembly,
-  units: r.units ?? 0,
-  sources: '',
-  has_demand: false,
-  status: (r.verdict ?? 'not_checked') as DemandCompletionModel['status'],
-  next_build: r.next_build,
-  last_build: r.last_build,
-  in_iedb: r.in_iedb_catalog,
-  has_cycle_time: r.has_cycle_time,
-  checked: r.checked ?? false,
-});
-
 /** "6 Aug" — the year is noise when everything sits inside a 13-week window. */
 function fmtDate(v?: string | null): string {
   if (!v) return '—';
@@ -287,25 +281,21 @@ function PickerRow({ label, dot, count, hint, selected, onClick }: {
 
 export default function CompletionDataTable({ lockedWorkcell, universeToggle }: {
   lockedWorkcell?: string;
-  /** Offer "In demand / All models". Only meaningful with `lockedWorkcell` —
-   *  the universe endpoint answers one workcell at a time. Off by default, so
-   *  every existing call site renders exactly what it rendered before. */
+  /** Legacy no-op. The Planned/All toggle used to need the per-workcell
+   *  universe endpoint, so it was opt-in; the demand payload now carries every
+   *  model itself and the toggle is always available. Kept so existing call
+   *  sites still compile. */
   universeToggle?: boolean;
 }) {
-  const { data, isLoading, error } = useCycleTimeCompletionDemand();
+  // Scoped when locked. `data.total` and the workcell picker are `!locked`-only,
+  // so nothing on this page reads a number that scoping would change.
+  const { data, isLoading, error } = useCycleTimeCompletionDemand(lockedWorkcell);
   const locked = !!lockedWorkcell;
   const [scopeMode, setScopeMode] = useState<'demand' | 'all'>('demand');
-  const showToggle = locked && !!universeToggle;
-
-  // Same query key the model page uses, so walking table -> model -> back costs
-  // one request in total. Only fetched once "All models" is actually asked for:
-  // it is the whole workcell, and most visits never leave the demand list.
-  const universe = useQuery({
-    queryKey: ['ct-universe-workcell', lockedWorkcell],
-    queryFn: () => cycleTimeApi.universe.workcell(lockedWorkcell!),
-    staleTime: 1000 * 60 * 10,
-    enabled: showToggle && scopeMode === 'all' && !!lockedWorkcell,
-  });
+  // Always offered. The payload holds all three tiers now — demand, graded, and
+  // every model that merely exists — so "which of them am I looking at?" is a
+  // question every call site has to be able to answer, not just the workcell page.
+  const showToggle = true;
 
   // Per-assembly facts IEDB knows and the demand endpoint does not: which
   // workcenters the model runs, whether IEDB carries it, its SMH and how many
@@ -327,7 +317,6 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
-  const [limit, setLimit] = useState(0);                // 0 = no cap
   const [open, setOpen] = useState<{ customer: string; assembly: string } | null>(null);
 
   const scope = data?.scope;
@@ -366,23 +355,11 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
   // chip always shows how many models it holds in the current workcell/search
   // scope. Counting post-status-filter meant picking one status zeroed every
   // other chip, and the numbers only appeared on whatever was selected.
-  // Demand rows first, then every model the workcell owns that nothing has
-  // ordered. The demand row WINS on collision — it carries the split gap and the
-  // LBR/IPK the universe row does not have, so preferring it never loses detail.
-  const sourceRows = useMemo<Row[]>(() => {
-    const demand: Row[] = data?.models ?? [];
-    if (!showToggle || scopeMode !== 'all' || !universe.data || !lockedWorkcell) return demand;
-    const want = wcKey(lockedWorkcell);
-    const mine = demand.filter(m => wcKey(m.customer) === want);
-    // Plant is a property of the workcell, not the model, so any demand row of
-    // this workcell carries it. Blank only when the workcell has no demand at all.
-    const plant = mine[0]?.plant ?? '';
-    const seen = new Set(mine.map(m => wcKey(m.assembly)));
-    const extra = universe.data.rows
-      .filter(r => !seen.has(wcKey(r.assembly)))
-      .map(r => fromUniverse(r, lockedWorkcell, plant));
-    return [...demand, ...extra];
-  }, [data, universe.data, showToggle, scopeMode, lockedWorkcell]);
+  // Demand, the graded mart and the full model universe — already unioned
+  // server-side, one row per model. This used to fetch the universe separately
+  // per workcell and merge it here, which meant the global report had no way to
+  // reach those models at all and the two screens counted different totals.
+  const sourceRows = useMemo<Row[]>(() => data?.models ?? [], [data]);
 
   // Merged once, here — not read inside the row renderer. The virtualiser
   // remounts rows constantly, and a Map lookup per cell per scroll frame is the
@@ -404,7 +381,11 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
     });
   }, [sourceRows, alistBy, locked]);
 
-  const scopedRows = useMemo(() => {
+  // Everything the pickers and the search box select, BEFORE the Planned/All
+  // toggle is applied. Split out so the toggle can label itself with what each
+  // side would actually show in the scope you are already in — a count taken
+  // after the toggle can only ever describe the side you are on.
+  const inScope = useMemo(() => {
     let r = enriched;
     // Sets, not arrays: .includes() on every one of ~3,900 rows was a linear
     // scan per row for both filters.
@@ -429,14 +410,22 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
     return r;
   }, [enriched, lockedWorkcell, picked, qDebounced, stageFilter]);
 
+  const scopeCounts = useMemo(() => ({
+    demand: inScope.reduce((n, m) => n + (m.has_demand ? 1 : 0), 0),
+    all: inScope.length,
+  }), [inScope]);
+
+  // The payload is demand UNION graded UNION every model that exists, so
+  // "Planned" has to filter or both sides of the toggle render the same rows.
+  const scopedRows = useMemo(
+    () => (scopeMode === 'demand' ? inScope.filter(m => m.has_demand) : inScope),
+    [inScope, scopeMode]);
+
   const rows = useMemo(() => {
-    let r = scopedRows;
-    if (statusFilter.length) {
-      const wanted = new Set(statusFilter);
-      r = r.filter(m => wanted.has(dstatus(m)));
-    }
-    return limit ? r.slice(0, limit) : r;
-  }, [scopedRows, statusFilter, limit]);
+    if (!statusFilter.length) return scopedRows;
+    const wanted = new Set(statusFilter);
+    return scopedRows.filter(m => wanted.has(dstatus(m)));
+  }, [scopedRows, statusFilter]);
 
   const { sorted, sort, toggle } = useSortable<Row, SortKey>(rows, ACCESSORS,
     { key: 'rank', dir: 'asc' });
@@ -460,7 +449,6 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
   }, [scopedRows]);
 
   const grid = locked ? GRID_LOCKED : GRID;
-  const minW = locked ? MIN_W_LOCKED : undefined;
 
   if (isLoading) {
     return <div className="flex h-64 items-center justify-center">
@@ -561,31 +549,24 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
           onClear={() => setStatusFilter([])}
         />
 
-        {!locked && (
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => setLimit(limit ? 0 : 500)}>
-            {limit ? 'Show all' : 'Top 500 only'}
-          </Button>
-        )}
         {/* Two scopes, one table. The workcell's model list used to live in a
             second component with a second look, which is how the same model
             could be described two ways on one page. */}
         {showToggle && (
           <div className="ml-auto flex items-center rounded-lg border bg-card p-0.5">
             {([
-              ['demand', 'In demand', 'Ordered in the next 13 weeks — the planner window UNION eDash'],
-              ['all', 'All models', 'Every model this workcell owns, from IEDB, MES and demand combined'],
+              ['demand', 'Planned', 'Ordered in the next 13 weeks — the planner window UNION the MES projection'],
+              ['all', 'All models', 'Every model that exists, from IEDB, MES and demand combined — the same total the Coverage page reports'],
             ] as const).map(([k, label, hint]) => (
               <button key={k} onClick={() => setScopeMode(k)} title={hint}
                 className={cn('rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
                   scopeMode === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
                 {label}
-                {k === 'all' && universe.data && (
-                  <span className="ml-1 tabular-nums opacity-70">{universe.data.models.toLocaleString()}</span>
-                )}
+                {/* Counted from the rows in hand. It used to come from a second
+                    request, so the number and the table could disagree. */}
+                <span className="ml-1 tabular-nums opacity-70">{scopeCounts[k].toLocaleString()}</span>
               </button>
             ))}
-            {universe.isFetching && <Loader2 className="mx-1.5 h-3 w-3 animate-spin text-muted-foreground" />}
           </div>
         )}
       </div>
@@ -598,8 +579,10 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
 
       {/* ── Table ────────────────────────────────────────────────────────── */}
       <div className="overflow-x-auto rounded-xl border bg-card">
-        <div className="grid items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-          style={{ gridTemplateColumns: grid, minWidth: minW }}>
+        <div ref={scrollRef} className="max-h-[62vh] overflow-y-auto">
+        <div className="sticky top-0 z-30 bg-card">
+        <div className="grid items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+          style={{ gridTemplateColumns: grid }}>
           {/* Position in the list as it is currently shown, not a stored rank.
               It used to print the demand rank, which meant the column read
               1, 2, 3 … then a run of em-dashes the moment a model without
@@ -609,7 +592,7 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
           <span>#</span>
           {!locked && <SortHeader label="Workcell" active={sort?.key === 'customer'} dir={sort?.dir} onClick={() => toggle('customer')} />}
           <SortHeader label="Model" active={sort?.key === 'assembly'} dir={sort?.dir} onClick={() => toggle('assembly')} />
-          <span>Plant</span>
+          {!locked && <span>Plant</span>}
           <SortHeader label="Next build" active={sort?.key === 'next'} dir={sort?.dir} onClick={() => toggle('next')} />
           <SortHeader label="Last build" active={sort?.key === 'last'} dir={sort?.dir} onClick={() => toggle('last')} />
           {/* Before the verdict, because they are what the verdict is built ON:
@@ -623,18 +606,18 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
           <SortHeader label="Checked" active={sort?.key === 'checked'} dir={sort?.dir} onClick={() => toggle('checked')} className="justify-center" />
           <SortHeader label="Status" active={sort?.key === 'status'} dir={sort?.dir} onClick={() => toggle('status')} />
           {/* Two gaps, never one number: theirs, then ours. */}
-          <SortHeader label="Gap" active={sort?.key === 'gap'} dir={sort?.dir} onClick={() => toggle('gap')} className="justify-end" />
-          <SortHeader label="Unmapped" active={sort?.key === 'unmapped'} dir={sort?.dir} onClick={() => toggle('unmapped')} className="justify-end" />
-          {locked && <SortHeader label="SMH" active={sort?.key === 'smh'} dir={sort?.dir} onClick={() => toggle('smh')} className="justify-end" />}
-          {locked && <SortHeader label="Rev" active={sort?.key === 'rev'} dir={sort?.dir} onClick={() => toggle('rev')} className="justify-end" />}
-          <SortHeader label="LBR" active={sort?.key === 'lbr'} dir={sort?.dir} onClick={() => toggle('lbr')} className="justify-end" />
-          <SortHeader label="IPK" active={sort?.key === 'ipk'} dir={sort?.dir} onClick={() => toggle('ipk')} className="justify-end" />
+          <SortHeader label="Gap" active={sort?.key === 'gap'} dir={sort?.dir} onClick={() => toggle('gap')} className={NUM_HEAD} />
+          <SortHeader label="Unmapped" active={sort?.key === 'unmapped'} dir={sort?.dir} onClick={() => toggle('unmapped')} className={NUM_HEAD} />
+          {locked && <SortHeader label="SMH" active={sort?.key === 'smh'} dir={sort?.dir} onClick={() => toggle('smh')} className={NUM_HEAD} />}
+          {locked && <SortHeader label="Rev" active={sort?.key === 'rev'} dir={sort?.dir} onClick={() => toggle('rev')} className={NUM_HEAD} />}
+          <SortHeader label="LBR" active={sort?.key === 'lbr'} dir={sort?.dir} onClick={() => toggle('lbr')} className={NUM_HEAD} />
+          <SortHeader label="IPK" active={sort?.key === 'ipk'} dir={sort?.dir} onClick={() => toggle('ipk')} className={NUM_HEAD} />
           {locked && <span className="text-right">Workcenter</span>}
           {/* the open-page arrow — no label, the icon says it */}
           <span />
         </div>
+        </div>
 
-        <div ref={scrollRef} className="max-h-[62vh] overflow-y-auto">
           {sorted.length === 0 && (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
               {locked && !qDebounced && !statusFilter.length
@@ -667,11 +650,11 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
                   }
                 }}
                 className="absolute left-0 top-0 grid w-full cursor-pointer items-center gap-2 border-b px-4 text-left text-xs hover:bg-muted/30 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary"
-                style={{ gridTemplateColumns: grid, height: ROW_H, minWidth: minW, transform: `translateY(${v.start}px)` }}>
+                style={{ gridTemplateColumns: grid, height: ROW_H, transform: `translateY(${v.start}px)` }}>
                 <span className="tabular-nums text-muted-foreground">{v.index + 1}</span>
                 {!locked && <span className="truncate font-medium" title={m.customer}>{m.customer}</span>}
                 <span className="truncate font-mono text-[11px]" title={m.assembly}>{m.assembly}</span>
-                <span className="truncate text-muted-foreground">{m.plant}</span>
+                {!locked && <span className="truncate text-muted-foreground">{m.plant}</span>}
 
                 {/* No upcoming start but demand still running = already on the floor. */}
                 <span className="tabular-nums text-muted-foreground">
@@ -753,13 +736,13 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
                 {locked && (() => {
                   const stages = stagesOf(m);
                   return (
-                    <span className="flex flex-wrap items-center justify-end gap-2">
+                    <span className="flex items-center justify-end gap-1.5 overflow-hidden">
                       {stages.length === 0
                         ? <span className="text-muted-foreground/50">—</span>
                         : stages.map(w => (
                           <span key={w} title={WC_LABEL[w]}
-                            className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
-                            <span className={cn('h-2.5 w-2.5 rounded-full', WC_DOT[w])} />{w}
+                            className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
+                            <span className={cn('h-2 w-2 shrink-0 rounded-full', WC_DOT[w])} />{w}
                           </span>
                         ))}
                     </span>
@@ -771,7 +754,7 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
                     "show me everything". stopPropagation, or the click would
                     also open the drawer it is meant to bypass. */}
                 <Link
-                  to={`/cycle-time/wc/${encodeURIComponent(m.customer)}/${encodeURIComponent(m.assembly)}`}
+                  to={`/cycle-time/${encodeURIComponent(m.customer)}/${encodeURIComponent(m.assembly)}`}
                   onClick={(e) => e.stopPropagation()}
                   title={`Open ${m.assembly}`}
                   className="flex items-center justify-center rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"

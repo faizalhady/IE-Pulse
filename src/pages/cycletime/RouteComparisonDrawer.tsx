@@ -95,7 +95,7 @@ export function RouteComparisonDrawer({
                 Solid, not a text link: the way OUT of a drawer has to be as
                 findable as the tabs inside it, or nobody finds it at all. */}
             <Link
-              to={`/cycle-time/wc/${encodeURIComponent(customer)}/${encodeURIComponent(assembly)}`}
+              to={`/cycle-time/${encodeURIComponent(customer)}/${encodeURIComponent(assembly)}`}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
             >
               Open full page <ArrowUpRight className="h-3.5 w-3.5" />

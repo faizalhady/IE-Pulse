@@ -34,25 +34,39 @@
  * judged. Delete one of the two once a decision is made; do not let both live.
  */
 
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowLeft, BookOpen, Table2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
+
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
-import { matchCustomerStatus } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import {
   useCycleTimeCustomers,
-  useCycleTimeCustomerStatus,
   useInvalidateOnRefreshComplete,
 } from '@/hooks/cycle_time/useCycleTimeData';
 
 import CompletionDataTable from './CompletionDataTable';
+import { ProcessRegistryPanel } from './ProcessRegistry';
+
+/** Two questions about one workcell, in the order people ask them: what are we
+ *  building, then what do we call the steps. Processes is the same panel the old
+ *  workcell page carried — imported, never re-implemented, because two registries
+ *  drifting apart is exactly the failure this module keeps hitting. */
+const TABS = [
+  { key: 'models',   label: 'Models',    icon: Table2,
+    tip: 'Every model this workcell owns, its status and the gap behind it' },
+  { key: 'registry', label: 'Processes', icon: BookOpen,
+    tip: 'What this workcell runs, and what MES and IEDB each call it' },
+] as const;
+type TabKey = (typeof TABS)[number]['key'];
 
 export default function CycleTimeWorkcellModels() {
   useInvalidateOnRefreshComplete();
 
   const navigate = useNavigate();
+  const [tab, setTab] = useState<TabKey>('models');
   const { customer: rawCustomer = '' } = useParams();
 
   // The URL may carry the MES spelling ("NOKIA OPTICS") while the cycle-time
@@ -65,9 +79,6 @@ export default function CycleTimeWorkcellModels() {
     return match?.customer ?? rawCustomer;
   }, [customerList, rawCustomer]);
 
-  const { data: statusRows = [], isLoading: statusLoading, isError: statusError } =
-    useCycleTimeCustomerStatus();
-  const status = matchCustomerStatus(statusRows, customer);
   const logo = getWorkcellLogo(customer);
 
   return (
@@ -76,7 +87,7 @@ export default function CycleTimeWorkcellModels() {
         <div className="flex items-center justify-between gap-4 px-6 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <button
-              onClick={() => navigate('/cycle-time/home2')}
+              onClick={() => navigate('/cycle-time/home')}
               title="All workcells"
               className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             >
@@ -101,94 +112,25 @@ export default function CycleTimeWorkcellModels() {
             <div className="min-w-0">
               <h1 className="truncate text-lg font-bold text-foreground">{customer}</h1>
               <p className="truncate text-[11px] text-muted-foreground">
-                Every model, one table — pick a row for the proof, open the page for the detail
+                Pick a row for the proof, open the page for the detail
               </p>
             </div>
           </div>
 
-          <AssemblyCoverageCard
-            total={status?.NoOfAssemblies ?? null}
-            withData={status?.NoOfAssembliesWithData ?? null}
-            pct={status?.Complete ?? null}
-            loading={statusLoading}
-            unavailable={!statusLoading && (statusError || !status)}
-          />
+        </div>
+        <div className="px-6">
+          <UnderlineTabs tabs={TABS} active={tab} onChange={setTab} />
         </div>
       </div>
 
+      {/* No overflow here. CompletionDataTable is `h-full` and runs its own
+          scrollers; wrapping it in a second one collapsed its height and let the
+          table spill. Only the registry panel, which is plain flow content,
+          needs a scroller of its own. */}
       <div className="min-h-0 flex-1">
-        <CompletionDataTable lockedWorkcell={customer} universeToggle />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Total vs with-data assemblies, from IEDB's own CustomerStatus report — the
- * same source the workcell league table ranks on, so the two can never
- * disagree. The gap between the two numbers is the point.
- */
-function AssemblyCoverageCard({
-  total, withData, pct, loading, unavailable,
-}: {
-  total: number | null;
-  withData: number | null;
-  pct: number | null;
-  loading?: boolean;
-  unavailable?: boolean;
-}) {
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="text-[11px]">Loading coverage…</span>
-      </div>
-    );
-  }
-  if (unavailable) {
-    return (
-      <div className="flex items-center rounded-lg border border-border bg-card px-3.5 py-2">
-        <span className="text-[11px] italic text-muted-foreground">Can't fetch coverage data</span>
-      </div>
-    );
-  }
-
-  const tone =
-    pct == null ? 'text-muted-foreground'
-    : pct >= 90 ? 'text-emerald-400'
-    : pct >= 50 ? 'text-amber-400'
-    : 'text-red-400';
-  const bar =
-    pct == null ? 'bg-muted-foreground/30'
-    : pct >= 90 ? 'bg-emerald-500'
-    : pct >= 50 ? 'bg-amber-400'
-    : 'bg-red-500';
-
-  return (
-    <div className="flex flex-shrink-0 items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-2">
-      <div className="text-right leading-none">
-        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">With data</div>
-        <div className="mt-1 font-mono text-lg font-black tabular-nums text-emerald-400">
-          {withData == null ? '…' : withData.toLocaleString()}
-        </div>
-      </div>
-
-      <span className="text-muted-foreground/40">/</span>
-
-      <div className="text-right leading-none">
-        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Total</div>
-        <div className="mt-1 font-mono text-lg font-black tabular-nums text-foreground">
-          {total == null ? '…' : total.toLocaleString()}
-        </div>
-      </div>
-
-      <div className="ml-1 w-16">
-        <div className={cn('text-right font-mono text-xs font-semibold tabular-nums', tone)}>
-          {pct == null ? '—' : `${pct}%`}
-        </div>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted/50">
-          <div className={cn('h-full rounded-full transition-all', bar)} style={{ width: `${pct ?? 0}%` }} />
-        </div>
+        {tab === 'models'
+          ? <CompletionDataTable lockedWorkcell={customer} universeToggle />
+          : <div className="h-full overflow-auto p-6"><ProcessRegistryPanel workcell={customer} /></div>}
       </div>
     </div>
   );

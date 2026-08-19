@@ -22,22 +22,25 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Search } from 'lucide-react';
 
 import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
 import { cn } from '@/lib/utils';
 import { cycleTimeApi } from '@/lib/cycle_time/cycleTimeApi';
 import {
   useCycleTimeAssemblyBuilds,
+  useCycleTimeBom,
   useCycleTimeCompletionSteps,
   useCycleTimeLineMetrics,
 } from '@/hooks/cycle_time/useCycleTimeData';
 import { IpkView, LbrView, MetricsGate, RouteView } from './RouteComparisonDrawer';
 
 const TABS = [
-  { key: 'overview', label: 'Overview' },
+  // Overview is gone: it restated the header — status, revision, workcenter —
+  // for a reader who had just read them, and made "Cycle time" cost a click.
   { key: 'ct',       label: 'Cycle time' },
   { key: 'steps',    label: 'Steps' },
+  { key: 'bom',      label: 'BOM' },
   { key: 'lbr',      label: 'LBR' },
   { key: 'ipk',      label: 'IPK' },
 ] as const;
@@ -78,7 +81,7 @@ const n = (v: number | null | undefined) =>
 export default function CycleTimeModel() {
   const navigate = useNavigate();
   const { customer = '', assembly = '' } = useParams();
-  const [tab, setTab] = useState<TabKey>('overview');
+  const [tab, setTab] = useState<TabKey>('ct');
 
   // The workcell's full model list, filtered to this one. Cached and shared with
   // the workcell page, so arriving here costs no extra request in practice.
@@ -107,6 +110,11 @@ export default function CycleTimeModel() {
   const [rev, setRev] = useState<string | null>(null);
   const activeRev = rev && revisions.includes(rev) ? rev : revisions[0] ?? null;
 
+  // The BOM comes from MES, the revision picker from IEDB. They do not always
+  // hold the same revisions, so the server falls back and flags it rather than
+  // returning an empty BOM for a model that has one.
+  const bom = useCycleTimeBom(customer, assembly, activeRev);
+
   const meta = model?.verdict ? STATUS[model.verdict] : undefined;
 
   return (
@@ -114,7 +122,7 @@ export default function CycleTimeModel() {
       <div className="border-b border-border">
         <div className="flex items-start gap-3 px-6 pt-4 pb-3">
           <button
-            onClick={() => navigate(`/cycle-time/wc/${encodeURIComponent(customer)}`)}
+            onClick={() => navigate(`/cycle-time/${encodeURIComponent(customer)}`)}
             title="Back to the workcell"
             className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
           >
@@ -138,7 +146,7 @@ export default function CycleTimeModel() {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 px-6">
-          <UnderlineTabs tabs={TABS} active={tab} onChange={setTab} />
+          <UnderlineTabs tabs={TABS} active={tab} onChange={(k) => setTab(k as TabKey)} />
           {/* Drives every tab below. Hidden at one revision, because a picker
               with a single option is furniture, not a control. */}
           {revisions.length > 1 && (
@@ -162,12 +170,12 @@ export default function CycleTimeModel() {
           <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : tab === 'overview' ? (
-          <Overview model={model} />
         ) : tab === 'ct' ? (
           <CycleTimeTab q={builds} revision={activeRev} />
         ) : tab === 'steps' ? (
           <RouteView q={steps} />
+        ) : tab === 'bom' ? (
+          <BomTab q={bom} />
         ) : tab === 'lbr' ? (
           <MetricsGate q={lm}>{(m) => <LbrView lm={m} />}</MetricsGate>
         ) : (
@@ -178,33 +186,130 @@ export default function CycleTimeModel() {
   );
 }
 
-/** Status, the split gap, and the demand behind it — the "should I care?" tab. */
-function Overview({ model }: { model?: Record<string, unknown> }) {
-  if (!model) {
+/**
+ * The MES BOM for this model — what actually goes onto the board.
+ *
+ * WHY THE EMPTY STATES ARE THREE AND NOT ONE
+ *   "No BOM" hides which of three different things happened, and they need
+ *   different people to fix them:
+ *     - the assembly is not in MES at all            -> a naming/mapping problem
+ *     - MES has it but no BOM was ever loaded        -> nothing we can do; all of
+ *       LAMGB and ~26% of MES look like this, and it is not an error
+ *     - the mart has not been pulled yet             -> run the pipeline
+ *   Collapsing them into one grey message is how "the BOM tab is broken" gets
+ *   reported for a model whose BOM genuinely does not exist.
+ */
+function BomTab({ q }: { q: ReturnType<typeof useCycleTimeBom> }) {
+  const { data, isLoading, error } = q;
+  const [find, setFind] = useState('');
+
+  const rows = useMemo(() => {
+    const all = data?.materials ?? [];
+    const k = find.trim().toUpperCase();
+    if (!k) return all;
+    return all.filter(m =>
+      String(m.material ?? '').toUpperCase().includes(k) ||
+      String(m.description ?? '').toUpperCase().includes(k));
+  }, [data, find]);
+
+  if (isLoading) {
+    return <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  }
+  if (error) {
+    return <div className="p-6 text-sm text-rose-600">{(error as Error).message}</div>;
+  }
+  if (!data?.in_mes) {
     return <div className="p-8 text-center text-sm text-muted-foreground">
-      This model is not in the workcell's list. It may belong to another workcell.
+      This assembly is not in MES under this name, so there is no BOM to read.
     </div>;
   }
-  const m = model as Record<string, number | string | boolean | null>;
-  const rows: [string, React.ReactNode, string?][] = [
-    ['In IEDB catalogue', m.in_iedb_catalog ? 'Yes' : 'No',
-      'Whether IEDB lists the model at all — separate from whether anyone timed it'],
-    ['Has cycle time', m.has_cycle_time ? 'Yes' : 'No'],
-    ['Built in last 24 months', m.in_mes_history ? 'Yes' : 'No'],
-    ['In forward demand', m.in_demand ? 'Yes' : 'No', 'Planner 13-week or eDash ~4-week'],
-    ['Demand units', n(m.units as number)],
-    ['Next build', (m.next_build as string) || '—'],
-    ['Last build', (m.last_build as string) || '—'],
-  ];
+  if (!data.has_bom) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">
+      MES has this assembly but no BOM was ever loaded for it.
+    </div>;
+  }
+  // A real BOM we simply have not fetched. Saying "no BOM" here would blame MES
+  // for our own pull scope, and send someone to fix a BOM that is already fine.
+  if (!data.in_mart) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">
+      MES has BOM <span className="font-mono text-foreground">{data.bom_id}</span> for this model,
+      but we have not pulled its materials yet — the mart currently covers the planner list only.
+    </div>;
+  }
+
+  const total = data.materials.length;
   return (
-    <div className="max-w-2xl space-y-1 p-6">
-      {rows.map(([k, v, hint]) => (
-        <div key={k} title={hint}
-             className="flex items-baseline justify-between gap-4 border-b border-border py-2 last:border-0">
-          <span className="text-xs text-muted-foreground">{k}</span>
-          <span className="text-sm font-medium tabular-nums">{v}</span>
+    <div className="space-y-3 overflow-x-auto p-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px]">
+        <span className="text-muted-foreground">
+          BOM <span className="font-mono font-medium text-foreground">{data.bom_id}</span>
+        </span>
+        <span className="text-muted-foreground">
+          rev <span className="font-mono font-medium text-foreground">{data.revision}</span>
+        </span>
+        <span className="text-muted-foreground">
+          <span className="font-medium text-foreground">{total.toLocaleString()}</span> materials
+        </span>
+        {/* MES reuses one BOM across revisions. Saying so stops an engineer
+            hunting for a difference that does not exist. */}
+        {data.revisions.filter(r => r.bom_id === data.bom_id).length > 1 && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+            shared by rev{' '}
+            {data.revisions.filter(r => r.bom_id === data.bom_id).map(r => r.revision).join(', ')}
+          </span>
+        )}
+        {/* The picker asked for a revision MES does not have. */}
+        {data.revision_matched === false && data.requested_revision && (
+          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400">
+            MES has no rev {data.requested_revision} — showing {data.revision}
+          </span>
+        )}
+        <label className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={find}
+            onChange={(e) => setFind(e.target.value)}
+            placeholder="Filter material or description"
+            className="w-56 rounded-md border border-border bg-background py-1 pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground"
+          />
+        </label>
+      </div>
+
+      <table className="w-full text-xs">
+        <thead className="bg-muted/50 text-left">
+          <tr className="[&>th]:whitespace-nowrap [&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+            <th className="text-right">#</th>
+            <th>Material</th>
+            <th>Description</th>
+            <th className="text-right">Qty</th>
+            <th className="text-right">Level</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 1000).map((m, i) => (
+            <tr key={m.bom_material_id ?? i}
+                className="border-t border-border [&>td]:px-3 [&>td]:py-1.5">
+              <td className="text-right tabular-nums text-muted-foreground/60">{i + 1}</td>
+              <td className="whitespace-nowrap font-mono font-medium">{m.material ?? '—'}</td>
+              <td className="text-muted-foreground">{m.description ?? '—'}</td>
+              <td className="whitespace-nowrap text-right font-semibold tabular-nums">{n(m.qty)}</td>
+              <td className="whitespace-nowrap text-right tabular-nums text-muted-foreground">{m.bom_level ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {!rows.length && (
+        <div className="p-6 text-center text-sm text-muted-foreground">
+          No material matches "{find}".
         </div>
-      ))}
+      )}
+      {rows.length > 1000 && (
+        <div className="pt-2 text-[11px] text-muted-foreground">
+          showing the first 1,000 of {rows.length.toLocaleString()} rows
+        </div>
+      )}
     </div>
   );
 }

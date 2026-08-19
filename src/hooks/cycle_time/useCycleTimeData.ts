@@ -124,10 +124,18 @@ export function useCycleTimeCompletion() {
  *  Filtering is done client-side from one payload: the whole list is ~3.9k rows
  *  and the picker changes constantly, so re-fetching per selection would be far
  *  more traffic than sending it once. */
-export function useCycleTimeCompletionDemand() {
+export function useCycleTimeCompletionDemand(workcell?: string) {
+  // Unscoped is 43,020 models / 24.8 MB of JSON, and the global report needs it
+  // that way — its picker changes constantly and re-fetching per selection is
+  // far more traffic than sending it once. A LOCKED workcell page has no picker:
+  // the workcell cannot change, and it was downloading all 38 workcells to draw
+  // one. Scoped, ARISTA is 61 KB instead of 660 KB on the wire.
+  //
+  // The key carries the scope, so the locked page and the global report hold
+  // separate cache entries and neither can serve the other the wrong rows.
   return useQuery({
-    queryKey: [...ctKeys.all, 'completionDemand'] as const,
-    queryFn:  () => cycleTimeApi.completion.demand(),
+    queryKey: [...ctKeys.all, 'completionDemand', workcell ?? ''] as const,
+    queryFn:  () => cycleTimeApi.completion.demand(workcell ? { workcells: workcell } : undefined),
     staleTime: 30 * 60_000,
   });
 }
@@ -163,6 +171,19 @@ export function useCycleTimeLineMetrics(customer: string | undefined, assembly: 
   return useQuery({
     queryKey: [...ctKeys.all, 'lineMetrics', customer ?? '', assembly ?? ''] as const,
     queryFn:  ({ signal }) => cycleTimeApi.completion.lineMetrics(customer!, assembly!, signal),
+    enabled:  Boolean(customer && assembly),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** MES BOM materials for one model, at one revision. `revision` undefined lets
+ *  the server pick the newest revision that has a BOM. */
+export function useCycleTimeBom(
+  customer: string | undefined, assembly: string | undefined, revision?: string | null,
+) {
+  return useQuery({
+    queryKey: [...ctKeys.all, 'bom', customer ?? '', assembly ?? '', revision ?? ''] as const,
+    queryFn:  ({ signal }) => cycleTimeApi.bom.get(customer!, assembly!, revision ?? undefined, signal),
     enabled:  Boolean(customer && assembly),
     staleTime: 30 * 60_000,
   });

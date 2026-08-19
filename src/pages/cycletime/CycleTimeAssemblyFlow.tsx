@@ -639,7 +639,7 @@ function FlowList({
                   <button
                     type="button"
                     title="Open this model"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/cycle-time/wc/${encodeURIComponent(customer)}/${encodeURIComponent(a.assembly)}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/cycle-time/${encodeURIComponent(customer)}/${encodeURIComponent(a.assembly)}`); }}
                     className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <ArrowUpRight className="h-3.5 w-3.5" />

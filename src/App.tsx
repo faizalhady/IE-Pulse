@@ -6,7 +6,6 @@ import { AppProvider, useApp } from "@/context/AppContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
-import CycleTimeWorkcell from "@/pages/cycletime/CycleTimeWorkcell";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
 import CycleTime4QReport from "@/pages/cycletime/CycleTime4QReport";
 import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
@@ -14,6 +13,7 @@ import IncompletionReport from "@/pages/cycletime/IncompletionReport";
 import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail";
 import PlantRunnerDashboard from "@/pages/cycletime/PlantRunnerDashboard";
 import ProcessRegistry from "@/pages/cycletime/ProcessRegistry";
+import ProcessesGlobal from "@/pages/cycletime/ProcessesGlobal";
 import WorkcellCoverage from "@/pages/cycletime/WorkcellCoverage";
 import CycleTimeHomeNew from "@/pages/cycletime/CycleTimeHomeNew";
 import CycleTimeModel from "@/pages/cycletime/CycleTimeModel";
@@ -77,9 +77,27 @@ import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import MapPage from "./pages/MapPage";
 import DowntimeManagement from "./pages/ole/DowntimeManagement";
+
+/** The retired cycle-time URLs, kept alive as redirects.
+ *
+ *  `/cycle-time/wc/:customer` and `/cycle-time/models/:customer` both now mean
+ *  `/cycle-time/:customer`. `replace` so the dead URL does not sit in history —
+ *  otherwise Back lands on the redirect and bounces the user forward again.
+ *  The query string rides along: RegistrySearch and PlantRunnerDashboard both
+ *  deep-link with `?tab=`. */
+function RedirectWorkcell() {
+  const { customer = '' } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={`/cycle-time/${encodeURIComponent(customer)}${search}`} replace />;
+}
+
+function RedirectModel() {
+  const { customer = '', assembly = '' } = useParams();
+  return <Navigate to={`/cycle-time/${encodeURIComponent(customer)}/${encodeURIComponent(assembly)}`} replace />;
+}
 
 const queryClient = new QueryClient();
 
@@ -152,12 +170,19 @@ function AppShell() {
             </>}
 
             {includesApp('cycle-time') && <>
-              <Route path="/cycle-time" element={<Navigate to="/cycle-time/workcells" replace />} />
+              {/* /cycle-time/home is the landing page. */}
+              <Route path="/cycle-time" element={<Navigate to="/cycle-time/home" replace />} />
               <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
-              <Route path="/cycle-time/wc/:customer" element={<CycleTimeWorkcell />} />
-              <Route path="/cycle-time/wc/:customer/:assembly" element={<CycleTimeModel />} />
-              {/* candidate — one table, two scopes. Judged against the wc page. */}
-              <Route path="/cycle-time/models/:customer" element={<CycleTimeWorkcellModels />} />
+
+              {/* The OLD workcell page is gone. Not merely unlinked — routed to
+                  a redirect, because unlinking leaves it alive at a URL that is
+                  still in browser history, in bookmarks and in Teams messages,
+                  and someone reading yesterday's numbers off a page nobody
+                  maintains is worse than a 404. Same for the interim
+                  /models/:customer shape. */}
+              <Route path="/cycle-time/wc/:customer" element={<RedirectWorkcell />} />
+              <Route path="/cycle-time/wc/:customer/:assembly" element={<RedirectModel />} />
+              <Route path="/cycle-time/models/:customer" element={<RedirectWorkcell />} />
               <Route path="/cycle-time/completion" element={<DemandCompletionReport />} />
               <Route path="/cycle-time/4q" element={<CycleTime4QReport />} />
               <Route path="/cycle-time/incompletion" element={<IncompletionReport />} />
@@ -165,8 +190,19 @@ function AppShell() {
               <Route path="/cycle-time/plant-runners" element={<PlantRunnerDashboard />} />
               <Route path="/cycle-time/coverage" element={<WorkcellCoverage />} />
               {/* TEMP: candidate landing page. One of these two goes. */}
-              <Route path="/cycle-time/home2" element={<CycleTimeHomeNew />} />
+              <Route path="/cycle-time/home" element={<CycleTimeHomeNew />} />
+              {/* /home2 was the candidate URL and is in people's history and
+                  bookmarks. Redirect rather than 404 them. */}
+              <Route path="/cycle-time/home2" element={<Navigate to="/cycle-time/home" replace />} />
               <Route path="/cycle-time/registry" element={<ProcessRegistry />} />
+              <Route path="/cycle-time/processes" element={<ProcessesGlobal />} />
+
+              {/* Last, and dynamic. Every static route above out-ranks these in
+                  React Router's scoring, so a workcell can never shadow /home.
+                  A workcell literally named "home" would — nothing in
+                  CT_CUSTOMERS is, and the redirect above keeps old links alive. */}
+              <Route path="/cycle-time/:customer" element={<CycleTimeWorkcellModels />} />
+              <Route path="/cycle-time/:customer/:assembly" element={<CycleTimeModel />} />
             </>}
 
             {includesApp('ppqt') && <>

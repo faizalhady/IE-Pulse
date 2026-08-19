@@ -221,7 +221,7 @@ export default function CycleTimeWorkcells() {
             return (
               <button
                 key={r.customer}
-                onClick={() => navigate(`/cycle-time/wc/${encodeURIComponent(r.customer)}`)}
+                onClick={() => navigate(`/cycle-time/${encodeURIComponent(r.customer)}`)}
                 className="group grid items-center w-full text-left border-b border-border last:border-0 hover:bg-muted/30 transition-colors relative"
                 style={{ gridTemplateColumns: GRID, height: 60 }}
               >

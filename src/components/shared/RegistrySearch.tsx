@@ -80,8 +80,8 @@ export function RegistrySearch({ className }: { className?: string }) {
     const wc = encodeURIComponent(h.workcell);
     // A process hit lands on the workcell's Processes tab — the only place the
     // MES/IEDB names sit side by side.
-    if (h.kind === 'process') navigate(`/cycle-time/wc/${wc}?tab=registry`);
-    else navigate(`/cycle-time/wc/${wc}`);
+    if (h.kind === 'process') navigate(`/cycle-time/${wc}?tab=registry`);
+    else navigate(`/cycle-time/${wc}`);
   }
 
   return (

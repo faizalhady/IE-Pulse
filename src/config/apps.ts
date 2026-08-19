@@ -28,6 +28,7 @@ import {
   Truck,
   UploadCloud,
   UserCheck,
+  Workflow,
   Wrench
 } from 'lucide-react';
 import { createElement } from 'react';
@@ -133,18 +134,27 @@ export const APPS: AppConfig[] = [
     basename: '/ietools/cycle-time',
     category: 'Analytics',
     navItems: [
-      { label: 'Home', to: '/cycle-time/workcells', icon: Home },
-      { label: 'Report', to: '/cycle-time/completion', icon: ClipboardList },
-      { label: 'Coverage', to: '/cycle-time/coverage', icon: Layers },
-      { label: 'Home (new)', to: '/cycle-time/home2', icon: Layers },   // TEMP: candidate landing page
-      { label: 'Process Registry', to: '/cycle-time/registry', icon: BookOpen },
+      { label: 'Home', to: '/cycle-time/home', icon: Home },
+      { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
+      // Every (workcell, MES step) couple in the plant. The workcell page's
+      // Processes tab is this same table locked to one workcell — same
+      // component, so the two can never disagree about a step's mapping.
+      { label: 'Processes', to: '/cycle-time/processes', icon: Workflow },
       // Hidden from the sidebar (routes still work):
+      //  • Report → now the second tab on Home, not its own destination
+      //  • Coverage → superseded by Home, which is the same table plus identity
+      //  • Process Registry → reached from a workcell's Processes tab, where
+      //    the question ("what do we call this step HERE") is actually asked
+      //  • Home (old) → the /workcells league table, replaced by /home
+      // { label: 'Report', to: '/cycle-time/completion', icon: ClipboardList },
+      // { label: 'Coverage', to: '/cycle-time/coverage', icon: Layers },
+      // { label: 'Process Registry', to: '/cycle-time/registry', icon: BookOpen },
+      // { label: 'Home (old)', to: '/cycle-time/workcells', icon: Layers },
       //  • 4Q Report → reached from the Incompletion Report's "4Q Report" link
       //  • Plant Runners → the older runner-based incompletion view
       //  • Incompletion (old) → superseded by /cycle-time/completion
       //  • Assemblies → now lives in the workcell Breakdown→Assemblies tab
       //  • Data → still reachable directly at /cycle-time/data
-      // { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
       // { label: 'Plant Runners', to: '/cycle-time/plant-runners', icon: Building2 },
       // { label: 'Incompletion Report', to: '/cycle-time/incompletion', icon: ClipboardList },
       // { label: 'Assemblies', to: '/cycle-time/assemblies', icon: Boxes },

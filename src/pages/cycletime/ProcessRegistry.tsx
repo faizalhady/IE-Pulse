@@ -9,41 +9,39 @@
  *   scan 27%, by bay 55%. A wrong mapping is worse than a blank, so they come
  *   here instead, to the engineer who works the line.
  *
- * THE DESIGN IS DRIVEN BY ONE NUMBER
- *   ~3,300 open questions plant-wide.
- *      3,300 x 30s = 27 hours   nobody finishes
- *      3,300 x  3s =  2.7 h     split across 24 owners = 7 min each
- *   So: one question on screen, evidence above it, keyboard, auto-advance, no
- *   save button. A mouse round-trip per question is what turns 3s into 30.
+ * TWO TABS, NOT THREE
+ *   Processes  every (workcell, MES step) couple MES scanned, with its IEDB
+ *              counterpart, editable, filterable by mapped/unmapped. This IS
+ *              the objective — 5,344 couples plant-wide, 983 still unmapped.
+ *   Questions  the same unanswered steps, but carrying the evidence that only
+ *              exists for them: which bay, what was scanned before and after,
+ *              and which IEDB names live on that line.
  *
- *   Sorted by scans DESCENDING, never alphabetically — someone who answers the
- *   top 20 and stops has still covered most of the volume.
+ *   A "Browse" tab used to sit between them, showing merged process keys across
+ *   both systems. It answered a question nobody was asking here, and answered
+ *   it wrong — 234 of LAM RESEARCH's 479 MES steps appeared in no Browse row at
+ *   all, 149 of them already mapped. Removed rather than repaired: the merge it
+ *   read from is built in the registry repo, not here.
  *
- *   "Don't know" is a first-class answer. Without it one hard step stalls the
- *   queue and the tab gets closed.
+ * THE QUEUE IS A LIST NOW
+ *   It used to serve one question at a time, keyboard-driven, auto-advancing.
+ *   That is the right shape for 3,300 questions and the wrong one for the 141
+ *   that actually carry evidence — you cannot see how much is left, cannot skip
+ *   to the one you know, and cannot answer four spellings of one name together.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, HelpCircle, Link2, Loader2, Pencil, SkipForward, Table2, Wrench } from 'lucide-react';
+import { HelpCircle, Loader2, Table2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  cycleTimeApi, type RegistryAnswer, type RegistryProcess, type RegistryQuestion,
-} from '@/lib/cycle_time/cycleTimeApi';
+import { cycleTimeApi, type RegistryQuestion } from '@/lib/cycle_time/cycleTimeApi';
+import { cn } from '@/lib/utils';
 
-/** What each `source` means, in the words someone reading it needs. */
-const SOURCE: Record<string, { label: string; cls: string }> = {
-  both:         { label: 'agreed',            cls: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
-  iedb_only:    { label: 'IEDB only',         cls: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
-  mes_only:     { label: 'no cycle time',     cls: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
-  mes_non_iedb: { label: 'rework / handling', cls: 'bg-muted text-muted-foreground border-border' },
-};
+import ProcessTable from './ProcessTable';
 
 /** "FVT#2(1035) HLA#3(7)" → [{key:'FVT#2', n:1035}, …] */
 function parseNeighbours(s: string) {
@@ -53,34 +51,35 @@ function parseNeighbours(s: string) {
   });
 }
 
-function Neighbours({ label, value }: { label: string; value: string }) {
+function Neighbours({ value }: { value: string }) {
   const items = parseNeighbours(value);
+  if (items.length === 0) return <span className="text-muted-foreground/50">—</span>;
   return (
-    <div className="min-w-0">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      {items.length === 0
-        ? <div className="text-sm text-muted-foreground/60">—</div>
-        : (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {items.map((i) => (
-              <span key={i.key} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                {i.key}
-                {i.n > 0 && <span className="ml-1 text-muted-foreground">×{i.n}</span>}
-              </span>
-            ))}
-          </div>
-        )}
-    </div>
+    <span className="flex flex-wrap gap-1">
+      {items.map((i) => (
+        <span key={i.key} className="rounded bg-muted px-1 py-px font-mono text-[10px]">
+          {i.key}{i.n > 0 && <span className="ml-0.5 text-muted-foreground">×{i.n}</span>}
+        </span>
+      ))}
+    </span>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * The queue — one question at a time
+ * Questions — every unanswered step at once, with its evidence.
+ *
+ * Sorted by scans DESCENDING, never alphabetically. Someone who answers the
+ * top 20 and stops has still covered most of the volume; alphabetical order
+ * would spend their attention on a step scanned once.
+ *
+ * "Don't know" is a first-class answer. Without it one hard step stalls the
+ * list and the tab gets closed.
  * ───────────────────────────────────────────────────────────────────────── */
-function AnswerQueue({ workcell }: { workcell: string }) {
+function QuestionsList({ workcell }: { workcell: string }) {
   const qc = useQueryClient();
-  const [i, setI] = useState(0);
-  const [custom, setCustom] = useState('');
+  const [filter, setFilter] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const { data: questions = [], isLoading } = useQuery({
     queryKey: ['registry-questions', workcell],
@@ -91,346 +90,167 @@ function AnswerQueue({ workcell }: { workcell: string }) {
     queryFn: () => cycleTimeApi.registry.aliases(workcell),
   });
 
-  const total = questions.length;
-  const q: RegistryQuestion | undefined = questions[i];
-
-  const decide = useMutation({
-    mutationFn: cycleTimeApi.registry.decide,
-    // Advance immediately, refresh in the background. Waiting for a round-trip
-    // between questions is exactly the 3s→30s tax this page exists to avoid.
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['registry-workcells'] }); },
-  });
-
-  const answer = useCallback((a: RegistryAnswer, alias?: string) => {
-    if (!q) return;
-    decide.mutate({
-      workcell, mes_step: q.mes_step, answer: a, iedb_alias: alias,
-      evidence: `before: ${q.scanned_before || '—'} | after: ${q.scanned_after || '—'} | ${q.scans} scans`,
-    });
-    setCustom('');
-    setI((n) => n + 1);
-  }, [q, workcell, decide]);
-
-  // Keyboard: 1-3 pick a candidate, N = not IEDB, ? = don't know, S = skip.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;   // typing a custom alias
-      if (!q) return;
-      const cands = q.candidates.slice(0, 3);
-      if (/^[1-9]$/.test(e.key)) {
-        const c = cands[Number(e.key) - 1];
-        if (c) answer('mapped', c);
-      } else if (e.key.toLowerCase() === 'n') answer('non_iedb');
-      else if (e.key === '?' || e.key === '/') answer('unknown');
-      else if (e.key.toLowerCase() === 's') setI((n) => n + 1);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [q, answer]);
-
-  useEffect(() => { setI(0); }, [workcell]);
-
-  if (isLoading) {
-    return <div className="flex items-center gap-2 p-8 text-muted-foreground">
-      <Loader2 className="h-4 w-4 animate-spin" /> loading…
-    </div>;
-  }
-  if (total === 0) {
-    return <Card className="p-8 text-center">
-      <Check className="mx-auto mb-2 h-8 w-8 text-emerald-500" />
-      <div className="font-medium">Nothing left to answer</div>
-      <div className="text-sm text-muted-foreground">
-        Every MES step in {workcell} is named.
-      </div>
-    </Card>;
-  }
-  if (!q) {
-    return <Card className="p-8 text-center">
-      <Check className="mx-auto mb-2 h-8 w-8 text-emerald-500" />
-      <div className="font-medium">Done — {total} answered</div>
-      <Button variant="outline" className="mt-3" onClick={() => setI(0)}>Start over</Button>
-    </Card>;
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Progress value={(i / total) * 100} className="h-2 flex-1" />
-        <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-          {i} of {total}
-        </span>
-      </div>
-
-      <Card className="p-5">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">MES scans</span>
-          {/* pre keeps trailing / double spaces visible — they are the evidence */}
-          <pre className="font-mono text-xl font-semibold">{q.mes_step}</pre>
-          <span className="text-sm text-muted-foreground">
-            {q.scans.toLocaleString()} times · {q.models} models{q.bay && ` · bay ${q.bay}`}
-          </span>
-        </div>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Neighbours label="scanned just before" value={q.scanned_before} />
-          <Neighbours label="scanned just after" value={q.scanned_after} />
-        </div>
-
-        <div className="mt-5 border-t pt-4">
-          <div className="mb-2 text-sm font-medium">Which IEDB process is this?</div>
-          <div className="flex flex-wrap gap-2">
-            {q.candidates.slice(0, 3).map((c, n) => (
-              <Button key={c} onClick={() => answer('mapped', c)} className="font-mono">
-                <kbd className="mr-2 rounded bg-background/20 px-1 text-[10px]">{n + 1}</kbd>{c}
-              </Button>
-            ))}
-            <Button variant="secondary" onClick={() => answer('non_iedb')}>
-              <kbd className="mr-2 rounded bg-background/40 px-1 text-[10px]">N</kbd>
-              <Wrench className="mr-1 h-3.5 w-3.5" /> Not IEDB work
-            </Button>
-            <Button variant="ghost" onClick={() => answer('unknown')}>
-              <kbd className="mr-2 rounded bg-muted px-1 text-[10px]">?</kbd>
-              <HelpCircle className="mr-1 h-3.5 w-3.5" /> Don't know
-            </Button>
-            <Button variant="ghost" onClick={() => setI((n) => n + 1)}>
-              <kbd className="mr-2 rounded bg-muted px-1 text-[10px]">S</kbd>
-              <SkipForward className="mr-1 h-3.5 w-3.5" /> Skip
-            </Button>
-          </div>
-
-          <div className="mt-3 flex gap-2">
-            <Input
-              list="registry-aliases"
-              placeholder="…or type another IEDB process"
-              value={custom}
-              onChange={(e) => setCustom(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && custom.trim()) answer('mapped', custom.trim()); }}
-              className="max-w-sm font-mono"
-            />
-            {/* The alias is what gets stored; IEDB's display name rides along as
-                the label, because `BIRTH 1` alone tells you nothing and
-                `BIRTH 1 — Label 1` tells you what it is. Model count sorts the
-                list, so the process most of the workcell runs is offered first. */}
-            <datalist id="registry-aliases">
-              {aliases.map((a) => (
-                <option key={a.alias} value={a.alias}>
-                  {a.process && a.process !== a.alias ? `${a.process} · ` : ''}{a.models} models
-                </option>
-              ))}
-            </datalist>
-            <Button variant="outline" disabled={!custom.trim()}
-                    onClick={() => answer('mapped', custom.trim())}>Use this</Button>
-          </div>
-        </div>
-
-        {/* The suggestion is shown LAST and never pre-selected. Measured at 27-38%
-            accurate, it is a hint, not a default — a pre-filled wrong answer is
-            how a bad mapping gets clicked through. */}
-        {q.suggestion && (
-          <div className="mt-3 text-xs text-muted-foreground">
-            guess: <span className="font-mono">{q.suggestion}</span> ({q.confidence}) —
-            low confidence, check the neighbours above
-          </div>
-        )}
-      </Card>
-
-      {decide.isError && (
-        <div className="text-sm text-rose-600">
-          Could not save: {(decide.error as Error)?.message}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- * Browse — every process, both systems' names
- * ───────────────────────────────────────────────────────────────────────── */
-function BrowseList({ workcell }: { workcell: string }) {
-  const [filter, setFilter] = useState('');
-  const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['registry-processes', workcell],
-    queryFn: () => cycleTimeApi.registry.processes(workcell),
+  const save = useMutation({
+    mutationFn: cycleTimeApi.registry.decideBulk,
+    onSuccess: () => {
+      setPicked(new Set());
+      qc.invalidateQueries({ queryKey: ['registry-questions'] });
+      qc.invalidateQueries({ queryKey: ['registry-workcells'] });
+      qc.invalidateQueries({ queryKey: ['process-list'] });
+    },
   });
 
   const shown = useMemo(() => {
     const f = filter.trim().toLowerCase();
-    if (!f) return rows;
-    return rows.filter((r: RegistryProcess) =>
-      [r.process_key, r.process_name, r.iedb_aliases, r.mes_steps]
-        .some((v) => String(v).toLowerCase().includes(f)));
-  }, [rows, filter]);
+    if (!f) return questions;
+    return questions.filter((q: RegistryQuestion) =>
+      q.mes_step.toLowerCase().includes(f) ||
+      q.candidates.some((c) => c.toLowerCase().includes(f)));
+  }, [questions, filter]);
+
+  const answer = (targets: RegistryQuestion[], ans: 'mapped' | 'non_iedb' | 'unknown',
+                  alias?: string) =>
+    save.mutate(targets.map((q) => ({
+      workcell, mes_step: q.mes_step, answer: ans,
+      iedb_alias: alias ?? drafts[q.mes_step],
+      evidence: `before: ${q.scanned_before || '—'} | after: ${q.scanned_after || '—'} | ${q.scans} scans`,
+    })));
+
+  const pickedQs = shown.filter((q: RegistryQuestion) => picked.has(q.mes_step));
 
   if (isLoading) {
     return <div className="flex items-center gap-2 p-8 text-muted-foreground">
       <Loader2 className="h-4 w-4 animate-spin" /> loading…
     </div>;
   }
+  if (questions.length === 0) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">
+      Nothing left to answer for this workcell.
+    </div>;
+  }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Input placeholder="filter by any name…" value={filter}
-               onChange={(e) => setFilter(e.target.value)} className="max-w-xs" />
-        <span className="text-sm text-muted-foreground">
-          {shown.length} of {rows.length} processes
+      <div className="flex flex-wrap items-center gap-3">
+        <Input placeholder="filter a step or candidate…" value={filter}
+          onChange={(e) => setFilter(e.target.value)} className="h-8 max-w-xs text-xs" />
+        <span className="text-xs text-muted-foreground">
+          {shown.length} of {questions.length} unanswered
         </span>
       </div>
 
+      {picked.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+          <span className="text-xs font-medium">{picked.size} selected</span>
+          <select defaultValue="" disabled={save.isPending}
+            onChange={(e) => { if (e.target.value) answer(pickedQs, 'mapped', e.target.value); }}
+            className="h-8 rounded-md border bg-background px-2 text-xs">
+            <option value="">map all to…</option>
+            {aliases.map((a) => (
+              <option key={a.alias} value={a.alias}>{a.alias} · {a.process}</option>
+            ))}
+          </select>
+          <Button size="sm" variant="secondary" disabled={save.isPending}
+            onClick={() => answer(pickedQs, 'non_iedb')}>Not IEDB</Button>
+          <Button size="sm" variant="ghost" disabled={save.isPending}
+            onClick={() => answer(pickedQs, 'unknown')}>Don’t know</Button>
+          {save.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left">
-            <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-              <th>Process</th><th>IEDB calls it</th><th>MES calls it</th>
-              <th className="text-right">Models</th><th className="text-right">Scans</th>
-              <th>Status</th>
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-muted/50 text-left">
+            <tr className="[&>th]:px-2 [&>th]:py-2 [&>th]:text-[10px] [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wider [&>th]:text-muted-foreground">
+              <th className="w-8">
+                <input type="checkbox" aria-label="Select all"
+                  checked={shown.length > 0 && picked.size === shown.length}
+                  onChange={(e) => setPicked(e.target.checked
+                    ? new Set(shown.map((q: RegistryQuestion) => q.mes_step)) : new Set())}
+                  className="h-3.5 w-3.5 accent-primary" />
+              </th>
+              <th>MES step</th>
+              <th className="text-right">Models</th>
+              <th className="text-right">Scans</th>
+              <th>Bay</th>
+              {/* The evidence that only exists for unanswered steps — and the
+                  only reason this tab is not just the Processes filter. */}
+              <th>Scanned before</th>
+              <th>Scanned after</th>
+              <th>IEDB names on that line</th>
+              <th>Answer</th>
             </tr>
           </thead>
           <tbody>
-            {shown.map((r: RegistryProcess) => {
-              const s = SOURCE[r.source] ?? { label: r.source, cls: '' };
-              return (
-                <tr key={r.process_key} className="border-t [&>td]:px-3 [&>td]:py-2">
-                  <td>
-                    <div className="font-mono font-medium">{r.process_key}</div>
-                    <div className="text-xs text-muted-foreground">{r.process_name}</div>
-                  </td>
-                  <td className="font-mono text-xs">{r.iedb_aliases || <span className="text-muted-foreground/60">—</span>}</td>
-                  <td className="font-mono text-xs">{r.mes_steps || <span className="text-muted-foreground/60">—</span>}</td>
-                  <td className="text-right tabular-nums">{r.iedb_models || r.mes_models || 0}</td>
-                  <td className="text-right tabular-nums">{(r.mes_scans || 0).toLocaleString()}</td>
-                  <td><Badge variant="outline" className={s.cls}>{s.label}</Badge></td>
-                </tr>
-              );
-            })}
+            {shown.map((q: RegistryQuestion) => (
+              <tr key={q.mes_step}
+                className={cn('border-t align-top [&>td]:px-2 [&>td]:py-1.5',
+                  picked.has(q.mes_step) && 'bg-primary/5')}>
+                <td>
+                  <input type="checkbox" checked={picked.has(q.mes_step)}
+                    aria-label={`Select ${q.mes_step}`}
+                    onChange={() => setPicked((s) => {
+                      const n = new Set(s);
+                      if (n.has(q.mes_step)) n.delete(q.mes_step); else n.add(q.mes_step);
+                      return n;
+                    })}
+                    className="h-3.5 w-3.5 accent-primary" />
+                </td>
+                {/* pre — trailing and double spaces are the evidence */}
+                <td><pre className="font-mono text-[11px]">{q.mes_step}</pre></td>
+                <td className="text-right tabular-nums">{q.models.toLocaleString()}</td>
+                <td className="text-right tabular-nums font-medium">{q.scans.toLocaleString()}</td>
+                <td className="text-muted-foreground">{q.bay || '—'}</td>
+                <td><Neighbours value={q.scanned_before} /></td>
+                <td><Neighbours value={q.scanned_after} /></td>
+                <td>
+                  <span className="flex flex-wrap gap-1">
+                    {q.candidates.length === 0
+                      ? <span className="text-muted-foreground/50">—</span>
+                      : q.candidates.map((c) => (
+                        <button key={c} type="button"
+                          onClick={() => answer([q], 'mapped', c)}
+                          title={`Map ${q.mes_step} → ${c}`}
+                          className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-px font-mono text-[10px] text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400">
+                          {c}
+                        </button>
+                      ))}
+                  </span>
+                  {q.suggestion && (
+                    <Badge variant="outline" className="mt-1 text-[10px]"
+                      title={`confidence: ${q.confidence}`}>
+                      suggests {q.suggestion}
+                    </Badge>
+                  )}
+                </td>
+                <td>
+                  <div className="flex items-center gap-1">
+                    <select value={drafts[q.mes_step] ?? ''} disabled={save.isPending}
+                      onChange={(e) => {
+                        setDrafts((d) => ({ ...d, [q.mes_step]: e.target.value }));
+                        if (e.target.value) answer([q], 'mapped', e.target.value);
+                      }}
+                      className="h-7 w-40 rounded-md border bg-background px-1 text-[11px]">
+                      <option value="">pick IEDB…</option>
+                      {aliases.map((a) => (
+                        <option key={a.alias} value={a.alias}>{a.alias} · {a.process}</option>
+                      ))}
+                    </select>
+                    <Button size="sm" variant="secondary" className="h-7 px-2 text-[10px]"
+                      disabled={save.isPending}
+                      onClick={() => answer([q], 'non_iedb')}>Not IEDB</Button>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]"
+                      disabled={save.isPending}
+                      title="Asked and could not say — not the same as nobody looking"
+                      onClick={() => answer([q], 'unknown')}>?</Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- * Steps — EVERY MES step, mapped or not, and every one of them editable.
- *
- * The Answer queue only serves the unmapped, which left a wrong mapping
- * permanent: if the workbook says `POST SOLDER INSP 2 -> MSOLDER 2` and that is
- * wrong, nothing could correct it. A mapping is a decision someone made, and
- * decisions get revised.
- * ───────────────────────────────────────────────────────────────────────── */
-const SRC: Record<string, { label: string; cls: string; tip: string }> = {
-  decision: { label: 'engineer', cls: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-              tip: 'Someone answered this here' },
-  workbook: { label: 'workbook', cls: 'bg-sky-500/10 text-sky-600 border-sky-500/20',
-              tip: 'From the hand-typed Excel sheet' },
-  auto:     { label: 'auto',     cls: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-              tip: 'Plant-wide guess — the weakest source, check it' },
-  none:     { label: 'unmapped', cls: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
-              tip: 'Nothing maps this step' },
-};
-
-function StepsList({ workcell }: { workcell: string }) {
-  const qc = useQueryClient();
-  const [q, setQ] = useState('');
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-
-  const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['registry-steps', workcell, q],
-    queryFn: () => cycleTimeApi.registry.steps(workcell, q),
-  });
-  const { data: aliases = [] } = useQuery({
-    queryKey: ['registry-aliases', workcell],
-    queryFn: () => cycleTimeApi.registry.aliases(workcell),
-  });
-
-  const save = useMutation({
-    mutationFn: cycleTimeApi.registry.decide,
-    onSuccess: () => {
-      setEditing(null);
-      qc.invalidateQueries({ queryKey: ['registry-steps'] });
-      qc.invalidateQueries({ queryKey: ['registry-workcells'] });
-      qc.invalidateQueries({ queryKey: ['registry-questions'] });
-    },
-  });
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Input placeholder="search a MES step…" value={q} onChange={(e) => setQ(e.target.value)}
-               className="max-w-xs" />
-        <span className="text-sm text-muted-foreground">
-          {isLoading ? 'loading…' : `${rows.length} steps`}
-        </span>
-      </div>
-
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left">
-            <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-              <th>MES step</th><th>maps to</th><th>from</th>
-              <th className="text-right">Scans</th><th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const s = SRC[r.source] ?? SRC.none;
-              const isEditing = editing === r.mes_step;
-              return (
-                <tr key={r.mes_step} className="border-t [&>td]:px-3 [&>td]:py-2 align-top">
-                  {/* pre — trailing and double spaces are the evidence */}
-                  <td><pre className="font-mono text-xs">{r.mes_step}</pre></td>
-                  <td>
-                    {isEditing ? (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Input list="registry-aliases-edit" autoFocus value={draft}
-                               onChange={(e) => setDraft(e.target.value)}
-                               onKeyDown={(e) => {
-                                 if (e.key === 'Enter' && draft.trim()) {
-                                   save.mutate({ workcell, mes_step: r.mes_step,
-                                     answer: 'mapped', iedb_alias: draft.trim() });
-                                 }
-                                 if (e.key === 'Escape') setEditing(null);
-                               }}
-                               className="h-8 w-48 font-mono text-xs" placeholder="IEDB process…" />
-                        <datalist id="registry-aliases-edit">
-                          {aliases.map((a) => <option key={a} value={a} />)}
-                        </datalist>
-                        <Button size="sm" disabled={!draft.trim()}
-                                onClick={() => save.mutate({ workcell, mes_step: r.mes_step,
-                                  answer: 'mapped', iedb_alias: draft.trim() })}>Save</Button>
-                        <Button size="sm" variant="secondary"
-                                onClick={() => save.mutate({ workcell, mes_step: r.mes_step,
-                                  answer: 'non_iedb' })}>Not IEDB</Button>
-                        <Button size="sm" variant="ghost"
-                                onClick={() => setEditing(null)}>Cancel</Button>
-                      </div>
-                    ) : (
-                      <span className="font-mono text-xs">
-                        {r.iedb_alias || r.process_key ||
-                          <span className="text-muted-foreground/60">—</span>}
-                      </span>
-                    )}
-                  </td>
-                  <td><Badge variant="outline" className={s.cls} title={s.tip}>{s.label}</Badge>
-                      {r.decided_by && <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        {r.decided_by}</div>}</td>
-                  <td className="text-right tabular-nums">{r.scans.toLocaleString()}</td>
-                  <td className="text-right">
-                    {!isEditing && (
-                      <Button size="sm" variant="ghost"
-                              onClick={() => { setEditing(r.mes_step); setDraft(r.iedb_alias || ''); }}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {save.isError && <div className="text-sm text-rose-600">
+      {save.isError && <div className="text-xs text-rose-600">
         Could not save: {(save.error as Error)?.message}</div>}
     </div>
   );
@@ -440,10 +260,10 @@ function StepsList({ workcell }: { workcell: string }) {
  * The panel — used twice: standalone on /cycle-time/registry with a workcell
  * picker, and embedded in the workcell page with the workcell locked.
  *
- * Answer/Browse are PILL tabs, not another UnderlineTabs row. On the workcell
- * page this sits under the page's own underline tabs, and two identical tab
- * rows stacked is unreadable — the eye cannot tell which level it is on. Pills
- * read as a sub-control of the tab above them.
+ * Processes/Questions are PILL tabs, not another UnderlineTabs row. On the
+ * workcell page this sits under the page's own underline tabs, and two
+ * identical tab rows stacked is unreadable — the eye cannot tell which level it
+ * is on. Pills read as a sub-control of the tab above them.
  * ───────────────────────────────────────────────────────────────────────── */
 export function ProcessRegistryPanel({ workcell }: { workcell: string }) {
   const { data: workcells = [] } = useQuery({
@@ -456,41 +276,42 @@ export function ProcessRegistryPanel({ workcell }: { workcell: string }) {
   const norm = (s: string) => s.replace(/[^a-z0-9]/gi, '').toUpperCase();
   const wc = workcells.find((w) => norm(w.workcell) === norm(workcell));
   const left = wc?.questions_left ?? 0;
+  const target = wc?.workcell ?? workcell;
 
   return (
-    <Tabs defaultValue={left > 0 ? 'answer' : 'browse'} className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <Tabs defaultValue="processes" className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 sm:px-6">
         <TabsList>
-          <TabsTrigger value="answer" className="gap-1.5">
-            <HelpCircle className="h-3.5 w-3.5" /> Answer
+          <TabsTrigger value="processes" className="gap-1.5">
+            <Table2 className="h-3.5 w-3.5" /> Processes
+          </TabsTrigger>
+          <TabsTrigger value="questions" className="gap-1.5">
+            <HelpCircle className="h-3.5 w-3.5" /> Questions
             {left > 0 && (
               <span className="ml-1 rounded bg-primary/15 px-1.5 text-xs tabular-nums">{left}</span>
             )}
-          </TabsTrigger>
-          <TabsTrigger value="browse" className="gap-1.5">
-            <Table2 className="h-3.5 w-3.5" /> Browse
-          </TabsTrigger>
-          <TabsTrigger value="steps" className="gap-1.5">
-            <Link2 className="h-3.5 w-3.5" /> Mapping
           </TabsTrigger>
         </TabsList>
         {wc && (
           <div className="flex flex-wrap gap-1.5 text-xs">
             <Badge variant="outline">{wc.processes} processes</Badge>
-            <Badge variant="outline" className={SOURCE.both.cls}>{wc.agreed} agreed</Badge>
-            <Badge variant="outline" className={SOURCE.mes_only.cls}>{wc.gap} no cycle time</Badge>
+            <Badge variant="outline"
+              className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600">
+              {wc.agreed} agreed</Badge>
+            <Badge variant="outline"
+              className="border-rose-500/20 bg-rose-500/10 text-rose-600">
+              {wc.gap} no cycle time</Badge>
           </div>
         )}
       </div>
 
-      <TabsContent value="answer" className="mt-0">
-        <AnswerQueue workcell={wc?.workcell ?? workcell} />
+      {/* -mt-4, because ProcessTable brings its own padding — it is the same
+          full-height table the models tab uses and runs its own scrollers. */}
+      <TabsContent value="processes" className="mt-0 min-h-0 flex-1">
+        <ProcessTable workcell={target} scope="scanned" />
       </TabsContent>
-      <TabsContent value="browse" className="mt-0">
-        <BrowseList workcell={wc?.workcell ?? workcell} />
-      </TabsContent>
-      <TabsContent value="steps" className="mt-0">
-        <StepsList workcell={wc?.workcell ?? workcell} />
+      <TabsContent value="questions" className="mt-0 min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+        <QuestionsList workcell={target} />
       </TabsContent>
     </Tabs>
   );
@@ -506,33 +327,33 @@ export default function ProcessRegistry() {
   });
 
   // Land on the workcell with the most unanswered — that is where the work is.
-  useEffect(() => {
-    if (!workcell && workcells.length) setWorkcell(workcells[0].workcell);
-  }, [workcells, workcell]);
+  const first = workcells[0]?.workcell ?? '';
+  const active = workcell || first;
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-      <div>
+    <div className="flex h-full w-full flex-col">
+      <div className="border-b px-4 py-4 sm:px-6">
         <h1 className="text-xl font-semibold">Process registry</h1>
         <p className="text-sm text-muted-foreground">
-          Every process a workcell runs, and what MES and IEDB each call it.
-          Where nobody has said what a step is, answer it here.
+          Every MES step a workcell scans, and what IEDB calls it. Where nobody
+          has said what a step is, answer it here.
         </p>
+        <select
+          value={active}
+          onChange={(e) => setWorkcell(e.target.value)}
+          className="mt-3 h-9 rounded-md border bg-background px-3 text-sm"
+        >
+          {workcells.map((w) => (
+            <option key={w.workcell} value={w.workcell}>
+              {w.workcell}{w.questions_left > 0 ? ` — ${w.questions_left} to answer` : ' ✓'}
+            </option>
+          ))}
+        </select>
       </div>
 
-      <select
-        value={workcell}
-        onChange={(e) => setWorkcell(e.target.value)}
-        className="h-9 rounded-md border bg-background px-3 text-sm"
-      >
-        {workcells.map((w) => (
-          <option key={w.workcell} value={w.workcell}>
-            {w.workcell}{w.questions_left > 0 ? ` — ${w.questions_left} to answer` : ' ✓'}
-          </option>
-        ))}
-      </select>
-
-      {workcell && <ProcessRegistryPanel workcell={workcell} />}
+      <div className="min-h-0 flex-1">
+        {active && <ProcessRegistryPanel workcell={active} />}
+      </div>
     </div>
   );
 }

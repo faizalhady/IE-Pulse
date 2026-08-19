@@ -105,7 +105,7 @@ export default function PlantRunnerDashboard() {
   const dataFor = (m: RunnerMode) => (m === 'planner' ? plan.data : m === 'projection' ? proj.data : hist.data);
 
   const openReport = (customer: string, assembly?: string) =>
-    navigate(`/cycle-time/wc/${encodeURIComponent(customer)}?tab=report`
+    navigate(`/cycle-time/${encodeURIComponent(customer)}?tab=report`
       + (assembly ? `&assembly=${encodeURIComponent(assembly)}` : ''));
 
   const handleExport = async () => {

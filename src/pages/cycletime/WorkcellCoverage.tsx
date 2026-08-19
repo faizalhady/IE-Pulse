@@ -240,7 +240,7 @@ export default function WorkcellCoverage() {
 
         {sorted.map(w => (
           <button key={w.workcell}
-            onClick={() => navigate(`/cycle-time/wc/${encodeURIComponent(w.workcell)}?tab=report`)}
+            onClick={() => navigate(`/cycle-time/${encodeURIComponent(w.workcell)}?tab=report`)}
             className="grid min-w-[84rem] w-full items-center gap-2 border-b px-4 py-1.5 text-left text-xs last:border-0 hover:bg-muted/30"
             style={{ gridTemplateColumns: GRID }}>
             <span className="truncate font-medium" title={w.workcell}>{w.workcell}</span>

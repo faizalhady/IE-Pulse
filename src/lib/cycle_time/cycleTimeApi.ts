@@ -630,6 +630,42 @@ export interface DemandCompletionResponse {
 
 // ─── Per-model LBR / IPK breakdown (the drawer proof) ────────────────────────
 
+// ─── BOM — the MES materials behind one model ────────────────────────────────
+// Keyed on bom_id server-side, not on the model: MES shares one BOM across an
+// assembly's revisions, so `revisions` can list three revisions and one bom_id.
+export interface BomMaterial {
+  bom_material_id: number | null;
+  bom_material: string | null;
+  material_id: number | null;
+  material: string | null;
+  description: string | null;
+  qty: number | null;
+  bom_level: string | null;
+  bom_sort_order: number | null;
+  effective_from: string | null;
+  effective_to: string | null;
+}
+export interface BomRevision { revision: string; assembly_id: number | null; bom_id: number | null; }
+export interface ModelBom {
+  customer: string;
+  assembly: string;
+  revision: string | null;
+  requested_revision: string | null;
+  /** false = the revision asked for is not in MES, so `revision` is a fallback. */
+  revision_matched: boolean;
+  bom_id: number | null;
+  /** MES has a BOM for this revision. NOT the same as having its materials:
+   *  the mart is pulled planner-first, so a non-planner model is has_bom:true
+   *  with in_mart:false. */
+  has_bom: boolean;
+  /** The materials are in our mart. false + has_bom true = not pulled yet. */
+  in_mart: boolean;
+  /** false = the assembly itself was not found in MES. */
+  in_mes: boolean;
+  materials: BomMaterial[];
+  revisions: BomRevision[];
+}
+
 export interface LineMetricsStation { step: string; ct: number; is_bottleneck: boolean; }
 export interface LineMetricsLine {
   sub_workcenter: string;
@@ -937,6 +973,49 @@ export interface UniverseSummary {
 
 export type RegistryAnswer = 'mapped' | 'non_iedb' | 'unknown';
 
+/** What the step maps to. Separate from `source`, which says WHO decided it —
+ *  "mapped" and "mapped by a plant-wide guess" are not the same fact, and one
+ *  badge for both is what let bad auto-mappings look settled. */
+export type ProcessStatus = 'mapped' | 'non_iedb' | 'unmapped' | 'unknown';
+
+/** One (workcell, MES step) couple. That IS the mapping grain — inside a
+ *  workcell no step name resolves to two IEDB aliases (0 of 9,734), so there is
+ *  no model in this key and adding one would multiply the queue by every
+ *  assembly for nothing. */
+export interface ProcessRow {
+  workcell: string;
+  /** BYTE-EXACT as MES stores it. Trailing and double spaces are evidence. */
+  mes_step: string;
+  process_key: string;
+  status: ProcessStatus;
+  /** The IEDB counterpart. Empty when nothing maps it, or when it is non-IEDB. */
+  iedb_alias: string;
+  /** decision = an engineer · workbook = the Excel sheet · auto = the raw
+   *  bridge · none = nothing maps it. */
+  source: 'decision' | 'workbook' | 'auto' | 'none';
+  decided_by: string;
+  decided_on: string;
+  models: number;
+  /** MES scan RECORDS. The file's own `scans` column is 0 on all 82,010 rows —
+   *  it was never populated — so this is the only real volume signal. */
+  rows: number;
+  scans: number;
+}
+
+export interface ProcessListPage {
+  rows: ProcessRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  /** Over the filtered set BEFORE paging, so the chips can show how much work
+   *  each holds without a second round-trip. */
+  counts: { mapped: number; non_iedb: number; unmapped: number };
+}
+
+export type ProcessScope = 'scanned' | 'configured';
+export type ProcessSort =
+  'step' | 'workcell' | 'status' | 'source' | 'maps_to' | 'models' | 'rows' | 'scans';
+
 export const cycleTimeApi = {
   health: {
     get: () => get<CycleTimeHealth>('/health'),
@@ -973,6 +1052,17 @@ export const cycleTimeApi = {
      *  permanent — a mapping is a decision, and decisions get revised. */
     steps: (workcell: string, q = '') =>
       get<RegistryStep[]>('/registry/steps', { workcell, q }),
+    /** The process list. `scanned` (5,344 couples) is the work list;
+     *  `configured` (72,692, of which 67,394 were never scanned) is the whole
+     *  route catalogue and is paged for a reason — never ask for it in one go. */
+    processList: (p: {
+      scope?: ProcessScope; workcell?: string; q?: string; status?: string;
+      sort?: ProcessSort; direction?: 'asc' | 'desc'; page?: number; page_size?: number;
+    }) => get<ProcessListPage>('/registry/process-list', {
+      scope: p.scope ?? 'scanned', workcell: p.workcell ?? '', q: p.q ?? '',
+      status: p.status ?? '', sort: p.sort ?? 'rows', direction: p.direction ?? 'desc',
+      page: p.page ?? 1, page_size: p.page_size ?? 200,
+    }),
     /** This workcell's own IEDB names — the pick-list. Scoped on purpose:
      *  `MA 1` is Mech Assy at ARISTA and Deposition OPT 10 at LAM GAS BOX. */
     aliases: (workcell: string) => get<RegistryAlias[]>('/registry/aliases', { workcell }),
@@ -982,6 +1072,13 @@ export const cycleTimeApi = {
       iedb_alias?: string; evidence?: string;
     }) => postJson<{ workcell: string; mes_step: string; answer: string }>(
       '/registry/decision', body),
+    /** Answer many steps at once, all-or-nothing. Four spellings of one step
+     *  name are four rows and ONE answer; one at a time is four round-trips
+     *  and four chances to typo the alias. */
+    decideBulk: (items: {
+      workcell: string; mes_step: string; answer: RegistryAnswer;
+      iedb_alias?: string; evidence?: string;
+    }[]) => postJson<{ saved: number }>('/registry/decisions', { items }),
     /** Write answers to process_decision.csv for the registry generators. */
     export: () => post<{ exported: number }>('/registry/export'),
   },
@@ -1091,6 +1188,13 @@ export const cycleTimeApi = {
     /** Per-model LBR + IPK breakdown (lines, stations, buffers). */
     lineMetrics: (customer: string, assembly: string, signal?: AbortSignal) =>
       get<LineMetrics>('/completion/line-metrics', { customer, assembly }, signal),
+  },
+  bom: {
+    /** MES BOM materials for one model. Omit `revision` for the newest revision
+     *  that actually has a BOM. Never 404s — a model with no BOM comes back
+     *  `has_bom:false`, which is an answer, not a failure. */
+    get: (customer: string, assembly: string, revision?: string, signal?: AbortSignal) =>
+      get<ModelBom>('/bom', { customer, assembly, revision }, signal),
   },
 };
 

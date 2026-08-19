@@ -3,42 +3,37 @@
  * ──────────────────────────
  * Completion status for the models we are actually building and about to build.
  *
- * This file is only the shell: page header + tabs. Both tabs live elsewhere and
- * are shared — the table with the workcell page's Report tab, the 4Q with its
- * own standalone route — so no view of completion can drift from another.
+ * This file is only the shell: page header + the ranked table, which is shared
+ * with the workcell page's Models tab so no view of completion can drift from
+ * another.
  *
  *   Data Table → CompletionDataTable
- *   4Q Report  → CycleTime4QReport (embedded)
+ *
+ * The 4Q used to be a second tab here. It is a report in its own right — it gets
+ * presented, exported and sent on — and burying it as a tab on another page made
+ * it something you had to already know about to find. It has its own route now:
+ * /cycle-time/4q → CycleTime4QReport. Same component, no embed flag.
  *
  * Route: /cycle-time/completion
  */
 
-import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
 import { useCycleTimeCompletionDemand } from '@/hooks/cycle_time/useCycleTimeData';
-import { LayoutGrid, Table2 } from 'lucide-react';
-import { useState } from 'react';
 import CompletionDataTable from './CompletionDataTable';
-import CycleTime4QReport from './CycleTime4QReport';
 
-/** Two views of the same completion data — the ranked list, and the 4Q that
- *  summarises it. Same page so they can never be read as different reports. */
-const TABS = [
-  { key: 'table', label: 'Data Table', icon: Table2 },
-  { key: '4q', label: '4Q Report', icon: LayoutGrid, badge: 'Testing Phase' },
-] as const;
-
-export default function DemandCompletionReport() {
+/** `embedded` drops the page title. The report is a tab on Home now, and a
+ *  second <h1> under the page's own is wrong for a screen reader and reads as a
+ *  nested page to everyone else. Same flag CycleTime4QReport already uses. */
+export default function DemandCompletionReport({ embedded = false }: { embedded?: boolean }) {
   // Same query key as the table's — react-query serves both from one fetch.
   const { data } = useCycleTimeCompletionDemand();
-  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('table');
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       {/* ── Page header + tabs ───────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-b border-border bg-background px-4 pt-4 md:px-6">
+      <div className="flex-shrink-0 border-b border-border bg-background px-4 py-4 md:px-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
-            <h1 className="text-lg font-semibold">Report</h1>
+            {!embedded && <h1 className="text-lg font-semibold">Report</h1>}
             <p className="text-xs text-muted-foreground">
               Models in demand — MES plan (~4wk) + planner forecast (~13wk) — ranked by demand.
             </p>
@@ -51,13 +46,10 @@ export default function DemandCompletionReport() {
             </span>
           )}
         </div>
-        {/* -mb-px on the row (inside UnderlineTabs) lands the active underline
-            on top of this header's bottom border — hence tabs go last. */}
-        <UnderlineTabs tabs={TABS} active={tab} onChange={setTab} className="mt-3" />
       </div>
 
       <div className="min-h-0 flex-1">
-        {tab === '4q' ? <CycleTime4QReport embedded /> : <CompletionDataTable />}
+        <CompletionDataTable />
       </div>
     </div>
   );

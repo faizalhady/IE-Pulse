@@ -33,7 +33,7 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Search } from 'lucide-react';
+import { ClipboardList, Layers, Loader2, Search } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { SortHeader } from '@/components/shared/SortHeader';
@@ -42,11 +42,18 @@ import { cycleTimeApi, type UniverseWorkcell } from '@/lib/cycle_time/cycleTimeA
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
+import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
+import DemandCompletionReport from './DemandCompletionReport';
 
 // Workcell · Models | Has CT · No CT · Not in IEDB · Split | Checked · Coverage
 // · Complete · Incomplete · Unbuilt · Built 24mo
+// The 12 tracks need 80.5rem (58rem fixed + 15rem workcell min + 5.5rem gaps
+// + 2rem padding). The container asked for min-w-90rem, so on every screen it
+// forced 9.5rem it did not need: the sole fr track swallowed the slack, the
+// workcell column went cavernous, and the right-hand columns fell off the edge.
+// min-w now matches what the tracks actually need.
 const GRID =
-  'minmax(15rem,1.5fr) 4.75rem  5rem 5rem 5.5rem 7rem  5rem 5.5rem  4.75rem 5.25rem 4.75rem 5.5rem';
+  'minmax(13rem,1.4fr) 4.75rem  5rem 5rem 5.5rem 7rem  5rem 5.5rem  4.75rem 5.25rem 4.75rem 5.5rem';
 
 const n = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : Number(v).toLocaleString();
@@ -96,7 +103,7 @@ function Bar({ pct, tone }: { pct: number | null; tone: string }) {
 
 type SortKey = keyof UniverseWorkcell;
 
-export default function CycleTimeHomeNew() {
+function CoverageTab() {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const { data, isLoading, isError, error } = useQuery({
@@ -144,13 +151,6 @@ export default function CycleTimeHomeNew() {
 
   return (
     <div className="h-full space-y-4 overflow-auto p-4 md:p-6">
-      <div>
-        <h1 className="text-lg font-bold">Cycle Time</h1>
-        <p className="text-xs text-muted-foreground">
-          Every workcell, every model we know of — from IEDB, MES and demand,
-          deduplicated. Pick a workcell to go into its models.
-        </p>
-      </div>
 
       {/* THE THREE BUCKETS lead, because they are known for every model. The
           completion tiles below them are a share of the ~10% we have checked,
@@ -234,7 +234,7 @@ export default function CycleTimeHomeNew() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border bg-card">
-        <div className="grid min-w-[90rem] items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+        <div className="grid min-w-[78rem] items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
              style={{ gridTemplateColumns: GRID }}>
           {head('Workcell', 'workcell', 'justify-start')}
           {head('Models', 'models')}
@@ -254,8 +254,8 @@ export default function CycleTimeHomeNew() {
 
         {sorted.map(w => (
           <button key={w.workcell}
-            onClick={() => navigate(`/cycle-time/models/${encodeURIComponent(w.workcell)}`)}
-            className="grid min-w-[90rem] w-full items-center gap-2 border-b px-4 py-1.5 text-left text-xs last:border-0 hover:bg-muted/30"
+            onClick={() => navigate(`/cycle-time/${encodeURIComponent(w.workcell)}`)}
+            className="grid min-w-[78rem] w-full items-center gap-2 border-b px-4 py-1.5 text-left text-xs last:border-0 hover:bg-muted/30"
             style={{ gridTemplateColumns: GRID }}>
             {/* Logo, name, plant — the same identity block the workcell page
                 uses, so a workcell looks the same everywhere. The logo is a
@@ -306,6 +306,39 @@ export default function CycleTimeHomeNew() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The landing page. Two questions, in the order they get asked: how much do we
+ *  cover, then what is in demand right now. Report is the same component the
+ *  /cycle-time/completion route renders — one component, so the two can never
+ *  show a different verdict for the same model. */
+const TABS = [
+  { key: 'coverage', label: 'Coverage', icon: Layers,
+    tip: 'Every workcell, every model — what IEDB has priced and what it has not' },
+  { key: 'report',   label: 'Report',   icon: ClipboardList,
+    tip: 'Models in demand — MES plan (~4wk) + planner forecast (~13wk)' },
+] as const;
+
+export default function CycleTimeHomeNew() {
+  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('coverage');
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className="flex-shrink-0 border-b border-border bg-background px-4 pt-4 md:px-6">
+        <h1 className="text-lg font-bold">Cycle Time</h1>
+        <p className="text-xs text-muted-foreground">
+          Every workcell, every model we know of — from IEDB, MES and demand,
+          deduplicated. Pick a workcell to go into its models.
+        </p>
+        {/* -mb-px inside UnderlineTabs lands the active underline on this
+            header's bottom border, so the tabs must come last. */}
+        <UnderlineTabs tabs={TABS} active={tab} onChange={setTab} className="mt-3" />
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {tab === 'coverage' ? <CoverageTab /> : <DemandCompletionReport embedded />}
+      </div>
     </div>
   );
 }
