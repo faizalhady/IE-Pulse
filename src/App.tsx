@@ -9,6 +9,7 @@ import BayDetail from "@/pages/BayDetail";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
 import CycleTime4QReport from "@/pages/cycletime/CycleTime4QReport";
 import CycleTimeChat from "@/pages/cycletime/CycleTimeChat";
+import ChatWidget from "@/components/cycletime/ChatWidget";
 import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
 import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail";
@@ -128,9 +129,15 @@ function AppShell() {
       prefetchOleData();
     }
   }, [pathname]);
+  // The floating chat bubble lives on every cycle-time page except the
+  // full chat page itself — a bubble that opens the page you are on is noise.
+  const showChatBubble = includesApp('cycle-time')
+    && pathname.startsWith('/cycle-time')
+    && pathname !== '/cycle-time/ask';
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
+      {showChatBubble && <ChatWidget />}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* <Header /> */}
         <main className="flex-1 overflow-y-auto">
