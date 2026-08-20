@@ -1,8 +1,8 @@
 /**
  * ChatWidget — the floating "Ask the data" bubble + drawer.
  *
- * A Lottie-animated button pinned bottom-left of every cycle-time page.
- * Click: the chat opens in a left drawer (~38% wide). X or clicking away
+ * A Lottie-animated button pinned bottom-right of every cycle-time page.
+ * Click: the chat opens in a right drawer (~38% wide). X or clicking away
  * closes it. The SAME <CycleTimeChat /> component also lives at
  * /cycle-time/ask as a full page — which UI wins is an open decision, so
  * both stay; the bubble simply hides on the page itself.
@@ -31,7 +31,7 @@ export default function ChatWidget() {
         aria-label="Ask the data"
         title="Ask the data"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 left-6 z-40 h-16 w-16 overflow-hidden rounded-full
+        className="fixed bottom-6 right-6 z-40 h-16 w-16 overflow-hidden rounded-full
                    border border-border bg-card shadow-lg transition-transform
                    duration-200 hover:scale-110 active:scale-95"
       >
@@ -41,7 +41,7 @@ export default function ChatWidget() {
       <Sheet open={open} onOpenChange={setOpen}>
         {/* Default Sheet caps at sm:max-w-sm — overridden: the chat needs
             room for tables. p-0 so the chat's own header owns the top. */}
-        <SheetContent side="left" className="w-[38vw] min-w-[420px] p-0 sm:max-w-none">
+        <SheetContent side="right" className="w-[38vw] min-w-[420px] p-0 sm:max-w-none">
           <SheetTitle className="sr-only">Ask the data</SheetTitle>
           <div className="h-full">
             <CycleTimeChat />
