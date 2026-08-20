@@ -31,7 +31,10 @@ const MES_STATUS: Record<string, { label: string; row: string; pill: string }> =
   present:     { label: 'in IEDB',    row: 'bg-emerald-500/5', pill: 'bg-emerald-500/15 text-emerald-600' },
   missing:     { label: 'missing CT', row: 'bg-red-500/5',     pill: 'bg-red-500/15 text-red-600' },
   no_ct:       { label: 'missing CT', row: 'bg-red-500/5',     pill: 'bg-red-500/15 text-red-600' },
-  not_in_iedb: { label: 'not in route', row: 'bg-violet-500/5', pill: 'bg-violet-500/15 text-violet-600' },
+  // 'not in route' was ambiguous the moment the IEDB column grew its own
+  // 'not in MES route' badge — two opposite gaps reading as the same words.
+  // Each badge now names the route the step is MISSING FROM.
+  not_in_iedb: { label: 'not in IEDB route', row: 'bg-violet-500/5', pill: 'bg-violet-500/15 text-violet-600' },
   non_iedb:    { label: 'not IEDB',   row: '',                 pill: 'bg-muted text-muted-foreground' },
   unmapped:    { label: 'unmapped',   row: 'bg-amber-500/5',   pill: 'bg-amber-500/15 text-amber-600' },
 };
