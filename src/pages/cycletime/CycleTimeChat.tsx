@@ -26,6 +26,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { Streamdown } from 'streamdown';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
@@ -98,6 +99,43 @@ interface Turn {
   role: 'user' | 'assistant';
   content: string;
   meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table' | 'intent'>;
+}
+
+/** Assistant markdown, streamed-safe. Streamdown styles incomplete blocks as
+ *  tokens arrive (bold is bold before the closing **), renders GFM tables, and
+ *  is hardened by default. The overrides keep our entity links alive inside
+ *  markdown text; table cells keep streamdown's own styling (links there come
+ *  from the structured meta.table instead). Headings are stepped down to
+ *  bubble scale — a chat answer with an h1 shouts. */
+function MdAnswer({ text, names, byKey, ctxWc }: {
+  text: string;
+  names: string[];
+  byKey: Map<string, string>;
+  ctxWc?: string;
+}) {
+  const wrap = (children: ReactNode): ReactNode => {
+    const one = (c: ReactNode, i: number): ReactNode =>
+      typeof c === 'string' ? <span key={i}>{linkify(c, names, byKey, ctxWc)}</span> : c;
+    return Array.isArray(children) ? children.map(one) : one(children, 0);
+  };
+  const mk = (Tag: keyof JSX.IntrinsicElements, cls?: string) =>
+    (props: { children?: ReactNode }) => <Tag className={cls}>{wrap(props.children)}</Tag>;
+  return (
+    <Streamdown
+      className="space-y-2 [&_table]:text-xs"
+      components={{
+        p: mk('p'),
+        li: mk('li', 'my-0.5'),
+        strong: mk('strong', 'font-semibold'),
+        em: mk('em'),
+        h1: mk('h3', 'mt-2 text-sm font-bold'),
+        h2: mk('h4', 'mt-2 text-sm font-semibold'),
+        h3: mk('h4', 'mt-1.5 text-[13px] font-semibold'),
+      }}
+    >
+      {text}
+    </Streamdown>
+  );
 }
 
 /** Where to go for the full picture — one deterministic suggestion per answer,
@@ -322,8 +360,10 @@ export default function CycleTimeChat() {
             )}
             <div className={cn('min-w-0 max-w-[42rem] rounded-xl px-3.5 py-2.5 text-sm',
               t.role === 'user' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card')}>
-              <div className="whitespace-pre-wrap break-words">
-                {t.role === 'assistant' ? linkify(t.content, wcNames, byKey, ctxWc) : t.content}
+              <div className="break-words">
+                {t.role === 'assistant'
+                  ? <MdAnswer text={t.content} names={wcNames} byKey={byKey} ctxWc={ctxWc} />
+                  : <span className="whitespace-pre-wrap">{t.content}</span>}
               </div>
 
               {/* An ungrounded answer must not dress like a sourced one — the
@@ -386,7 +426,7 @@ export default function CycleTimeChat() {
             </div>
             <div className="min-w-0 max-w-[42rem] rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm">
               {live
-                ? <div className="whitespace-pre-wrap break-words">{live}</div>
+                ? <div className="break-words"><MdAnswer text={live} names={wcNames} byKey={byKey} /></div>
                 : (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
