@@ -97,7 +97,30 @@ function turnWorkcell(t: Turn, names: string[], byKey: Map<string, string>): str
 interface Turn {
   role: 'user' | 'assistant';
   content: string;
-  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table'>;
+  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table' | 'intent'>;
+}
+
+/** Where to go for the full picture — one deterministic suggestion per answer,
+ *  mapped from the intent that produced it. */
+function suggestion(t: Turn, ctxWc?: string): { label: string; to: string } | null {
+  const intent = t.meta?.intent;
+  if (!intent || t.meta?.error) return null;
+  const asm = t.meta?.calls?.[0]?.args?.assembly;
+  if (['model_status', 'model_bom', 'model_cycle_time'].includes(intent)
+      && ctxWc && typeof asm === 'string' && asm) {
+    return { label: `the ${asm} model page`, to: modelHref(ctxWc, asm) };
+  }
+  if (['workcell_completion', 'models_by_status'].includes(intent) && ctxWc) {
+    return { label: `the ${ctxWc} workcell page`, to: wcHref(ctxWc) };
+  }
+  if (intent === 'completion_trend') return { label: 'the 4Q report', to: '/cycle-time/4q' };
+  if (intent === 'plant_completion') return { label: 'the plant report', to: '/cycle-time/home' };
+  if (intent === 'open_query') {
+    return ctxWc
+      ? { label: `the ${ctxWc} workcell page`, to: wcHref(ctxWc) }
+      : { label: 'the plant report', to: '/cycle-time/home' };
+  }
+  return null;
 }
 
 /** A query result as a real table. Numbers right-aligned; the raw text answer
@@ -231,7 +254,7 @@ export default function CycleTimeChat() {
         role: 'assistant',
         content: `The request failed: ${(e as Error).message}`,
         meta: { calls: [], sources: [], elapsed_s: 0, error: 'request_failed',
-                grounded: false, lane: 'error' },
+                grounded: false, lane: 'error', intent: 'none' },
       }]);
     } finally {
       setBusy(false);
@@ -320,6 +343,16 @@ export default function CycleTimeChat() {
                   {t.meta.sql}
                 </pre>
               )}
+
+              {/* One door onward — the page with the full picture. */}
+              {t.role === 'assistant' && (() => {
+                const s = suggestion(t, ctxWc);
+                return s && (
+                  <div className="mt-2 text-[11px] text-muted-foreground">
+                    → See <Link className={LINK_CLS} to={s.to}>{s.label}</Link> for more.
+                  </div>
+                );
+              })()}
 
               {/* The audit trail. Deliberately always visible. */}
               {t.meta && (t.meta.calls.length > 0 || t.meta.sources.length > 0) && (
