@@ -4,7 +4,7 @@
  * The Cycle Time 4Q — same shell as the OLE 4Q, different content.
  *
  *   Q1  where we stand      completion % by week, against target
- *   Q2  where it is going   split by plant and workcell
+ *   Q2  where it is going   the Pareto of negatives, and who owns them
  *   Q3  what we will do     the improvement plan (saved; everything else is live)
  *   Q4  the 100% view       complete + every loss, back to 100%
  *
@@ -30,14 +30,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCycleTimeCompletionDemand, useCycleTimeCompletionHistory } from '@/hooks/cycle_time/useCycleTimeData';
 import { useSavedReport } from '@/hooks/shared/useSavedReport';
+import { dstatus, statusLabel } from '@/lib/cycle_time/cycleTimeConstants';
 import { savedReports } from '@/lib/shared/savedReportsApi';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Pencil, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  CompletionHeadline, NoHistoryYet, Q1Trend, Q2Splits, Q4Stack,
-  Quadrant, TARGET, buildQuadrantModel, lossColor, lossLabel,
+  CompletionHeadline, NoHistoryYet, Q1Trend, Q4Stack,
+  Quadrant, TARGET, buildQuadrantModel, lossColor,
 } from './CompletionFourQuadrant';
 
 // Module scope, not per-render: the factory returns a fresh object each call.
@@ -107,18 +108,24 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
      per model. Same source the Data Table reads, so the two cannot disagree. */
   const q2 = useMemo(() => {
     const wanted = picked.length ? new Set(picked) : null;
+    // has_demand FIRST. The demand payload now carries every model that exists
+    // (57,074), not just what we are building (4,401) — so without this Q2 ranked
+    // universe-scale losses while Q1 and Q4 measured demand, and the same report
+    // showed 27.2k "not built" models above a 100% view totalling 3,928.
     const rows = (demand?.models ?? []).filter(r =>
-      r.status !== 'complete' && (!wanted || wanted.has(r.customer)));
+      r.has_demand && dstatus(r) !== 'complete' && (!wanted || wanted.has(r.customer)));
 
-    // Bucket by (status, reason) — the same pairing Q4 stacks by. One per model.
-    const byLoss = new Map<string, { label: string; models: number; status: string; reason: string }>();
+    // Bucket by STATUS, the same six verdicts the models table and Q4 use.
+    // It used to bucket by (status, reason): sixteen bars, five of them reading
+    // "Not in IEDB" and four "Missing CT", with the reason — the only half that
+    // told them apart — truncated away by the axis. A Pareto nobody can read
+    // picks the improvement plan's top two issues, so it has to be legible.
+    const byLoss = new Map<string, { label: string; models: number; status: string }>();
     for (const r of rows) {
-      const reason = r.reason ?? '';
-      const k = `${r.status}|${reason}`;
-      const hit = byLoss.get(k)
-        ?? { label: lossLabel({ status: r.status, reason, units: 0, models: 0, pct: 0 }), models: 0, status: r.status, reason };
+      const st = dstatus(r);
+      const hit = byLoss.get(st) ?? { label: statusLabel(st), models: 0, status: st };
       hit.models += 1;
-      byLoss.set(k, hit);
+      byLoss.set(st, hit);
     }
     const buckets = [...byLoss.values()];
     const dist = buildPareto(buckets.map(b => ({ name: b.label, value: b.models, color: lossColor(b.status) })));
@@ -129,7 +136,7 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
       if (!b) return [];
       const byWc = new Map<string, number>();
       for (const r of rows) {
-        if (r.status !== b.status || (r.reason ?? '') !== b.reason) continue;
+        if (dstatus(r) !== b.status) continue;
         byWc.set(r.customer, (byWc.get(r.customer) ?? 0) + 1);
       }
       return buildPareto([...byWc.entries()]
@@ -201,7 +208,7 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
            distribution on the left, the two workcell breakdowns stacked right. */
         <div className="flex h-full min-h-0 gap-2">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <ParetoChart title="Incomplete Models by Reason (model count)" data={q2.dist}
+            <ParetoChart title="Incomplete Models by Status (model count)" data={q2.dist}
               fillHeight unit="Models" unitLabel="models"
               emptyText="Nothing incomplete in this scope." />
           </div>
@@ -392,9 +399,9 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
                     </Quadrant>
 
                     <Quadrant n="Q2" title="Where it is going"
-                      sub="Every negative by model count, then the top 3 workcells behind each of the two biggest">
+                      sub="Every negative by model count, then the top 3 workcells behind each of the two biggest. Demand only.">
                       <div className="space-y-2">
-                        <ParetoChart title="Incomplete Models by Reason (model count)" data={q2.dist}
+                        <ParetoChart title="Incomplete Models by Status (model count)" data={q2.dist}
                           height={200} unit="Models" unitLabel="models"
                           emptyText="Nothing incomplete in this scope." />
                         <div className="grid grid-cols-2 gap-3">
@@ -404,11 +411,6 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
                             height={180} unit="Models" unitLabel="models" />
                         </div>
                       </div>
-                    </Quadrant>
-
-                    <Quadrant n="Q2b" title="By plant and workcell"
-                      sub="The same completion %, split by where it is built">
-                      <Q2Splits m={m} listHeight={200} />
                     </Quadrant>
 
                     <Quadrant n="Q3" title="What we will do"

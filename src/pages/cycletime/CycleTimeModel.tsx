@@ -219,6 +219,15 @@ function BomTab({ q }: { q: ReturnType<typeof useCycleTimeBom> }) {
   if (error) {
     return <div className="p-6 text-sm text-rose-600">{(error as Error).message}</div>;
   }
+  // Checked BEFORE in_mes/has_bom: without the bridge every model looks like a
+  // model MES has no BOM for, and that reads as a fact about MES rather than a
+  // pipeline that has not run here yet.
+  if (data && !data.bridge_ready) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">
+      BOMs are not available on this server yet — the MES assembly map has not been
+      rebuilt with its BOM ids. Nothing is wrong with this model.
+    </div>;
+  }
   if (!data?.in_mes) {
     return <div className="p-8 text-center text-sm text-muted-foreground">
       This assembly is not in MES under this name, so there is no BOM to read.

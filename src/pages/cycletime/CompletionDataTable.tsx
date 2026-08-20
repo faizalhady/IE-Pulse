@@ -10,9 +10,11 @@
  * status is that a workcell's own page and the global report must never show
  * a different verdict for the same model.
  *
- * Scope = MES projection (~4wk forward) UNION planner demand (~13wk), ranked by
- * demand units. Volume is heavily concentrated — the top 500 models are ~88% of
- * it — so the default view is "everything, ranked", and you narrow from there.
+ * Scope = MES projection (~4wk forward) UNION planner demand (~13wk) UNION every
+ * model that exists, ranked by demand units. 4,401 in demand, 57,074 in total —
+ * the Planned/All toggle chooses, and Planned is the default. Volume is heavily
+ * concentrated: the top 500 demand models carry 88.1% of the units and the top
+ * 100 carry 64.9%, which is why rank order is the default sort.
  *
  * The picker mirrors the OLE 4Q report's: a plant is "selected" purely because
  * its workcells all happen to be picked. That state is DERIVED, never stored, so
@@ -29,6 +31,9 @@ import { useCycleTimeAssemblyList, useCycleTimeCompletionDemand } from '@/hooks/
 import { useSortable } from '@/hooks/shared/useSortable';
 import { cycleTimeApi, formatBuildDuration, formatCycleHMS } from '@/lib/cycle_time/cycleTimeApi';
 import type { CycleTimeAssemblyListRow, DemandCompletionModel } from '@/lib/cycle_time/cycleTimeApi';
+// ONE vocabulary, shared with the 4Q — see cycleTimeConstants. These used to be
+// declared here AND in CompletionFourQuadrant, and had already drifted apart.
+import { REASON_LABEL, STATUS_META, STATUS_ORDER, dstatus } from '@/lib/cycle_time/cycleTimeConstants';
 import { cn } from '@/lib/utils';
 import { ArrowUpRight, Check, ChevronDown, ChevronsUpDown, Loader2, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -70,37 +75,9 @@ const GRID_LOCKED = '2.25rem minmax(8rem,1.6fr) minmax(5.5rem,0.8fr) minmax(5.5r
 
 /** Status → label + colour. Ordered worst-first so the legend reads as a
  *  priority list: what needs creating, then fixing, then nothing. */
-const STATUS_META: Record<string, { label: string; cls: string; dot: string; hint: string }> = {
-  incomplete:  { label: 'Missing CT', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', dot: 'bg-amber-500', hint: 'In IEDB with cycle times, but gaps against what the floor actually runs' },
-  no_cycle_time: { label: 'No cycle time', cls: 'bg-orange-500/15 text-orange-600 dark:text-orange-400', dot: 'bg-orange-500', hint: 'Model EXISTS in IEDB, but not one cycle time has been entered' },
-  not_in_iedb: { label: 'Not in IEDB', cls: 'bg-red-500/15 text-red-600 dark:text-red-400', dot: 'bg-red-500', hint: 'Model does not exist in IEDB at all — it has to be created first' },
-  not_built:   { label: 'Not built yet', cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', dot: 'bg-sky-500', hint: 'MES has no production record in the window. Nothing to do but wait for the build' },
-  cannot_check: { label: 'Cannot be checked', cls: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground/40', hint: 'This workcell is not on MES, so no scan will ever arrive. Waiting is pointless — 470 LAMMEC models read as "not built yet" until this was split out' },
-  not_checked: { label: 'Not checked', cls: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground/40', hint: 'The completion run has not reached this model yet' },
-  complete:    { label: 'Complete', cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500', hint: 'Every step MES ran was named AND has a cycle time' },
-};
-const STATUS_ORDER = ['incomplete', 'no_cycle_time', 'not_in_iedb', 'not_built',
-                      'cannot_check', 'not_checked', 'complete'];
-
-/** Compatibility shim, and nothing more.
- *
- *  The server now sends the corrected verdict from `model_universe`, which owns
- *  BOTH corrections (a `complete` carrying a gap is demoted; `not_in_mes` is
- *  split into "not built yet" vs "no scan will ever come"). That used to happen
- *  here, and separately in the report, and not at all in the demand endpoint —
- *  which is why one workcell reported 279, 236 and 208 complete models on three
- *  screens at once.
- *
- *  What is left runs only against an OLDER backend that still sends the raw
- *  mart status — prod, until this deploys. Against a current backend every
- *  branch below is a no-op, which is exactly the intended end state: delete it
- *  once prod is on this code. */
-export const dstatus = (m: DemandCompletionModel) => {
-  if (m.status === 'not_in_mes')
-    return m.reason === 'workcell_not_on_mes' ? 'cannot_check' : 'not_built';
-  if (m.status === 'complete' && (m.no_ct || m.not_in_iedb || m.unmapped)) return 'incomplete';
-  return m.status;
-};
+// `dstatus` moved to cycleTimeConstants — the 4Q needs it too. Re-exported
+// here so the existing import path and its test keep working.
+export { dstatus };
 
 /** Plant keys as the backend sends them (`_PLANT_REGION` in api/routers/cycle_time.py),
  *  in site order with the names people actually use. The key stays the raw code —
@@ -115,16 +92,6 @@ const plantLabel = (p: string) => PLANT_LABEL[p] ?? p;
 
 /** The `reason` behind a status — the detail the 4 statuses deliberately fold
  *  away. Shown as a sub-label so the chip stays scannable. */
-const REASON_LABEL: Record<string, string> = {
-  missing_ct: 'blank cycle time', missing_step: 'step not in route',
-  'missing_ct+step': 'blank CT + route gap', unmapped: 'steps unrecognised',
-  no_alias: 'cycle times entered, but no alias to match them on',
-  in_iedb_untimed: 'in IEDB, nobody has timed it',
-  absent: 'no IEDB record',
-  absent_unverified: 'not in our IEDB snapshot, and the snapshot is short for this workcell',
-  no_production: 'not built yet', workcell_not_on_mes: 'workcell not on MES',
-};
-
 type SortKey = 'rank' | 'customer' | 'assembly' | 'status' | 'lbr' | 'ipk' | 'next' | 'last'
              | 'gap' | 'unmapped' | 'iedb' | 'ct' | 'checked' | 'smh' | 'rev';
 
@@ -653,7 +620,17 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
                 style={{ gridTemplateColumns: grid, height: ROW_H, transform: `translateY(${v.start}px)` }}>
                 <span className="tabular-nums text-muted-foreground">{v.index + 1}</span>
                 {!locked && <span className="truncate font-medium" title={m.customer}>{m.customer}</span>}
-                <span className="truncate font-mono text-[11px]" title={m.assembly}>{m.assembly}</span>
+                {/* The model NAME navigates; the rest of the row opens the drawer.
+                    stopPropagation keeps the row handler from firing too, so a
+                    click on the name does one thing rather than both. */}
+                <Link
+                  to={`/cycle-time/${encodeURIComponent(m.customer)}/${encodeURIComponent(m.assembly)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Open ${m.assembly}`}
+                  className="truncate font-mono text-[11px] underline-offset-2 transition-colors hover:text-primary hover:underline focus-visible:text-primary focus-visible:underline focus:outline-none"
+                >
+                  {m.assembly}
+                </Link>
                 {!locked && <span className="truncate text-muted-foreground">{m.plant}</span>}
 
                 {/* No upcoming start but demand still running = already on the floor. */}

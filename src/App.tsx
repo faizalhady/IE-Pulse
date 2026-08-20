@@ -8,6 +8,7 @@ import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
 import CycleTime4QReport from "@/pages/cycletime/CycleTime4QReport";
+import CycleTimeChat from "@/pages/cycletime/CycleTimeChat";
 import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
 import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail";
@@ -185,6 +186,7 @@ function AppShell() {
               <Route path="/cycle-time/models/:customer" element={<RedirectWorkcell />} />
               <Route path="/cycle-time/completion" element={<DemandCompletionReport />} />
               <Route path="/cycle-time/4q" element={<CycleTime4QReport />} />
+              <Route path="/cycle-time/ask" element={<CycleTimeChat />} />
               <Route path="/cycle-time/incompletion" element={<IncompletionReport />} />
               <Route path="/cycle-time/incompletion/:customer" element={<IncompletionReportDetail />} />
               <Route path="/cycle-time/plant-runners" element={<PlantRunnerDashboard />} />

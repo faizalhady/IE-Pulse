@@ -1,0 +1,215 @@
+/**
+ * CycleTimeChat.tsx
+ * ─────────────────
+ * Ask the cycle-time data a question in English.
+ *
+ * Route: /cycle-time/ask
+ *
+ * WHAT IT IS, AND WHAT IT IS NOT
+ *   A local model (llama3.1:8b via Ollama) picks which of nine existing endpoints
+ *   answers your question and extracts its arguments. It does NOT write SQL and
+ *   it does NOT do arithmetic — every number comes from the same marts these
+ *   pages already read, so the chat cannot disagree with the screen.
+ *
+ * WHY EVERY ANSWER SHOWS ITS SOURCE
+ *   This is meant to replace IEDB. Nobody moves onto a system whose numbers they
+ *   cannot check, so the tool that ran and the mart it read are printed under
+ *   every reply — not hidden behind a "details" toggle.
+ *
+ * WHY AMBIGUITY COMES BACK AS A QUESTION
+ *   "arista" is two real workcells building different models. The server refuses
+ *   to pick and returns the candidates; the answer asks which one. A confident
+ *   wrong number is worse than a question, because it reads exactly like a right
+ *   one.
+ */
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { cycleTimeApi } from '@/lib/cycle_time/cycleTimeApi';
+import type { ChatAnswer } from '@/lib/cycle_time/cycleTimeApi';
+import { cn } from '@/lib/utils';
+
+interface Turn {
+  role: 'user' | 'assistant';
+  content: string;
+  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error'>;
+}
+
+/** Questions that exercise a different tool each — a blank chat box is the
+ *  fastest way to make someone close the page. */
+const EXAMPLES = [
+  'How complete is KEYSIGHT?',
+  'Which LAMRESEARCH models have no cycle time?',
+  'Show me the BOM for PCA-01156-15',
+  'Are we improving week on week?',
+];
+
+export default function CycleTimeChat() {
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  const health = useQuery({
+    queryKey: ['ct-chat-health'],
+    queryFn: () => cycleTimeApi.chat.health(),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [turns, busy]);
+
+  // Text only, and only the last few. Replaying tool payloads would fill an 8k
+  // context window in about three questions.
+  const history = useMemo(
+    () => turns.slice(-6).map(t => ({ role: t.role, content: t.content })),
+    [turns]);
+
+  async function send(q: string) {
+    const question = q.trim();
+    if (!question || busy) return;
+    setDraft('');
+    setTurns(t => [...t, { role: 'user', content: question }]);
+    setBusy(true);
+    try {
+      const r = await cycleTimeApi.chat.ask(question, history);
+      setTurns(t => [...t, { role: 'assistant', content: r.answer, meta: r }]);
+    } catch (e) {
+      setTurns(t => [...t, {
+        role: 'assistant',
+        content: `The request failed: ${(e as Error).message}`,
+        meta: { calls: [], sources: [], elapsed_s: 0, error: 'request_failed' },
+      }]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const down = health.data && !health.data.ok;
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-6 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-lg font-bold">Ask the data</h1>
+          {health.data?.ok && (
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+              {health.data.model} · {health.data.tools.length} tools
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Answers come from the same marts these pages read. Every reply shows which one.
+        </p>
+      </div>
+
+      {/* A dead model must say so. A spinner that never resolves is how someone
+          concludes the whole module is broken. */}
+      {down && (
+        <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <div className="font-medium">The local model is not reachable.</div>
+            <div className="mt-0.5 opacity-90">{health.data?.detail}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto px-6 py-5">
+        {!turns.length && (
+          <div className="mx-auto max-w-lg pt-8 text-center">
+            <Bot className="mx-auto h-8 w-8 text-muted-foreground/50" />
+            <p className="mt-3 text-sm text-muted-foreground">
+              Ask about completion, models, cycle times or BOMs.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {EXAMPLES.map(x => (
+                <button key={x} onClick={() => send(x)} disabled={busy || down}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50">
+                  {x}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {turns.map((t, i) => (
+          <div key={i} className={cn('flex gap-3', t.role === 'user' && 'justify-end')}>
+            {t.role === 'assistant' && (
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+                <Bot className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
+            <div className={cn('min-w-0 max-w-[42rem] rounded-xl px-3.5 py-2.5 text-sm',
+              t.role === 'user' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card')}>
+              <div className="whitespace-pre-wrap break-words">{t.content}</div>
+
+              {/* The audit trail. Deliberately always visible. */}
+              {t.meta && (t.meta.calls.length > 0 || t.meta.sources.length > 0) && (
+                <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-[10px] text-muted-foreground">
+                  {t.meta.calls.map((c, j) => (
+                    <div key={j} className="font-mono">
+                      <span className={c.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
+                        {c.ok ? '✓' : '!'}
+                      </span>{' '}
+                      {c.tool}({Object.entries(c.args).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')})
+                    </div>
+                  ))}
+                  {t.meta.sources.map((s, j) => <div key={`s${j}`}>source: {s}</div>)}
+                  {t.meta.elapsed_s > 0 && <div>{t.meta.elapsed_s}s</div>}
+                </div>
+              )}
+            </div>
+            {t.role === 'user' && (
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+                <User className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+        ))}
+
+        {busy && (
+          <div className="flex gap-3">
+            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+              <Bot className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              reading the marts…
+            </div>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      <div className="border-t border-border px-6 py-4">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter sends, Shift+Enter breaks the line — the convention
+              // everyone already has in their fingers.
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); }
+            }}
+            rows={1}
+            maxLength={500}
+            disabled={busy || down}
+            placeholder={down ? 'The local model is not running.' : 'Ask about a workcell, a model, a BOM…'}
+            className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground disabled:opacity-60"
+          />
+          <Button size="sm" className="h-10 w-10 p-0" disabled={busy || down || !draft.trim()}
+            onClick={() => send(draft)} title="Send">
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          The model chooses which report to read — it never writes SQL and never does the arithmetic.
+        </p>
+      </div>
+    </div>
+  );
+}

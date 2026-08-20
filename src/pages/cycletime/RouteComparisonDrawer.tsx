@@ -138,6 +138,28 @@ export function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSt
     return c ? byCode.get(c) ?? null : null;
   };
 
+  // The reverse direction. `iedbSeqOf` answers "which IEDB step does this MES row
+  // point at"; this answers "did ANY MES row point here". An IEDB step nothing
+  // points at is a step we have priced and the floor never ran — the route on
+  // paper and the route in reality have drifted, and until now the only way to
+  // spot one was to read both columns and diff them by eye.
+  //
+  // Built from the FULL mes list, not `mesShown`: "hide logistics" is a display
+  // filter, and letting it change whether a step counts as found would make the
+  // shading flicker with a checkbox.
+  const mesCodes = new Set<string>();
+  for (const s of mes) {
+    const c = aliasCode(s.alias);
+    if (c) mesCodes.add(c);
+  }
+  // No alias at all counts as unlinked too: there is nothing for MES to match on,
+  // so no scan can ever reach it. Same consequence, same shading.
+  const notInMes = (alias: string | null) => {
+    const c = aliasCode(alias);
+    return !c || !mesCodes.has(c);
+  };
+  const missingCount = iedb.filter((s) => notInMes(s.alias)).length;
+
   if (q.isLoading) return <Center><Loader2 className="h-5 w-5 animate-spin" /></Center>;
   if (q.isError || !data) return <Center><span className="text-sm text-muted-foreground">No route data available for this model.</span></Center>;
 
@@ -186,6 +208,11 @@ export function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSt
       <div className="flex min-h-0 flex-col">
         <div className="border-b border-border bg-muted/40 px-4 py-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">IEDB route (cycle time) · {iedb.length}</span>
+          {missingCount > 0 && mes.length > 0 && (
+            <span className="ml-2 rounded-full bg-red-500/15 px-1.5 py-px text-[9px] font-semibold text-red-600 dark:text-red-400">
+              {missingCount} not in MES route
+            </span>
+          )}
         </div>
         {borrowedFrom && (
           <div className="flex items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2">
@@ -197,8 +224,14 @@ export function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSt
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-auto">
-          {iedb.map((s, i) => (
-            <div key={i} className="grid grid-cols-[1.25rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0">
+          {iedb.map((s, i) => {
+            // Only meaningful when there IS a MES route to compare against. With
+            // no MES data every step would shade red and say the floor skipped
+            // them, when the truth is the model has not been built recently.
+            const orphan = mes.length > 0 && notInMes(s.alias);
+            return (
+            <div key={i} className={cn('grid grid-cols-[1.25rem_1fr_auto] items-center gap-2 border-b border-border px-4 py-1.5 last:border-0',
+                                       orphan && 'bg-red-500/5')}>
               {/* Still SORTED by the source `order` — only the label is the
                   position, so the route sequence is unchanged. */}
               <OrderDot n={i + 1} side="iedb" />
@@ -206,11 +239,20 @@ export function RouteView({ q }: { q: ReturnType<typeof useCycleTimeCompletionSt
                 <p className="truncate text-[12px] font-medium text-foreground">{s.process}</p>
                 {/* Alias, not sub_workcenter: the alias is what the MES side is
                     actually matched against, so it belongs next to the step. */}
-                {s.alias && <p className="truncate text-[10px] text-muted-foreground">{s.alias}</p>}
+                <p className="flex items-center gap-1.5 truncate text-[10px] text-muted-foreground">
+                  {s.alias && <span className="truncate">{s.alias}</span>}
+                  {orphan && (
+                    <span className="shrink-0 rounded-full bg-red-500/15 px-1.5 py-px text-[8px] font-semibold uppercase tracking-wide text-red-600 dark:text-red-400"
+                          title="No step in the MES route matches this one — priced, but the floor did not run it">
+                      not in MES route
+                    </span>
+                  )}
+                </p>
               </div>
               <span className="ct-num tabular-nums text-[11px] font-semibold text-foreground whitespace-nowrap">{formatCycleSecondsLabel(s.cycle_time)}</span>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

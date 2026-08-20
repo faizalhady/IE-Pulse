@@ -546,11 +546,18 @@ export interface CompletionModel {
 /** `not_checked` = the completion run has not reached this model yet. It is NOT
  *  a verdict — the model is simply absent from the mart. Shown rather than
  *  hidden, so "missing from the report" can't be mistaken for "no problems". */
-/** Four verdicts, worst-first, plus `not_checked` for rows the run hasn't reached.
+/** The verdicts, worst-first, plus `not_checked` for rows the run hasn't reached.
  *  Collapsed from seven on 2026-08-05 — route_gap/no_data/unverified/unavailable
- *  said the same thing four ways. The detail moved to `reason`. */
+ *  said the same thing four ways. The detail moved to `reason`.
+ *
+ *  `not_in_mes` is LEGACY and only reaches the UI from an older backend or from
+ *  a history week snapshotted before the split. It was one word for two answers:
+ *  `not_built` (wait for the scan) and `cannot_check` (no scan will ever come).
+ *  `dstatus()` maps it; keep it in the union until prod stops sending it. */
 export type DemandCompletionStatus =
-  | 'incomplete' | 'no_cycle_time' | 'not_in_iedb' | 'not_in_mes' | 'complete' | 'not_checked';
+  | 'incomplete' | 'no_cycle_time' | 'not_in_iedb' | 'not_built' | 'cannot_check'
+  | 'complete' | 'not_checked'
+  | 'not_in_mes';
 
 /** Why a status was given — the detail the four statuses fold away. */
 export type DemandCompletionReason =
@@ -660,6 +667,10 @@ export interface ModelBom {
   has_bom: boolean;
   /** The materials are in our mart. false + has_bom true = not pulled yet. */
   in_mart: boolean;
+  /** The mes_assembly_map bridge carries bom_id at all. false on a freshly
+   *  deployed server until the pipelines run — every model reads has_bom:false
+   *  in that state, which says nothing about MES. */
+  bridge_ready: boolean;
   /** false = the assembly itself was not found in MES. */
   in_mes: boolean;
   materials: BomMaterial[];
@@ -1016,6 +1027,19 @@ export type ProcessScope = 'scanned' | 'configured';
 export type ProcessSort =
   'step' | 'workcell' | 'status' | 'source' | 'maps_to' | 'models' | 'rows' | 'scans';
 
+// ─── Chat ────────────────────────────────────────────────────────────────────
+export interface ChatCall { tool: string; args: Record<string, unknown>; ok: boolean; }
+export interface ChatAnswer {
+  answer: string;
+  /** Which tools ran, so the answer can be audited rather than trusted. */
+  calls: ChatCall[];
+  /** Which mart produced the numbers. Rendered under every answer. */
+  sources: string[];
+  elapsed_s: number;
+  error?: string;
+}
+export interface ChatHealth { ok: boolean; detail: string; model: string; tools: string[]; }
+
 export const cycleTimeApi = {
   health: {
     get: () => get<CycleTimeHealth>('/health'),
@@ -1188,6 +1212,14 @@ export const cycleTimeApi = {
     /** Per-model LBR + IPK breakdown (lines, stations, buffers). */
     lineMetrics: (customer: string, assembly: string, signal?: AbortSignal) =>
       get<LineMetrics>('/completion/line-metrics', { customer, assembly }, signal),
+  },
+  chat: {
+    /** Is the local model up? Cheap — call before showing the composer so a dead
+     *  Ollama reads as "not running" instead of a spinner that never resolves. */
+    health: () => get<ChatHealth>('/chat/health'),
+    /** Ask one question. `history` carries prior turns as plain text only. */
+    ask: (question: string, history: { role: string; content: string }[] = []) =>
+      postJson<ChatAnswer>('/chat', { question, history }),
   },
   bom: {
     /** MES BOM materials for one model. Omit `revision` for the newest revision

@@ -11,6 +11,7 @@ import {
   FileText,
   FlaskConical,
   Gauge,
+  MessageSquare,
   GitFork,
   Home,
   Inbox,
@@ -136,6 +137,7 @@ export const APPS: AppConfig[] = [
     navItems: [
       { label: 'Home', to: '/cycle-time/home', icon: Home },
       { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
+      { label: 'Ask the data', to: '/cycle-time/ask', icon: MessageSquare },
       // Every (workcell, MES step) couple in the plant. The workcell page's
       // Processes tab is this same table locked to one workcell — same
       // component, so the two can never disagree about a step's mapping.

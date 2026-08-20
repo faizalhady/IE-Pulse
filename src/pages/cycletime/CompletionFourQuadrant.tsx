@@ -5,14 +5,19 @@
  * building has complete cycle times.
  *
  *   Q1  where we stand      completion % by week, against target
- *   Q2  where it is going   split by plant and workcell, plus every loss ranked
+ *   Q2  where it is going   every loss ranked, and the workcells behind the top two
  *   Q3  what we will do     the improvement plan (owned by CycleTime4QReport)
  *   Q4  the 100% view       complete + every loss, summing back to 100%
  *
- * Measured in demand UNITS, not model count. The top 500 of ~4,100 models are
- * 88% of the volume, so a rate counted by model says something quite different
- * from one weighted by what actually gets built. Model counts are shown beside
- * the units so the two can be compared rather than confused.
+ * Measured in demand UNITS, not model count. The top 500 of the 4,401 demand
+ * models carry 88.1% of the volume (the top 100 carry 64.9%), so a rate counted
+ * by model says something quite different from one weighted by what actually
+ * gets built. Model counts are shown beside the units so the two can be compared
+ * rather than confused.
+ *
+ * SCOPE IS DEMAND, NOT THE UNIVERSE. 4,401 models, not the 57,074 the report's
+ * "All models" shows. The snapshot enforces it server-side (completion_history
+ * .rollup filters on has_demand) — this indicator is about what we are building.
  *
  * Data: /cycle-time/completion/history (the only cycle-time mart that
  * accumulates — the status marts are overwritten every run).
@@ -22,39 +27,25 @@
  * twice.
  */
 
-import type { CompletionHistory, CompletionLoss, CompletionSplit, CompletionWeek } from '@/lib/cycle_time/cycleTimeApi';
+import type { CompletionHistory, CompletionLoss, CompletionWeek } from '@/lib/cycle_time/cycleTimeApi';
+// ONE vocabulary, shared with the models table — see cycleTimeConstants.
+import {
+  REASON_LABEL, STATUS_ORDER, TARGET, canonStatus, reasonLabel, statusColor, statusLabel,
+} from '@/lib/cycle_time/cycleTimeConstants';
 import { cn } from '@/lib/utils';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-export const TARGET = 90;
-
-/** Loss colours, worst-first — matches the status chips on the Data Table tab
- *  so a colour means the same thing on both. */
-const LOSS_COLOR: Record<string, string> = {
-  incomplete:    '#f59e0b',
-  no_cycle_time: '#f97316',
-  not_in_iedb:   '#ef4444',
-  not_in_mes:    '#0ea5e9',
-  not_checked:   '#94a3b8',
+export { TARGET, REASON_LABEL };
+/** Chart/bar colour for a status. Legacy keys resolve first, so a pre-split
+ *  history week still gets a real colour instead of the fallback grey. */
+export const lossColor = (s: string) => statusColor(canonStatus(s));
+/** How a loss reads in the improvement plan's Issue column and the Pareto. */
+export const lossLabel = (l: CompletionLoss) => {
+  const st = statusLabel(canonStatus(l.status));
+  const rs = reasonLabel(l.reason);
+  return rs ? `${st} · ${rs}` : st;
 };
-export const lossColor = (s: string) => LOSS_COLOR[s] ?? '#94a3b8';
-
-export const STATUS_LABEL: Record<string, string> = {
-  incomplete: 'Missing CT', no_cycle_time: 'No cycle time', not_in_iedb: 'Not in IEDB',
-  not_in_mes: 'Not in MES', not_checked: 'Not checked', complete: 'Complete',
-};
-export const REASON_LABEL: Record<string, string> = {
-  missing_ct: 'blank cycle time', missing_step: 'step not in route',
-  'missing_ct+step': 'blank CT + route gap', unmapped: 'steps unrecognised',
-  no_alias: 'no alias to match on', in_iedb_untimed: 'in IEDB, never timed',
-  absent: 'no IEDB record', absent_unverified: 'not in our IEDB snapshot',
-  no_production: 'not built yet', workcell_not_on_mes: 'workcell not on MES',
-};
-
-/** How a loss reads in the improvement plan's Issue column. */
-export const lossLabel = (l: CompletionLoss) =>
-  `${STATUS_LABEL[l.status] ?? l.status}${l.reason ? ` · ${REASON_LABEL[l.reason] ?? l.reason}` : ''}`;
 
 const n0 = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`);
@@ -91,8 +82,6 @@ export interface QuadrantModel {
   losses: CompletionLoss[];
   /** complete + every loss, so the bar sums to 100%. */
   stack: CompletionLoss[];
-  byPlant: CompletionSplit[];
-  byWorkcell: CompletionSplit[];
 }
 
 export function buildQuadrantModel(data: CompletionHistory): QuadrantModel | null {
@@ -102,20 +91,40 @@ export function buildQuadrantModel(data: CompletionHistory): QuadrantModel | nul
   const prev = weeks.length > 1 ? weeks[weeks.length - 2] : null;
   const delta = prev?.pct != null && latest.pct != null ? latest.pct - prev.pct : null;
 
-  // Q4 wants complete AND the losses in one list that sums to 100%.
+  // The endpoint returns one bucket per (status, REASON) — 16 of them this week,
+  // and 147 rows behind the scenes. Q2's Pareto wants that detail; Q4 does not.
+  // Rendering it produced a "100% view" of sixteen slivers, several under 0.1%,
+  // in the vocabulary of a table that only ever shows SIX verdicts. Q4 collapses
+  // to the status, which is the vocabulary every other cycle-time screen uses.
+  const losses = data.losses.filter(l => l.status !== 'complete');
+
+  const byStatus = new Map<string, CompletionLoss>();
+  for (const l of losses) {
+    const key = canonStatus(l.status);          // fold retired keys in first
+    const acc = byStatus.get(key);
+    if (acc) { acc.units += l.units; acc.models += l.models; }
+    else byStatus.set(key, { status: key, reason: '', units: l.units, models: l.models, pct: 0 });
+  }
+  // One division against the week's total, NOT a sum of the rounded parts the
+  // server sent — adding 16 values each rounded to 1dp drifts, and this bar is
+  // the one place the number has to land on exactly 100.
+  const total = latest.units || 1;
+  const grouped = [...byStatus.values()]
+    .map(l => ({ ...l, pct: Math.round((1000 * l.units) / total) / 10 }))
+    .sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
+
   const complete: CompletionLoss = {
     status: 'complete', reason: '', units: latest.complete_units,
     models: latest.complete_models, pct: latest.pct,
   };
-  const losses = data.losses.filter(l => l.status !== 'complete');
 
   return {
     weeks, latest, delta, losses,
-    stack: [complete, ...losses],
+    // Worst-first by STATUS_ORDER, which puts `complete` last — it is the
+    // answer, not a loss, and the table orders it the same way.
+    stack: [...grouped, complete],
     // "Last 4 weeks", so the movers are measured against 4 weeks back.
     base: weeks.length > 4 ? weeks[weeks.length - 5] : weeks[0],
-    byPlant: data.by_plant,
-    byWorkcell: data.by_workcell,
   };
 }
 
@@ -171,47 +180,6 @@ export function Q1Trend({ m, height = 210 }: { m: QuadrantModel; height?: number
   );
 }
 
-function SplitRow({ label, row, bold }: { label: string; row: CompletionSplit; bold?: boolean }) {
-  const v = row.pct ?? 0;
-  return (
-    <div className="flex items-center gap-2 text-[11px]">
-      <span className={cn('w-28 shrink-0 truncate', bold && 'font-semibold')}>{label}</span>
-      <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full"
-          style={{ width: `${v}%`, background: v >= TARGET ? '#10b981' : v >= 60 ? '#f59e0b' : '#ef4444' }} />
-      </div>
-      <span className="w-11 text-right font-mono tabular-nums">{pct(row.pct)}</span>
-      <span className="w-14 text-right tabular-nums text-muted-foreground">{n0(row.units)}</span>
-    </div>
-  );
-}
-
-export function Q2Splits({ m, maxWorkcells = 40, listHeight = 130 }: {
-  m: QuadrantModel; maxWorkcells?: number; listHeight?: number;
-}) {
-  const shown = m.byWorkcell.slice(0, maxWorkcells);
-  const hidden = m.byWorkcell.length - shown.length;
-  return (
-    <div className="space-y-1">
-      {m.byPlant.map(p => <SplitRow key={p.plant} label={p.plant ?? '—'} row={p} bold />)}
-      <div className="mt-2 space-y-1 overflow-y-auto pr-1" style={{ maxHeight: listHeight }}>
-        {shown.map(w => <SplitRow key={w.workcell} label={w.workcell ?? '—'} row={w} />)}
-      </div>
-      {/* Never truncate silently — a cut-off list reads as "that's everything". */}
-      {hidden > 0 && (
-        <p className="pt-1 text-[10px] text-muted-foreground">
-          + {hidden} more workcell{hidden === 1 ? '' : 's'} not shown
-        </p>
-      )}
-      {m.weeks.length > 1 && (
-        <p className="pt-1 text-[10px] text-muted-foreground">
-          {m.base.iso_week} → {m.latest.iso_week}: {pct(m.base.pct)} → {pct(m.latest.pct)}
-        </p>
-      )}
-    </div>
-  );
-}
-
 // The horizontal loss bar that used to be Q3 is gone: Q2 now ranks the same
 // numbers as a proper Pareto (bars + cumulative line), matching OLE, and Q3 is
 // the improvement plan.
@@ -221,18 +189,20 @@ export function Q4Stack({ m }: { m: QuadrantModel }) {
     <>
       <div className="flex h-6 w-full overflow-hidden rounded-md">
         {m.stack.filter(s => (s.pct ?? 0) > 0).map((s, i) => (
-          <div key={i} style={{ width: `${s.pct}%`, background: s.status === 'complete' ? '#10b981' : lossColor(s.status) }}
-            title={`${STATUS_LABEL[s.status] ?? s.status} ${pct(s.pct)}`} />
+          <div key={i} style={{ width: `${s.pct}%`, background: lossColor(s.status) }}
+            title={`${statusLabel(s.status)} ${pct(s.pct)}`} />
         ))}
       </div>
       <div className="mt-3 space-y-1">
         {m.stack.map((s, i) => (
           <div key={i} className="flex items-center gap-2 text-[11px]">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ background: s.status === 'complete' ? '#10b981' : lossColor(s.status) }} />
-            <span className="min-w-0 flex-1 truncate">
-              {STATUS_LABEL[s.status] ?? s.status}
-              {s.reason && <span className="text-muted-foreground"> · {REASON_LABEL[s.reason] ?? s.reason}</span>}
+              style={{ background: lossColor(s.status) }} />
+            {/* Status only. The reason breakdown lives in Q2's Pareto, which is
+                where the detail is actionable. */}
+            <span className="min-w-0 flex-1 truncate">{statusLabel(s.status)}</span>
+            <span className="w-16 text-right tabular-nums text-muted-foreground">
+              {n0(s.models)}
             </span>
             <span className="tabular-nums text-muted-foreground">{n0(s.units)}</span>
             <span className="w-12 text-right font-mono font-semibold tabular-nums">{pct(s.pct)}</span>
@@ -240,9 +210,16 @@ export function Q4Stack({ m }: { m: QuadrantModel }) {
         ))}
         <div className="flex items-center gap-2 border-t pt-1 text-[11px] font-semibold">
           <span className="flex-1">Total</span>
+          <span className="w-16 text-right tabular-nums text-muted-foreground">{n0(m.latest.models)}</span>
           <span className="tabular-nums text-muted-foreground">{n0(m.latest.units)}</span>
+          {/* Derived from units, NOT by summing the rounded parts. Each of the
+              ~147 buckets is rounded to 1dp server-side, so adding them up drifts
+              — the W34 stack sums to 100.1%. In the quadrant whose entire point
+              is that everything adds back to 100, that reads as a broken number. */}
           <span className="w-12 text-right font-mono tabular-nums">
-            {pct(m.stack.reduce((a, s) => a + (s.pct ?? 0), 0))}
+            {pct(m.latest.units
+              ? (100 * m.stack.reduce((a, s) => a + s.units, 0)) / m.latest.units
+              : null)}
           </span>
         </div>
       </div>
