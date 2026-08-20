@@ -1060,7 +1060,15 @@ export interface ChatEvent {
   /** Only on final. */
   payload?: ChatAnswer;
 }
-export interface ChatHealth { ok: boolean; detail: string; model: string; tools: string[]; }
+export interface ChatHealth {
+  ok: boolean;
+  detail: string;
+  model: string;
+  tools: string[];
+  /** false = the server has the chat switched off (CT_CHAT_ENABLED=0) — hide
+   *  every chat surface and fetch nothing further. Absent = an older server. */
+  enabled?: boolean;
+}
 
 export const cycleTimeApi = {
   health: {

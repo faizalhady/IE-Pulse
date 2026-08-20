@@ -45,3 +45,9 @@ export const includesApp = (id: AppId): boolean => BUILD_APPS.includes(id);
  * the URL the router actually matches against.
  */
 export const BUILD_BASENAME: string = '/ietools/';
+
+/** The "Ask the data" chat (nav item, route, floating bubble). Build-time so a
+ *  production bundle for 02 ships with ZERO chat UI and never calls the AI
+ *  endpoints. Off only when the env file says so: VITE_CHAT_ENABLED=0 in
+ *  .env.cycle-time; dev stays on. */
+export const CHAT_ENABLED: boolean = import.meta.env.VITE_CHAT_ENABLED !== '0';

@@ -14,16 +14,29 @@
  */
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 // v3 API: named export, `src` prop. LottieSvg is the svg-only engine — this
 // animation is plain vectors, so the full renderer would be dead weight.
 import { LottieSvg } from 'lottie-react';
 
 import chatbotAnim from '@/assets/chatbot-voice-assistant.json';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { cycleTimeApi } from '@/lib/cycle_time/cycleTimeApi';
 import CycleTimeChat from '@/pages/cycletime/CycleTimeChat';
 
 export default function ChatWidget() {
   const [open, setOpen] = useState(false);
+
+  // Belt on top of the build flag: if the SERVER says the chat is disabled
+  // (CT_CHAT_ENABLED=0), no bubble — one cheap health call, no retries, and
+  // nothing else about the chat is ever fetched again.
+  const health = useQuery({
+    queryKey: ['ct-chat-health'],
+    queryFn: () => cycleTimeApi.chat.health(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  if (health.data?.enabled === false) return null;
   return (
     <>
       <button
