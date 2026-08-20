@@ -31,8 +31,7 @@ export default function ChatWidget() {
         aria-label="Ask the data"
         title="Ask the data"
         onClick={() => setOpen(true)}
-        className="fixed bottom-3 right-6 z-40 h-16 w-16 overflow-hidden rounded-full
-                   border border-border bg-card shadow-lg transition-transform
+        className="fixed bottom-3 right-6 z-40 h-16 w-16 transition-transform
                    duration-200 hover:scale-110 active:scale-95"
       >
         <LottieSvg src={chatbotAnim} loop autoplay className="h-full w-full" />
