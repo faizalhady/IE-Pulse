@@ -33,7 +33,9 @@ import {
   Wrench
 } from 'lucide-react';
 import { createElement } from 'react';
-import { CHAT_ENABLED } from '@/lib/buildContext';
+// From buildFlags, NOT buildContext: buildContext imports APPS from this file,
+// and importing it back here is a cycle that white-screens the app.
+import { CHAT_ENABLED } from '@/lib/buildFlags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
