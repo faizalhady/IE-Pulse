@@ -1045,6 +1045,9 @@ export interface ChatAnswer {
   /** The SELECT that produced an open_query answer. Shown so a wrong query
    *  is checkable, not invisible. */
   sql?: string;
+  /** open_query results as structured rows — the UI renders the table; the
+   *  answer text is only the lead-in sentence. */
+  table?: { columns: string[]; rows: Record<string, unknown>[] };
   elapsed_s: number;
   error?: string;
 }

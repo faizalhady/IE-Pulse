@@ -35,7 +35,44 @@ import { cn } from '@/lib/utils';
 interface Turn {
   role: 'user' | 'assistant';
   content: string;
-  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane'>;
+  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table'>;
+}
+
+/** A query result as a real table. Numbers right-aligned; the raw text answer
+ *  above it is only the model's one-sentence lead-in. */
+function ResultTable({ table }: { table: NonNullable<ChatAnswer['table']> }) {
+  const numeric = table.columns.map(c =>
+    table.rows.every(r => r[c] === null || typeof r[c] === 'number'));
+  return (
+    <div className="mt-2 overflow-x-auto rounded border border-border/60">
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="bg-muted/50">
+            {table.columns.map((c, i) => (
+              <th key={c} className={cn('px-2.5 py-1.5 font-medium text-muted-foreground',
+                numeric[i] ? 'text-right' : 'text-left')}>
+                {c.replace(/_/g, ' ')}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((r, i) => (
+            <tr key={i} className="border-t border-border/40">
+              {table.columns.map((c, j) => (
+                <td key={c} className={cn('px-2.5 py-1',
+                  numeric[j] ? 'text-right font-mono tabular-nums' : '')}>
+                  {r[c] === null || r[c] === undefined ? '—'
+                    : typeof r[c] === 'number' ? (r[c] as number).toLocaleString()
+                    : String(r[c])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** Questions that exercise a different tool each — a blank chat box is the
@@ -175,6 +212,8 @@ export default function CycleTimeChat() {
                   general answer — not from your data
                 </div>
               )}
+
+              {t.meta?.table && <ResultTable table={t.meta.table} />}
 
               {/* The SELECT behind an open answer. A wrong query should be
                   checkable, not invisible. */}
