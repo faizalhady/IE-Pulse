@@ -24,18 +24,164 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { cycleTimeApi } from '@/lib/cycle_time/cycleTimeApi';
 import type { ChatAnswer } from '@/lib/cycle_time/cycleTimeApi';
+import { useCycleTimeCustomers } from '@/hooks/cycle_time/useCycleTimeData';
 import { cn } from '@/lib/utils';
+
+// ─── entity links ────────────────────────────────────────────────────────────
+// A workcell name in an answer is a door, not a word: click it, land on that
+// workcell's page. Same for part numbers when the workcell is known. Matching
+// is done here in the FE against the customers list the app already caches —
+// the backend stays a text API.
+
+const normKey = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** A part number: letters/digits with at least one dash and one digit. */
+const PART_SRC = '[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+';
+
+const LINK_CLS = 'underline decoration-dotted underline-offset-2 hover:text-primary';
+
+function wcHref(display: string) { return `/cycle-time/${encodeURIComponent(display)}`; }
+function modelHref(wc: string, asm: string) {
+  return `/cycle-time/${encodeURIComponent(wc)}/${encodeURIComponent(asm)}`;
+}
+
+/** Answer text -> text with workcell names and part numbers as links. */
+function linkify(text: string, names: string[], byKey: Map<string, string>,
+                 ctxWc?: string): ReactNode {
+  if (!names.length) return text;
+  const wcAlt = [...names].sort((a, b) => b.length - a.length).map(escapeRe).join('|');
+  const re = new RegExp(`(${wcAlt})|(${PART_SRC})`, 'gi');
+  const out: ReactNode[] = [];
+  let last = 0, m: RegExpExecArray | null, k = 0;
+  while ((m = re.exec(text)) !== null) {
+    const s = m[0];
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[1]) {
+      const display = byKey.get(normKey(s)) ?? s;
+      out.push(<Link key={k++} className={LINK_CLS} to={wcHref(display)}>{s}</Link>);
+    } else if (/\d/.test(s) && s.length >= 6 && ctxWc) {
+      out.push(<Link key={k++} className={LINK_CLS} to={modelHref(ctxWc, s)}>{s}</Link>);
+    } else {
+      out.push(s);                              // part-shaped but no workcell to anchor it
+    }
+    last = m.index + s.length;
+  }
+  if (!out.length) return text;
+  out.push(text.slice(last));
+  return out;
+}
+
+/** The one workcell this turn is about, as a display name — from the tool call
+ *  arguments first, else the single workcell named in the answer. */
+function turnWorkcell(t: Turn, names: string[], byKey: Map<string, string>): string | undefined {
+  const arg = t.meta?.calls?.[0]?.args?.workcell;
+  if (typeof arg === 'string' && arg) {
+    const hit = byKey.get(normKey(arg));
+    if (hit) return hit;
+  }
+  const found = new Set<string>();
+  for (const n of names) {
+    if (t.content.toUpperCase().includes(n.toUpperCase())) found.add(byKey.get(normKey(n)) ?? n);
+  }
+  return found.size === 1 ? [...found][0] : undefined;
+}
 
 interface Turn {
   role: 'user' | 'assistant';
   content: string;
-  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error'>;
+  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table' | 'intent'>;
+}
+
+/** Where to go for the full picture — one deterministic suggestion per answer,
+ *  mapped from the intent that produced it. */
+function suggestion(t: Turn, ctxWc?: string): { label: string; to: string } | null {
+  const intent = t.meta?.intent;
+  if (!intent || t.meta?.error) return null;
+  const asm = t.meta?.calls?.[0]?.args?.assembly;
+  if (['model_status', 'model_bom', 'model_cycle_time'].includes(intent)
+      && ctxWc && typeof asm === 'string' && asm) {
+    return { label: `the ${asm} model page`, to: modelHref(ctxWc, asm) };
+  }
+  if (['workcell_completion', 'models_by_status'].includes(intent) && ctxWc) {
+    return { label: `the ${ctxWc} workcell page`, to: wcHref(ctxWc) };
+  }
+  if (intent === 'completion_trend') return { label: 'the 4Q report', to: '/cycle-time/4q' };
+  if (intent === 'plant_completion') return { label: 'the plant report', to: '/cycle-time/home' };
+  if (intent === 'open_query') {
+    return ctxWc
+      ? { label: `the ${ctxWc} workcell page`, to: wcHref(ctxWc) }
+      : { label: 'the plant report', to: '/cycle-time/home' };
+  }
+  return null;
+}
+
+/** A query result as a real table. Numbers right-aligned; the raw text answer
+ *  above it is only the model's one-sentence lead-in. Workcell and assembly
+ *  cells link to their pages. */
+function ResultTable({ table, byKey, ctxWc }: {
+  table: NonNullable<ChatAnswer['table']>;
+  byKey: Map<string, string>;
+  ctxWc?: string;
+}) {
+  const numeric = table.columns.map(c =>
+    table.rows.every(r => r[c] === null || typeof r[c] === 'number'));
+
+  function cell(r: Record<string, unknown>, c: string): ReactNode {
+    const v = r[c];
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'number') return v.toLocaleString();
+    const s = String(v);
+    if (c === 'workcell' || c === 'customer') {
+      return <Link className={LINK_CLS} to={wcHref(s)}>{s}</Link>;
+    }
+    if (c === 'workcell_key') {
+      const display = byKey.get(s) ?? s;
+      return <Link className={LINK_CLS} to={wcHref(display)}>{s}</Link>;
+    }
+    if (c === 'assembly') {
+      const rowWc = (typeof r.workcell === 'string' && r.workcell)
+        || (typeof r.workcell_key === 'string' && (byKey.get(r.workcell_key) ?? r.workcell_key))
+        || ctxWc;
+      if (rowWc) return <Link className={LINK_CLS} to={modelHref(rowWc, s)}>{s}</Link>;
+    }
+    return s;
+  }
+  return (
+    <div className="mt-2 overflow-x-auto rounded border border-border/60">
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="bg-muted/50">
+            {table.columns.map((c, i) => (
+              <th key={c} className={cn('px-2.5 py-1.5 font-medium text-muted-foreground',
+                numeric[i] ? 'text-right' : 'text-left')}>
+                {c.replace(/_/g, ' ')}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((r, i) => (
+            <tr key={i} className="border-t border-border/40">
+              {table.columns.map((c, j) => (
+                <td key={c} className={cn('px-2.5 py-1',
+                  numeric[j] ? 'text-right font-mono tabular-nums' : '')}>
+                  {cell(r, c)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** Questions that exercise a different tool each — a blank chat box is the
@@ -51,6 +197,10 @@ export default function CycleTimeChat() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  /** What the server is doing right now ("routing…", "reading the mart…"),
+   *  and the partial answer while it streams. */
+  const [stage, setStage] = useState('');
+  const [live, setLive] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
   const health = useQuery({
@@ -59,6 +209,14 @@ export default function CycleTimeChat() {
     staleTime: 60_000,
     retry: false,
   });
+
+  // The entity dictionary: display names + normalised-key lookup, from the
+  // customer list the app already caches for an hour.
+  const customers = useCycleTimeCustomers();
+  const { wcNames, byKey } = useMemo(() => {
+    const names = [...new Set((customers.data ?? []).map(c => c.customer).filter(Boolean))];
+    return { wcNames: names, byKey: new Map(names.map(n => [normKey(n), n])) };
+  }, [customers.data]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [turns, busy]);
 
@@ -74,17 +232,34 @@ export default function CycleTimeChat() {
     setDraft('');
     setTurns(t => [...t, { role: 'user', content: question }]);
     setBusy(true);
+    setStage('routing…');
+    setLive('');
     try {
-      const r = await cycleTimeApi.chat.ask(question, history);
+      let r: ChatAnswer;
+      try {
+        // Streamed: stage lines while the server works, tokens as the answer
+        // is written. Falls back to the plain call — an old server without
+        // /chat/stream must degrade to slow, never to broken.
+        let acc = '';
+        r = await cycleTimeApi.chat.stream(question, history, (e) => {
+          if (e.type === 'stage') setStage(e.text ?? '');
+          if (e.type === 'delta') { acc += e.text ?? ''; setLive(acc); }
+        });
+      } catch {
+        r = await cycleTimeApi.chat.ask(question, history);
+      }
       setTurns(t => [...t, { role: 'assistant', content: r.answer, meta: r }]);
     } catch (e) {
       setTurns(t => [...t, {
         role: 'assistant',
         content: `The request failed: ${(e as Error).message}`,
-        meta: { calls: [], sources: [], elapsed_s: 0, error: 'request_failed' },
+        meta: { calls: [], sources: [], elapsed_s: 0, error: 'request_failed',
+                grounded: false, lane: 'error', intent: 'none' },
       }]);
     } finally {
       setBusy(false);
+      setStage('');
+      setLive('');
     }
   }
 
@@ -136,7 +311,9 @@ export default function CycleTimeChat() {
           </div>
         )}
 
-        {turns.map((t, i) => (
+        {turns.map((t, i) => {
+          const ctxWc = t.role === 'assistant' ? turnWorkcell(t, wcNames, byKey) : undefined;
+          return (
           <div key={i} className={cn('flex gap-3', t.role === 'user' && 'justify-end')}>
             {t.role === 'assistant' && (
               <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -145,7 +322,37 @@ export default function CycleTimeChat() {
             )}
             <div className={cn('min-w-0 max-w-[42rem] rounded-xl px-3.5 py-2.5 text-sm',
               t.role === 'user' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card')}>
-              <div className="whitespace-pre-wrap break-words">{t.content}</div>
+              <div className="whitespace-pre-wrap break-words">
+                {t.role === 'assistant' ? linkify(t.content, wcNames, byKey, ctxWc) : t.content}
+              </div>
+
+              {/* An ungrounded answer must not dress like a sourced one — the
+                  two read identically, which is exactly the danger. */}
+              {t.meta && t.meta.grounded === false && t.meta.lane === 'general' && (
+                <div className="mt-2 border-t border-border/60 pt-2 text-[10px] italic text-muted-foreground">
+                  general answer — not from your data
+                </div>
+              )}
+
+              {t.meta?.table && <ResultTable table={t.meta.table} byKey={byKey} ctxWc={ctxWc} />}
+
+              {/* The SELECT behind an open answer. A wrong query should be
+                  checkable, not invisible. */}
+              {t.meta?.sql && (
+                <pre className="mt-2 overflow-x-auto rounded bg-muted/60 p-2 font-mono text-[10px] text-muted-foreground">
+                  {t.meta.sql}
+                </pre>
+              )}
+
+              {/* One door onward — the page with the full picture. */}
+              {t.role === 'assistant' && (() => {
+                const s = suggestion(t, ctxWc);
+                return s && (
+                  <div className="mt-2 text-[11px] text-muted-foreground">
+                    → See <Link className={LINK_CLS} to={s.to}>{s.label}</Link> for more.
+                  </div>
+                );
+              })()}
 
               {/* The audit trail. Deliberately always visible. */}
               {t.meta && (t.meta.calls.length > 0 || t.meta.sources.length > 0) && (
@@ -169,16 +376,23 @@ export default function CycleTimeChat() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {busy && (
           <div className="flex gap-3">
             <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
               <Bot className="h-4 w-4 text-muted-foreground" />
             </div>
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              reading the marts…
+            <div className="min-w-0 max-w-[42rem] rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm">
+              {live
+                ? <div className="whitespace-pre-wrap break-words">{live}</div>
+                : (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {stage || 'reading the marts…'}
+                  </div>
+                )}
             </div>
           </div>
         )}
