@@ -31,7 +31,7 @@ export default function ChatWidget() {
         aria-label="Ask the data"
         title="Ask the data"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 h-16 w-16 overflow-hidden rounded-full
+        className="fixed bottom-3 right-6 z-40 h-16 w-16 overflow-hidden rounded-full
                    border border-border bg-card shadow-lg transition-transform
                    duration-200 hover:scale-110 active:scale-95"
       >
