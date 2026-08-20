@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 interface Turn {
   role: 'user' | 'assistant';
   content: string;
-  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error'>;
+  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane'>;
 }
 
 /** Questions that exercise a different tool each — a blank chat box is the
@@ -51,6 +51,10 @@ export default function CycleTimeChat() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  /** What the server is doing right now ("routing…", "reading the mart…"),
+   *  and the partial answer while it streams. */
+  const [stage, setStage] = useState('');
+  const [live, setLive] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
   const health = useQuery({
@@ -74,17 +78,34 @@ export default function CycleTimeChat() {
     setDraft('');
     setTurns(t => [...t, { role: 'user', content: question }]);
     setBusy(true);
+    setStage('routing…');
+    setLive('');
     try {
-      const r = await cycleTimeApi.chat.ask(question, history);
+      let r: ChatAnswer;
+      try {
+        // Streamed: stage lines while the server works, tokens as the answer
+        // is written. Falls back to the plain call — an old server without
+        // /chat/stream must degrade to slow, never to broken.
+        let acc = '';
+        r = await cycleTimeApi.chat.stream(question, history, (e) => {
+          if (e.type === 'stage') setStage(e.text ?? '');
+          if (e.type === 'delta') { acc += e.text ?? ''; setLive(acc); }
+        });
+      } catch {
+        r = await cycleTimeApi.chat.ask(question, history);
+      }
       setTurns(t => [...t, { role: 'assistant', content: r.answer, meta: r }]);
     } catch (e) {
       setTurns(t => [...t, {
         role: 'assistant',
         content: `The request failed: ${(e as Error).message}`,
-        meta: { calls: [], sources: [], elapsed_s: 0, error: 'request_failed' },
+        meta: { calls: [], sources: [], elapsed_s: 0, error: 'request_failed',
+                grounded: false, lane: 'error' },
       }]);
     } finally {
       setBusy(false);
+      setStage('');
+      setLive('');
     }
   }
 
@@ -147,6 +168,22 @@ export default function CycleTimeChat() {
               t.role === 'user' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card')}>
               <div className="whitespace-pre-wrap break-words">{t.content}</div>
 
+              {/* An ungrounded answer must not dress like a sourced one — the
+                  two read identically, which is exactly the danger. */}
+              {t.meta && t.meta.grounded === false && t.meta.lane === 'general' && (
+                <div className="mt-2 border-t border-border/60 pt-2 text-[10px] italic text-muted-foreground">
+                  general answer — not from your data
+                </div>
+              )}
+
+              {/* The SELECT behind an open answer. A wrong query should be
+                  checkable, not invisible. */}
+              {t.meta?.sql && (
+                <pre className="mt-2 overflow-x-auto rounded bg-muted/60 p-2 font-mono text-[10px] text-muted-foreground">
+                  {t.meta.sql}
+                </pre>
+              )}
+
               {/* The audit trail. Deliberately always visible. */}
               {t.meta && (t.meta.calls.length > 0 || t.meta.sources.length > 0) && (
                 <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-[10px] text-muted-foreground">
@@ -176,9 +213,15 @@ export default function CycleTimeChat() {
             <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
               <Bot className="h-4 w-4 text-muted-foreground" />
             </div>
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              reading the marts…
+            <div className="min-w-0 max-w-[42rem] rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm">
+              {live
+                ? <div className="whitespace-pre-wrap break-words">{live}</div>
+                : (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {stage || 'reading the marts…'}
+                  </div>
+                )}
             </div>
           </div>
         )}

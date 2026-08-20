@@ -1035,8 +1035,27 @@ export interface ChatAnswer {
   calls: ChatCall[];
   /** Which mart produced the numbers. Rendered under every answer. */
   sources: string[];
+  /** instant (canned, 0 model calls) | general | cycletime | error. */
+  lane: string;
+  /** The tool that answered, 'open_query' for the SQL lane, or 'none'. */
+  intent: string;
+  /** true = every number came from a mart. false = the model's own words —
+   *  the UI must say so, because both read identically. */
+  grounded: boolean;
+  /** The SELECT that produced an open_query answer. Shown so a wrong query
+   *  is checkable, not invisible. */
+  sql?: string;
   elapsed_s: number;
   error?: string;
+}
+
+/** One server-sent event from POST /chat/stream. */
+export interface ChatEvent {
+  type: 'stage' | 'delta' | 'final';
+  /** stage: short progress label. delta: the next piece of answer text. */
+  text?: string;
+  /** Only on final. */
+  payload?: ChatAnswer;
 }
 export interface ChatHealth { ok: boolean; detail: string; model: string; tools: string[]; }
 
@@ -1217,6 +1236,43 @@ export const cycleTimeApi = {
     /** Is the local model up? Cheap — call before showing the composer so a dead
      *  Ollama reads as "not running" instead of a spinner that never resolves. */
     health: () => get<ChatHealth>('/chat/health'),
+    /** Streaming ask. Calls `on` per event; resolves with the final payload.
+     *  The caller falls back to ask() when the stream is unavailable. */
+    stream: async (
+      question: string,
+      history: { role: string; content: string }[],
+      on: (e: ChatEvent) => void,
+    ): Promise<ChatAnswer> => {
+      const res = await fetch(`${BASE}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, history }),
+      });
+      if (!res.ok || !res.body) throw new Error(`chat/stream → ${res.status}`);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      let final: ChatAnswer | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        // SSE frames: "data: {...}\n\n"
+        for (;;) {
+          const cut = buf.indexOf('\n\n');
+          if (cut < 0) break;
+          const frame = buf.slice(0, cut);
+          buf = buf.slice(cut + 2);
+          const line = frame.split('\n').find(l => l.startsWith('data:'));
+          if (!line) continue;
+          const e = JSON.parse(line.slice(5)) as ChatEvent;
+          on(e);
+          if (e.type === 'final' && e.payload) final = e.payload;
+        }
+      }
+      if (!final) throw new Error('stream ended without a final payload');
+      return final;
+    },
     /** Ask one question. `history` carries prior turns as plain text only. */
     ask: (question: string, history: { role: string; content: string }[] = []) =>
       postJson<ChatAnswer>('/chat', { question, history }),
