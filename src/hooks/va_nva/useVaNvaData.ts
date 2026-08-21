@@ -61,6 +61,7 @@ export function useVaNvaUpload() {
       return {
         id: `ds-${file.name}-${file.size}`,
         filename: file.name,
+        period: periodLabel, // the upload form already asks for 'YYYY-MM'
         periodLabel,
         uploadedBy,
         uploadedAt: new Date().toISOString(),

@@ -22,35 +22,40 @@ export interface FourQPreviewProps {
   /** Banner text per quadrant, clockwise from top-left. */
   headings: [string, string, string, string];
   quadrants: [ReactNode, ReactNode, ReactNode, ReactNode];
-  /** Q3/Q4 are usually tables that bring their own header row. */
-  bareQuadrants?: [boolean, boolean, boolean, boolean];
+  /** Which slots hold a full-bleed table — see the banner note below.
+   *  Defaults to slots 3 and 4, which are the tables in every module. */
+  flushQuadrants?: [boolean, boolean, boolean, boolean];
   /** Extra classes per quadrant frame, when one needs different alignment. */
   frameClassName?: [string, string, string, string];
 }
 
-function QuadrantFrame({ heading, bare, extra, children }: {
-  heading: string; bare: boolean; extra: string; children: ReactNode;
+/**
+ * Every quadrant gets THIS banner, so all four read identically.
+ *
+ * FLUSH — why the table quadrants get no padding
+ *   A table brings its own blue header row. Padded, the frame's banner and that
+ *   header become two blue blocks with a white channel between them, and the
+ *   table's corners sit inset from the banner's — the "two headers, badly
+ *   glued" look. With no padding the banner sits directly on the header row and
+ *   the two read as one continuous header, which is what a 4Q sheet has always
+ *   looked like. Charts still get their padding; they need the breathing room.
+ */
+function QuadrantFrame({ heading, flush, extra, children }: {
+  heading: string; flush: boolean; extra: string; children: ReactNode;
 }) {
-  if (bare) {
-    return (
-      <div className={cn('border border-border bg-card rounded-lg overflow-hidden min-h-0 flex flex-col', extra)}>
-        {children}
-      </div>
-    );
-  }
   return (
-    <div className={cn('border border-border bg-card rounded-lg p-3 flex flex-col min-h-0 overflow-hidden', extra)}>
-      <div className="flex items-center -mx-3 -mt-3 px-3 py-1.5 rounded-t-lg bg-primary mb-2 flex-shrink-0">
+    <div className={cn('flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card', extra)}>
+      <div className="flex flex-shrink-0 items-center bg-primary px-3 py-1.5">
         <span className="flex-1 text-center text-xs font-bold uppercase text-primary-foreground">{heading}</span>
       </div>
-      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      <div className={cn('min-h-0 flex-1 overflow-hidden', flush ? 'p-0' : 'p-2')}>{children}</div>
     </div>
   );
 }
 
 export function FourQPreview({
   title, brand = 'JABIL 4Q REPORT', headings, quadrants,
-  bareQuadrants = [false, false, true, true],
+  flushQuadrants = [false, false, true, true],
   frameClassName = ['', '', '', ''],
 }: FourQPreviewProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -96,9 +101,9 @@ export function FourQPreview({
               <h1 className="text-sm font-bold uppercase tracking-wide">{title}</h1>
               <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{brand}</span>
             </div>
-            <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 min-h-0 overflow-hidden">
+            <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-3 overflow-hidden px-3 pb-3">
               {quadrants.map((q, i) => (
-                <QuadrantFrame key={i} heading={headings[i]} bare={bareQuadrants[i]} extra={frameClassName[i]}>
+                <QuadrantFrame key={i} heading={headings[i]} flush={flushQuadrants[i]} extra={frameClassName[i]}>
                   {q}
                 </QuadrantFrame>
               ))}

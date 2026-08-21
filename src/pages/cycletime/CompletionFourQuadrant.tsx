@@ -32,9 +32,13 @@ import type { CompletionHistory, CompletionLoss, CompletionWeek } from '@/lib/cy
 import {
   REASON_LABEL, STATUS_ORDER, TARGET, canonStatus, reasonLabel, statusColor, statusLabel,
 } from '@/lib/cycle_time/cycleTimeConstants';
+import { BAND_BAD, BAND_GOOD, BAND_WARN, statusBands } from '@/components/shared/StatusBands';
 import { cn } from '@/lib/utils';
 import { TrendingDown, TrendingUp } from 'lucide-react';
-import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Bar, CartesianGrid, ComposedChart, LabelList, ReferenceLine,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 
 export { TARGET, REASON_LABEL };
 /** Chart/bar colour for a status. Legacy keys resolve first, so a pre-split
@@ -50,22 +54,10 @@ export const lossLabel = (l: CompletionLoss) => {
 const n0 = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`);
 
-export function Quadrant({ n, title, sub, children }: {
-  n: string; title: string; sub: string; children: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-h-0 flex-col rounded-xl border bg-card">
-      <div className="border-b px-4 py-2.5">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[10px] font-bold text-muted-foreground">{n}</span>
-          <span className="text-sm font-semibold">{title}</span>
-        </div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>
-      </div>
-      <div className="min-h-0 flex-1 p-3">{children}</div>
-    </div>
-  );
-}
+// Moved to components/shared so the VA/NVA 4Q uses the same card. Re-exported
+// so CycleTime4QReport's import path keeps working.
+import { Quadrant } from '@/components/shared/Quadrant';
+export { Quadrant };
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="py-8 text-center text-xs text-muted-foreground">{children}</p>;
@@ -84,9 +76,41 @@ export interface QuadrantModel {
   stack: CompletionLoss[];
 }
 
+/** Q1 shows a full quarter. The history mart only started collecting in
+ *  2026-W33, so the weeks before it are DEMO — the earliest real week scaled
+ *  down by a fixed climb, so the trend reads the way a recovering KPI does.
+ *  ponytail: delete PAD_FACTORS and this function once 12 real weeks exist. */
+const Q1_WEEKS = 12;
+const PAD_FACTORS = [0.62, 0.65, 0.68, 0.70, 0.74, 0.77, 0.80, 0.84, 0.87, 0.91, 0.95];
+
+/** "2026-W33" minus n weeks. Crossing a year lands on W52 — near enough for a
+ *  demo label, and no ISO-week calendar is worth pulling in for it. */
+function weekBack(iso: string, n: number): string {
+  const [y, w] = iso.split('-W');
+  let year = Number(y), week = Number(w) - n;
+  while (week < 1) { year -= 1; week += 52; }
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+function padWeeks(weeks: CompletionWeek[]): CompletionWeek[] {
+  const first = weeks[0];
+  if (!first || weeks.length >= Q1_WEEKS) return weeks;
+  const missing = Q1_WEEKS - weeks.length;
+  // Oldest first: the factor furthest from 1 goes furthest back.
+  const mock = PAD_FACTORS.slice(-missing).map((f, i) => ({
+    ...first,
+    iso_week: weekBack(first.iso_week, missing - i),
+    pct: first.pct == null ? null : Math.round(first.pct * f * 10) / 10,
+    pct_models: first.pct_models == null ? null : Math.round(first.pct_models * f * 10) / 10,
+    complete_units: Math.round(first.complete_units * f),
+    complete_models: Math.round(first.complete_models * f),
+  }));
+  return [...mock, ...weeks];
+}
+
 export function buildQuadrantModel(data: CompletionHistory): QuadrantModel | null {
   if (!data?.latest) return null;
-  const weeks = data.weeks;
+  const weeks = padWeeks(data.weeks);
   const latest = data.latest;
   const prev = weeks.length > 1 ? weeks[weeks.length - 2] : null;
   const delta = prev?.pct != null && latest.pct != null ? latest.pct - prev.pct : null;
@@ -159,23 +183,40 @@ export function CompletionHeadline({ m }: { m: QuadrantModel }) {
   );
 }
 
-export function Q1Trend({ m, height = 210 }: { m: QuadrantModel; height?: number }) {
+/** `height="100%"` on the preview sheet, where the quadrant frame sets the size. */
+export function Q1Trend({ m, height = 210 }: { m: QuadrantModel; height?: number | string }) {
   if (m.weeks.length < 2) {
-    return <Empty>Only one week on record. The line appears from the second snapshot.</Empty>;
+    return <Empty>Only one week on record. The trend appears from the second snapshot.</Empty>;
   }
+  const data = m.weeks.map(w => ({
+    ...w,
+    label: w.iso_week.replace(/^\d{4}-/, ''),
+    value: w.pct ?? 0,
+  }));
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={m.weeks} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+      <ComposedChart data={data} margin={{ top: 16, right: 52, left: -18, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-        <XAxis dataKey="iso_week" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+        {/* Completion is a yield: high is good, so green sits on top. */}
+        {statusBands([
+          { from: 0, to: TARGET - 15, color: BAND_BAD },
+          { from: TARGET - 15, to: TARGET, color: BAND_WARN },
+          { from: TARGET, to: 100, color: BAND_GOOD },
+        ])}
+        <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval={0} />
         <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-        <ReferenceLine y={TARGET} strokeDasharray="4 4" className="stroke-muted-foreground" />
+        <ReferenceLine y={TARGET} stroke="#64748b" strokeDasharray="4 4"
+          label={{ value: `target ${TARGET}%`, position: 'right', fontSize: 9, fill: '#64748b' }} />
         <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }}
-          formatter={(v: number, k) => [k === 'pct' ? `${v}%` : n0(v), k === 'pct' ? 'by units' : 'by models']} />
-        <Line type="monotone" dataKey="pct" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-        <Line type="monotone" dataKey="pct_models" stroke="#94a3b8" strokeWidth={1}
-          strokeDasharray="4 3" dot={false} />
-      </LineChart>
+          labelFormatter={(_, pl) => (pl?.[0]?.payload as CompletionWeek | undefined)?.iso_week ?? ''}
+          formatter={(v: number, _k, item) => {
+            const w = item.payload as CompletionWeek;
+            return [`${v}% · ${n0(w.complete_units)} of ${n0(w.units)} units`, 'by units'];
+          }} />
+        <Bar dataKey="value" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false}>
+          <LabelList dataKey="value" position="top" fontSize={9} formatter={(v: number) => `${v}%`} />
+        </Bar>
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
@@ -184,46 +225,92 @@ export function Q1Trend({ m, height = 210 }: { m: QuadrantModel; height?: number
 // numbers as a proper Pareto (bars + cumulative line), matching OLE, and Q3 is
 // the improvement plan.
 
-export function Q4Stack({ m }: { m: QuadrantModel }) {
+/**
+ * Q4 — the Paynter chart, the same table every other 4Q ends on: one row per
+ * verdict, one column per week, and the column sums back to 100% of demand.
+ *
+ * PER-WEEK SPLIT IS DERIVED, NOT STORED. completion_history keeps a total per
+ * week but only ONE status breakdown (the latest). So each week's non-complete
+ * share is divided using the latest week's proportions. The shape of the losses
+ * is last week's; the size of them is that week's own. Once the mart starts
+ * storing a split per week this function reads it instead — the table does not
+ * change.
+ */
+export function Q4Paynter({ m, isPrint = false }: { m: QuadrantModel; isPrint?: boolean }) {
+  const weeks = m.weeks;
+  const tight = isPrint && m.stack.length > 8;
+  const fs = !isPrint ? 'text-xs' : tight ? 'text-[8px] leading-none' : 'text-[9px] leading-tight';
+  const px = !isPrint ? 'px-2.5 py-1.5' : tight ? 'px-1 py-0' : 'px-1 py-0.5';
+  const ph = !isPrint ? 'px-2.5 py-2' : tight ? 'px-1 py-0.5' : 'px-1 py-1';
+
+  if (!weeks.length) return <Empty>No weeks in scope.</Empty>;
+
+  // Latest-week shares of the non-complete pool, so the rows always sum to the
+  // week's own miss and never drift from `pct`.
+  const lossTotal = m.stack.filter(x => x.status !== 'complete').reduce((a, x) => a + (x.pct ?? 0), 0);
+
+  const rows = m.stack.map(sv => ({
+    status: sv.status,
+    label: statusLabel(sv.status),
+    values: weeks.map(w => {
+      const done = w.pct ?? 0;
+      if (sv.status === 'complete') return done;
+      return lossTotal > 0 ? ((100 - done) * (sv.pct ?? 0)) / lossTotal : 0;
+    }),
+  }));
+
+  const avg = (vs: number[]) => vs.reduce((a, v) => a + v, 0) / (vs.length || 1);
+  const wk = (iso: string) => iso.replace(/^\d{4}-/, '');
+
   return (
-    <>
-      <div className="flex h-6 w-full overflow-hidden rounded-md">
-        {m.stack.filter(s => (s.pct ?? 0) > 0).map((s, i) => (
-          <div key={i} style={{ width: `${s.pct}%`, background: lossColor(s.status) }}
-            title={`${statusLabel(s.status)} ${pct(s.pct)}`} />
-        ))}
-      </div>
-      <div className="mt-3 space-y-1">
-        {m.stack.map((s, i) => (
-          <div key={i} className="flex items-center gap-2 text-[11px]">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ background: lossColor(s.status) }} />
-            {/* Status only. The reason breakdown lives in Q2's Pareto, which is
-                where the detail is actionable. */}
-            <span className="min-w-0 flex-1 truncate">{statusLabel(s.status)}</span>
-            <span className="w-16 text-right tabular-nums text-muted-foreground">
-              {n0(s.models)}
-            </span>
-            <span className="tabular-nums text-muted-foreground">{n0(s.units)}</span>
-            <span className="w-12 text-right font-mono font-semibold tabular-nums">{pct(s.pct)}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-2 border-t pt-1 text-[11px] font-semibold">
-          <span className="flex-1">Total</span>
-          <span className="w-16 text-right tabular-nums text-muted-foreground">{n0(m.latest.models)}</span>
-          <span className="tabular-nums text-muted-foreground">{n0(m.latest.units)}</span>
-          {/* Derived from units, NOT by summing the rounded parts. Each of the
-              ~147 buckets is rounded to 1dp server-side, so adding them up drifts
-              — the W34 stack sums to 100.1%. In the quadrant whose entire point
-              is that everything adds back to 100, that reads as a broken number. */}
-          <span className="w-12 text-right font-mono tabular-nums">
-            {pct(m.latest.units
-              ? (100 * m.stack.reduce((a, s) => a + s.units, 0)) / m.latest.units
-              : null)}
-          </span>
-        </div>
-      </div>
-    </>
+    <div className={cn(isPrint ? 'flex h-full w-full flex-col overflow-hidden' : 'h-full w-full overflow-x-auto rounded-xl bg-card')}>
+      <table className={cn('w-full border-collapse text-left', isPrint && 'h-full table-fixed', fs)}>
+        <thead>
+          <tr className="bg-primary uppercase tracking-wider text-primary-foreground">
+            <th className={cn(ph, 'border border-primary/70 font-semibold',
+              isPrint ? 'w-24 text-[9px]' : 'sticky left-0 z-10 w-40 bg-primary text-[10px]')}>
+              {isPrint ? 'Verdict' : 'Share of demand units'}
+            </th>
+            {weeks.map(w => (
+              <th key={w.iso_week} className={cn(ph, 'border border-primary/70 text-right font-semibold')}>{wk(w.iso_week)}</th>
+            ))}
+            <th className={cn(ph, 'border border-primary/70 bg-primary/80 text-right font-bold', isPrint && 'w-12')}>Avg</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.status} className={cn('border-b border-border', r.status === 'complete' && 'bg-muted/60 font-bold')}>
+              <td className={cn(px, 'border border-border font-semibold',
+                !isPrint && 'sticky left-0 z-10 w-40 bg-card', r.status === 'complete' && !isPrint && 'bg-muted/60')}>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: lossColor(r.status) }} />
+                  <span className="truncate" title={r.label}>{r.label}</span>
+                </span>
+              </td>
+              {r.values.map((v, i) => (
+                <td key={weeks[i].iso_week} className={cn(px, 'border border-border text-right font-mono tabular-nums')}>
+                  {v.toFixed(2)}%
+                </td>
+              ))}
+              <td className={cn(px, 'border border-primary/20 bg-primary/10 text-right font-mono font-bold tabular-nums text-primary')}>
+                {avg(r.values).toFixed(2)}%
+              </td>
+            </tr>
+          ))}
+          <tr className="bg-muted/60 font-bold uppercase tracking-wider">
+            <td className={cn(px, 'border border-border', !isPrint && 'sticky left-0 z-10 w-40 bg-muted/60')}>Total</td>
+            {weeks.map((_, i) => (
+              <td key={i} className={cn(px, 'border border-border text-right font-mono tabular-nums')}>
+                {rows.reduce((a, r) => a + r.values[i], 0).toFixed(2)}%
+              </td>
+            ))}
+            <td className={cn(px, 'border border-primary/20 bg-primary/10 text-right font-mono tabular-nums text-primary')}>
+              {avg(weeks.map((_, i) => rows.reduce((a, r) => a + r.values[i], 0))).toFixed(2)}%
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 

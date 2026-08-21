@@ -11,7 +11,6 @@ import {
   FileText,
   FlaskConical,
   Gauge,
-  MessageSquare,
   GitFork,
   Home,
   Inbox,
@@ -35,7 +34,6 @@ import {
 import { createElement } from 'react';
 // From buildFlags, NOT buildContext: buildContext imports APPS from this file,
 // and importing it back here is a cycle that white-screens the app.
-import { CHAT_ENABLED } from '@/lib/buildFlags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,7 +113,6 @@ export const APPS: AppConfig[] = [
     navItems: [
       { label: 'Map', to: '/ole/map', icon: MapPin },
       { label: 'Report', to: '/ole/report', icon: LineChart, exact: false },
-      { label: '4Q Generator', to: '/ole/4q', icon: FourQ },
       { label: 'Analysis', to: '/ole/analysis', icon: Microscope },
       // { label: 'Home 0', to: '/ole', icon: TrendingUp },
       { label: 'Standard Man-Hour', to: '/ole/smh', icon: FlaskConical },
@@ -126,6 +123,7 @@ export const APPS: AppConfig[] = [
       // { label: 'Downtime Management', to: '/ole/downtime', icon: AlertTriangle },
       // { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
       // { label: 'API Test', to: '/ole-mart-api', icon: Database },
+      { label: '4Q Generator', to: '/ole/4q', icon: FourQ },
     ],
   },
   {
@@ -139,9 +137,9 @@ export const APPS: AppConfig[] = [
     category: 'Analytics',
     navItems: [
       { label: 'Home', to: '/cycle-time/home', icon: Home },
-      { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
-      // Testing-phase: the whole chat surface vanishes when the build says so.
-      ...(CHAT_ENABLED ? [{ label: 'Ask the data', to: '/cycle-time/ask', icon: MessageSquare }] : []),
+      // The chat lives in the floating drawer (ChatWidget) now — no nav item.
+      // The /cycle-time/ask route stays registered (direct URL still works)
+      // and the whole surface still vanishes when CHAT_ENABLED is off.
       // Every (workcell, MES step) couple in the plant. The workcell page's
       // Processes tab is this same table locked to one workcell — same
       // component, so the two can never disagree about a step's mapping.
@@ -165,6 +163,7 @@ export const APPS: AppConfig[] = [
       // { label: 'Incompletion Report', to: '/cycle-time/incompletion', icon: ClipboardList },
       // { label: 'Assemblies', to: '/cycle-time/assemblies', icon: Boxes },
       // { label: 'Data', to: '/cycle-time/data', icon: Database },
+      { label: '4Q Report', to: '/cycle-time/4q', icon: FourQ },
     ],
   },
   {
@@ -177,10 +176,12 @@ export const APPS: AppConfig[] = [
     basename: '/ietools/ppqt',
     category: 'Analytics',
     navItems: [
-      { label: 'Dashboard', to: '/ppqt', icon: LayoutDashboard, exact: false },
-      // { label: 'Testing Dashboard', to: '/ppqt/dash2', icon: FlaskConical },
-      // { label: 'Workcells', to: '/ppqt/workcell', icon: Factory },
-      // { label: 'Config', to: '/ppqt/config', icon: Settings2 },
+      // exact: the 4Q sits at /ppqt/4q, and a non-exact /ppqt would light up
+      // both links at once.
+      { label: 'Workcells', to: '/ppqt', icon: LayoutDashboard },
+      // Legacy (Wabtec-workbook model) stays reachable by URL only:
+      // { label: 'Legacy dashboard', to: '/ppqt-legacy', icon: FlaskConical },
+      { label: '4Q Report', to: '/ppqt/4q', icon: FourQ },
     ],
   },
   {
@@ -226,12 +227,13 @@ export const APPS: AppConfig[] = [
     iconBg: 'bg-teal-500/15',
     basename: '/ietools/va-nva',
     category: 'Analytics',
-    // Workcell-scoped pages are reached by drilling in from the league table,
-    // so the sidebar only carries always-valid static routes — same as IPK/LBR.
+    // Workcell pages are reached by clicking a row on the sizing page, so the
+    // sidebar only carries always-valid static routes — same as IPK/LBR.
     navItems: [
-      { label: 'Dashboard', to: '/va-nva', icon: LayoutDashboard },
-      { label: 'Workcells', to: '/va-nva/workcells', icon: Factory },
+      { label: 'HC Sizing', to: '/va-nva', icon: Users },
+      { label: 'Analytics', to: '/va-nva/analytics', icon: LayoutDashboard },
       { label: 'Upload', to: '/va-nva/upload', icon: UploadCloud },
+      { label: '4Q Report', to: '/va-nva/4q', icon: FourQ },
     ],
   },
   {

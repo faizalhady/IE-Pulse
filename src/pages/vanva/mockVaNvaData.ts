@@ -158,9 +158,31 @@ export const MATURITY_LADDER = [
   { key: 'long_term'  as const, stage: 'Long-term (Lean level)',  vaLo: 75, vaHi: 85, nvaLo: 15, nvaHi: 25, description: 'Mature system' },
 ];
 
+/**
+ * Eleven earlier months so the month browser and the 4Q's 12-month trend have
+ * something to show. DEMO ONLY — the Aug sheet with NVA MFG scaled by a factor
+ * per month (older = higher NVA, with a wobble so the trend is not a ruler).
+ * Nulls stay null. Never quote these numbers; real uploads replace them.
+ */
+const demoMonth = (f: number): VaNvaRow[] => SHEET1_ROWS.map(r => ({
+  ...r, nvaMfg: r.nvaMfg === null ? null : Math.round(r.nvaMfg * f),
+}));
+
+const DEMO_FACTORS: [string, number][] = [
+  ['2025-09', 1.34], ['2025-10', 1.31], ['2025-11', 1.33], ['2025-12', 1.27],
+  ['2026-01', 1.24], ['2026-02', 1.25], ['2026-03', 1.19], ['2026-04', 1.16],
+  ['2026-05', 1.17], ['2026-06', 1.12], ['2026-07', 1.06],
+];
+
+const monthLabel = (period: string) => {
+  const [y, m] = period.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en', { month: 'short', year: 'numeric' });
+};
+
 export const MOCK_VA_NVA_DATASETS: VaNvaDataset[] = [
   {
     id: 'ds-2026-08',
+    period: '2026-08',
     filename: 'KPI Tracker VA NVA  2.xlsx',
     periodLabel: 'Aug 2026',
     uploadedBy: 'seed',
@@ -169,4 +191,15 @@ export const MOCK_VA_NVA_DATASETS: VaNvaDataset[] = [
     active: true,
     rows: SHEET1_ROWS,
   },
+  ...DEMO_FACTORS.map(([period, f]): VaNvaDataset => ({
+    id: `ds-${period}`,
+    period,
+    filename: 'DEMO — derived from the Aug sheet',
+    periodLabel: monthLabel(period),
+    uploadedBy: 'demo',
+    uploadedAt: `${period}-10T00:00:00Z`,
+    rowCount: SHEET1_ROWS.length,
+    active: false,
+    rows: demoMonth(f),
+  })),
 ];

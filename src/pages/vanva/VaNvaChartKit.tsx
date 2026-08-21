@@ -73,12 +73,13 @@ export function KpiTile({
   icon?: LucideIcon;
   tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'accent';
 }) {
+  // Light/dark pairs: the 400 shades alone are ~2:1 on a white card.
   const toneClass = {
     neutral: 'text-foreground',
-    good: 'text-emerald-400',
-    warn: 'text-amber-400',
-    bad: 'text-red-400',
-    accent: 'text-sky-400',
+    good: 'text-emerald-600 dark:text-emerald-400',
+    warn: 'text-amber-600 dark:text-amber-400',
+    bad: 'text-red-600 dark:text-red-400',
+    accent: 'text-sky-600 dark:text-sky-400',
   }[tone];
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-3">

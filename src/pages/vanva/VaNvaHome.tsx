@@ -5,10 +5,9 @@
  * NVA-target slider, then five tabs. The target lives here rather than in the
  * Simulation tab so every chart on every tab answers to the same number.
  *
- * Route: /va-nva
+ * Route: /va-nva/analytics
  */
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
 import { Slider } from '@/components/ui/slider';
 import { useVaNvaRows } from '@/hooks/va_nva/useVaNvaData';
@@ -21,6 +20,7 @@ import DataTab from '@/pages/vanva/tabs/DataTab';
 import DistributionTab from '@/pages/vanva/tabs/DistributionTab';
 import OverviewTab from '@/pages/vanva/tabs/OverviewTab';
 import SimulationTab from '@/pages/vanva/tabs/SimulationTab';
+import { PeriodNav, usePeriod } from '@/pages/vanva/VaNvaSizingKit';
 import {
   Gauge, LayoutDashboard, PieChart, RotateCcw, Scale, Sliders, Table2,
 } from 'lucide-react';
@@ -39,8 +39,8 @@ type TabKey = typeof TABS[number]['key'];
 export default function VaNvaHome() {
   const [tab, setTab] = useState<TabKey>('overview');
   const [target, setTarget] = useState(NVA_TARGET);
-  const [datasetId, setDatasetId] = useState<string | undefined>();
-  const { rows, dataset, isLoading } = useVaNvaRows(target, datasetId);
+  const { period, periods, setPeriod, dataset: ds } = usePeriod();
+  const { rows, dataset, isLoading } = useVaNvaRows(target, ds?.id);
 
   return (
     <div className="relative">
@@ -82,17 +82,7 @@ export default function VaNvaHome() {
               />
             </div>
 
-            <div className="w-[190px]">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Dataset</p>
-              <Select value={dataset?.id ?? ''} onValueChange={setDatasetId}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={dataset?.id ?? 'none'} className="text-xs">
-                    {dataset ? `${dataset.periodLabel} · ${dataset.rowCount} rows` : 'No dataset'}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <PeriodNav period={period} periods={periods} onChange={setPeriod} />
           </div>
         </div>
 

@@ -87,6 +87,8 @@ export interface VaNvaTotals {
 export interface VaNvaDataset {
   id: string;
   filename: string;
+  /** Reporting month, 'YYYY-MM'. One dataset per month; the browse key. */
+  period: string;
   periodLabel: string;
   uploadedBy: string;
   uploadedAt: string;
