@@ -368,11 +368,15 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
       const s = qDebounced.trim().toLowerCase();
       r = r.filter(m => m.assembly.toLowerCase().includes(s) || m.customer.toLowerCase().includes(s));
     }
-    // ANY of the picked workcenters, not the exact set. Ticking SMT means "show
-    // me the models that run SMT" — the flow table read it as "runs SMT and
-    // nothing else", which quietly hid every mixed-stage model.
+    // The EXACT set, the same reading the Flow tab's picker uses: SMT means
+    // "runs SMT and nothing else", SMT+TH means "runs exactly those two". It
+    // used to match ANY of the ticked stages, which made the control read as
+    // broken — on KEYSIGHT, SMT alone gave 616 rows and SMT+TH gave 619, so
+    // adding a filter GREW the list and the Workcenter column still showed
+    // SMT·TH·BE on every row.
     if (stageFilter.length) {
-      r = r.filter(m => stageFilter.some(w => stagesOf(m).includes(w)));
+      const want = WORKCENTERS.filter(w => stageFilter.includes(w)).join('|');
+      r = r.filter(m => stagesOf(m).join('|') === want);
     }
     return r;
   }, [enriched, lockedWorkcell, picked, qDebounced, stageFilter]);
