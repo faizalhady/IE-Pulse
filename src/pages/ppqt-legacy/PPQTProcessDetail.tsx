@@ -24,7 +24,7 @@ import {
   PPQT_STATUS_LABEL,
   PPQT_UTIL_BAR,
   PPQT_UTIL_TEXT,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import { Beaker, FlaskConical, Gauge } from 'lucide-react';
 import { useMemo } from 'react';
@@ -95,7 +95,7 @@ export default function PPQTProcessDetail() {
   const utilWidth = Math.min(process.util, 100);
 
   const onAssemblyClick = (asm: PPQTAssembly) => {
-    navigate(`/ppqt/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}/proc/${encodeURIComponent(process.id)}/asm/${encodeURIComponent(asm.id)}`);
+    navigate(`/ppqt-legacy/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}/proc/${encodeURIComponent(process.id)}/asm/${encodeURIComponent(asm.id)}`);
   };
 
   return (
@@ -106,10 +106,10 @@ export default function PPQTProcessDetail() {
         <div className="px-6 py-3">
           <PPQTBreadcrumb
             items={[
-              { label: 'PPQT Dashboard', href: '/ppqt' },
-              { label: 'Workcells',      href: '/ppqt/workcell' },
-              { label: workcell.name,    href: `/ppqt/workcell/${encodeURIComponent(workcell.id)}`, workcellLogoKey: workcell.id },
-              { label: swc.name,         href: `/ppqt/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}` },
+              { label: 'PPQT Dashboard', href: '/ppqt-legacy' },
+              { label: 'Workcells',      href: '/ppqt-legacy/workcell' },
+              { label: workcell.name,    href: `/ppqt-legacy/workcell/${encodeURIComponent(workcell.id)}`, workcellLogoKey: workcell.id },
+              { label: swc.name,         href: `/ppqt-legacy/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}` },
               { label: process.name },
             ]}
           />

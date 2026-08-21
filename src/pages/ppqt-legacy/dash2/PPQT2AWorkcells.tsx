@@ -15,14 +15,14 @@ import {
   PPQT_VERDICT_BADGE,
   PPQT_VERDICT_LABEL,
   PPQT_VERDICT_TEXT,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { usePpqtMonths, usePpqtOverview } from '@/hooks/ppqt/usePpqtData';
+import { usePpqtMonths, usePpqtOverview } from '@/hooks/ppqt-legacy/usePpqtData';
 import { cn } from '@/lib/utils';
-import { monthLabel, PPQT_RESOURCE_COPY, type PPQTResourceMode } from '@/lib/ppqt/ppqtConstants';
+import { monthLabel, PPQT_RESOURCE_COPY, type PPQTResourceMode } from '@/lib/ppqt-legacy/ppqtConstants';
 import { AlertTriangle, ChevronRight, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -140,7 +140,7 @@ export default function PPQT2AWorkcells() {
             <button
               key={r.workcell}
               onClick={() => navigate(
-                `/ppqt/dash2a/${encodeURIComponent(r.workcell)}`
+                `/ppqt-legacy/dash2a/${encodeURIComponent(r.workcell)}`
                 + `?resource=${resource}` + (activeMonth ? `&month=${activeMonth}` : ''),
               )}
               className="group grid items-center w-full text-left border-b border-border last:border-0 hover:bg-muted/30 transition-colors"

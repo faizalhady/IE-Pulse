@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import {
   ppqtApi, type PPQTApiParams, type PPQTCapacityQuery, type PPQTResource,
-} from '@/lib/ppqt/ppqtApi';
+} from '@/lib/ppqt-legacy/ppqtApi';
 
 export const ppqtKeys = { all: ['ppqt'] as const };
 

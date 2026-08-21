@@ -11,7 +11,7 @@
  */
 
 import { cn } from '@/lib/utils';
-import { getPPQTStatus, PPQT_UTIL_BAR, PPQT_UTIL_TEXT } from '@/lib/ppqt/ppqtConstants';
+import { getPPQTStatus, PPQT_UTIL_BAR, PPQT_UTIL_TEXT } from '@/lib/ppqt-legacy/ppqtConstants';
 
 interface PPQTUtilisationBarProps {
   util: number;       // utilisation %, can exceed 100

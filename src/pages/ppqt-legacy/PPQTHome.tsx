@@ -20,7 +20,7 @@ import {
   PPQT_STATUS_LABEL,
   PPQT_UTIL_BAR,
   PPQT_UTIL_TEXT,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle,
@@ -83,7 +83,7 @@ export default function PPQTHome() {
   const ranked = useMemo(() => [...workcells].sort((a, b) => b.avgUtil - a.avgUtil), [workcells]);
 
   const drillTo = (workcellId: string) => {
-    navigate(`/ppqt/workcell/${encodeURIComponent(workcellId)}`);
+    navigate(`/ppqt-legacy/workcell/${encodeURIComponent(workcellId)}`);
   };
 
   return (
@@ -360,7 +360,7 @@ export default function PPQTHome() {
 
           {/* "View all workcells" link */}
           <button
-            onClick={() => navigate('/ppqt/workcell')}
+            onClick={() => navigate('/ppqt-legacy/workcell')}
             className="self-end flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             View all workcells

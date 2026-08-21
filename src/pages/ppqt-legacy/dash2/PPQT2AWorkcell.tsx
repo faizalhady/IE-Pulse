@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { usePpqtCapacity } from '@/hooks/ppqt/usePpqtData';
+import { usePpqtCapacity } from '@/hooks/ppqt-legacy/usePpqtData';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import {
   PPQT_AREA_BADGE,
@@ -33,7 +33,7 @@ import {
   monthLabel,
   PPQT_RESOURCE_COPY,
   type PPQTResourceMode,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, FileSpreadsheet,
@@ -90,7 +90,7 @@ export default function PPQT2AWorkcell() {
         {error
           ? `Could not load capacity for "${workcell}": ${(error as Error).message}`
           : `Workcell "${workcell}" not found.`}
-        <button onClick={() => navigate('/ppqt')} className="block mx-auto mt-3 text-emerald-400 hover:underline text-xs">
+        <button onClick={() => navigate('/ppqt-legacy')} className="block mx-auto mt-3 text-emerald-400 hover:underline text-xs">
           ← Back to capacity verdict
         </button>
       </div>
@@ -105,7 +105,7 @@ export default function PPQT2AWorkcell() {
         {api?.warnings?.length ? (
           <p className="text-xs mt-2 text-muted-foreground/70">{api.warnings[0]}</p>
         ) : null}
-        <button onClick={() => navigate('/ppqt')} className="block mx-auto mt-3 text-emerald-400 hover:underline text-xs">
+        <button onClick={() => navigate('/ppqt-legacy')} className="block mx-auto mt-3 text-emerald-400 hover:underline text-xs">
           ← Back to capacity verdict
         </button>
       </div>
@@ -120,7 +120,7 @@ export default function PPQT2AWorkcell() {
       <div className="sticky top-0 z-20 bg-background border-b border-border px-5 pb-0">
         <div className="pt-3 pb-3 flex items-center gap-3">
           <button
-            onClick={() => navigate('/ppqt')}
+            onClick={() => navigate('/ppqt-legacy')}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
             title="Back to capacity verdict"
           >

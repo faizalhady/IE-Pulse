@@ -23,7 +23,7 @@
  *   const cap = await ppqtApi.capacity.get({ workcell: 'WABTEC', eq_avail: 1 });
  */
 
-const BASE = '/ietools/ppqt/api';
+const BASE = '/ietools/ppqt-legacy/api';
 
 async function get<T>(
   path: string,

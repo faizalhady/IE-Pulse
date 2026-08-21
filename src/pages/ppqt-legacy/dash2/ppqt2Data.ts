@@ -16,13 +16,13 @@
  * API so every tab and the league table always agree.
  */
 
-import { getPPQTVerdict, PPQTVerdict } from '@/lib/ppqt/ppqtConstants';
+import { getPPQTVerdict, PPQTVerdict } from '@/lib/ppqt-legacy/ppqtConstants';
 import type {
   PPQTApiCapacity,
   PPQTApiEvidence,
   PPQTApiProcess,
   PPQTApiSubWorkcenter,
-} from '@/lib/ppqt/ppqtApi';
+} from '@/lib/ppqt-legacy/ppqtApi';
 import { PPQTProcess, PPQTSubWorkcenter } from '../types';
 
 // ─── Line (sub-workcenter) rollup ────────────────────────────────────────────

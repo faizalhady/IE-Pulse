@@ -22,7 +22,7 @@
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { usePpqtMatrix } from '@/hooks/ppqt/usePpqtData';
+import { usePpqtMatrix } from '@/hooks/ppqt-legacy/usePpqtData';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
@@ -39,7 +39,7 @@ import {
 } from 'recharts';
 import { PPQTProcess } from '../types';
 import { StepDrawer } from './StepDrawer';
-import { PPQT_RESOURCE_COPY, type PPQTResourceMode } from '@/lib/ppqt/ppqtConstants';
+import { PPQT_RESOURCE_COPY, type PPQTResourceMode } from '@/lib/ppqt-legacy/ppqtConstants';
 import { Ppqt2Line, getMathTrail, type Ppqt2Workcell } from './ppqt2Data';
 
 // Matrix grid: row label | total ("D") column | one column per process.
