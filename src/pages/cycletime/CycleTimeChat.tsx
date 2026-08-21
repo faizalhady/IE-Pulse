@@ -98,7 +98,7 @@ function turnWorkcell(t: Turn, names: string[], byKey: Map<string, string>): str
 interface Turn {
   role: 'user' | 'assistant';
   content: string;
-  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table' | 'intent'>;
+  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table' | 'intent' | 'model'>;
 }
 
 /** Assistant markdown, streamed-safe. Streamdown styles incomplete blocks as
@@ -231,7 +231,7 @@ const EXAMPLES = [
   'Are we improving week on week?',
 ];
 
-export default function CycleTimeChat() {
+export default function CycleTimeChat({ inDrawer = false }: { inDrawer?: boolean }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -305,24 +305,30 @@ export default function CycleTimeChat() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-6 py-4">
+      {/* In the drawer the Sheet's X sits top-right, so the header slims down,
+          keeps clear of it (pr-12) and drops the tagline — a drawer needs a
+          label, not a landing page. */}
+      <div className={cn('border-b border-border', inDrawer ? 'px-4 py-3 pr-12' : 'px-6 py-4')}>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-bold">Ask the data</h1>
+          <h1 className={cn('font-bold', inDrawer ? 'text-base' : 'text-lg')}>Ask the data</h1>
           {health.data?.ok && (
             <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
               {health.data.model} · {health.data.tools.length} tools
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Answers come from the same marts these pages read. Every reply shows which one.
-        </p>
+        {!inDrawer && (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Answers come from the same marts these pages read. Every reply shows which one.
+          </p>
+        )}
       </div>
 
       {/* A dead model must say so. A spinner that never resolves is how someone
           concludes the whole module is broken. */}
       {down && (
-        <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+        <div className={cn(inDrawer ? 'mx-4' : 'mx-6',
+          'mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400')}>
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <div className="font-medium">The local model is not reachable.</div>
@@ -331,7 +337,7 @@ export default function CycleTimeChat() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-auto px-6 py-5">
+      <div className={cn('min-h-0 flex-1 space-y-4 overflow-auto py-5', inDrawer ? 'px-4' : 'px-6')}>
         {!turns.length && (
           <div className="mx-auto max-w-lg pt-8 text-center">
             <Bot className="mx-auto h-8 w-8 text-muted-foreground/50" />
@@ -406,7 +412,12 @@ export default function CycleTimeChat() {
                     </div>
                   ))}
                   {t.meta.sources.map((s, j) => <div key={`s${j}`}>source: {s}</div>)}
-                  {t.meta.elapsed_s > 0 && <div>{t.meta.elapsed_s}s</div>}
+                  {t.meta.elapsed_s > 0 && (
+                    <div>
+                      {t.meta.elapsed_s}s
+                      {t.meta.model && <span className="font-mono"> · {t.meta.model}</span>}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -430,7 +441,12 @@ export default function CycleTimeChat() {
                 : (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {stage || 'reading the marts…'}
+                    <span>{stage || 'reading the marts…'}</span>
+                    {/* Which brain is on the request — the configured primary;
+                        the receipt under the answer names who ACTUALLY spoke. */}
+                    {health.data?.ok && (
+                      <span className="font-mono text-[10px] opacity-60">{health.data.model}</span>
+                    )}
                   </div>
                 )}
             </div>
@@ -439,7 +455,7 @@ export default function CycleTimeChat() {
         <div ref={endRef} />
       </div>
 
-      <div className="border-t border-border px-6 py-4">
+      <div className={cn('border-t border-border py-4', inDrawer ? 'px-4' : 'px-6')}>
         <div className="flex items-end gap-2">
           <textarea
             value={draft}

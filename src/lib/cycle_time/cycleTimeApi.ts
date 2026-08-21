@@ -1037,6 +1037,9 @@ export interface ChatAnswer {
   sources: string[];
   /** instant (canned, 0 model calls) | general | cycletime | error. */
   lane: string;
+  /** The model that ACTUALLY answered — the cloud primary, or the local
+   *  fallback when the cloud was down/rate-limited mid-question. */
+  model?: string;
   /** The tool that answered, 'open_query' for the SQL lane, or 'none'. */
   intent: string;
   /** true = every number came from a mart. false = the model's own words —
