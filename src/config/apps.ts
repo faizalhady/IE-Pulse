@@ -32,8 +32,6 @@ import {
   Wrench
 } from 'lucide-react';
 import { createElement } from 'react';
-// From buildFlags, NOT buildContext: buildContext imports APPS from this file,
-// and importing it back here is a cycle that white-screens the app.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,9 +135,6 @@ export const APPS: AppConfig[] = [
     category: 'Analytics',
     navItems: [
       { label: 'Home', to: '/cycle-time/home', icon: Home },
-      // The chat lives in the floating drawer (ChatWidget) now — no nav item.
-      // The /cycle-time/ask route stays registered (direct URL still works)
-      // and the whole surface still vanishes when CHAT_ENABLED is off.
       // Every (workcell, MES step) couple in the plant. The workcell page's
       // Processes tab is this same table locked to one workcell — same
       // component, so the two can never disagree about a step's mapping.

@@ -45,15 +45,3 @@ export const includesApp = (id: AppId): boolean => BUILD_APPS.includes(id);
  * the URL the router actually matches against.
  */
 export const BUILD_BASENAME: string = '/ietools/';
-
-/** The "Ask the data" chat (nav item, route, floating bubble). Build-time so a
- *  production bundle for 02 ships with ZERO chat UI and never calls the AI
- *  endpoints. Off only when the env file says so: VITE_CHAT_ENABLED=0 in
- *  .env.cycle-time; dev stays on.
- *
- *  DEFINED IN buildFlags.ts, not here, and re-exported for the importers that
- *  already reach for it from this module. It cannot live in this file:
- *  `config/apps.ts` needs it while building `navItems`, this file needs `APPS`
- *  at module scope, and the resulting cycle white-screened the whole app with
- *  "Cannot access 'APPS' before initialization". See buildFlags.ts. */
-export { CHAT_ENABLED } from '@/lib/buildFlags';
