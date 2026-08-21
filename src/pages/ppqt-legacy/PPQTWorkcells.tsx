@@ -20,7 +20,7 @@ import {
   PPQT_STATUS_LABEL,
   PPQT_UTIL_BAR,
   PPQT_UTIL_TEXT,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle, ChevronRight, Factory, FlaskConical, RefreshCw, Search,
@@ -47,7 +47,7 @@ export default function PPQTWorkcells() {
     return [...filtered].sort((a, b) => b.avgUtil - a.avgUtil || b.bottlenecks - a.bottlenecks);
   }, [workcells, search]);
 
-  const drillTo = (workcellId: string) => navigate(`/ppqt/workcell/${encodeURIComponent(workcellId)}`);
+  const drillTo = (workcellId: string) => navigate(`/ppqt-legacy/workcell/${encodeURIComponent(workcellId)}`);
 
   // ── Portfolio summary stats ──
   const totalBottlenecks = workcells.reduce((s, r) => s + r.bottlenecks, 0);

@@ -55,18 +55,19 @@ export const VANVA_STATUS_HEX: Record<VaNvaStatus, string> = {
 };
 
 /** Colour the NVA % figure itself (not a verdict pill). */
+// Light/dark pairs: the 400 shades alone are ~2:1 on a white card.
 export function nvaTextClass(nvaRatio: number | null): string {
   return {
-    healthy: 'text-emerald-400', warning: 'text-amber-400',
-    critical: 'text-red-400', unknown: 'text-muted-foreground',
+    healthy: 'text-emerald-600 dark:text-emerald-400', warning: 'text-amber-600 dark:text-amber-400',
+    critical: 'text-red-600 dark:text-red-400', unknown: 'text-muted-foreground',
   }[getVaNvaStatus(nvaRatio)];
 }
 
 /** Over/under sizing: more heads than the sizing calls for is the bad direction. */
 export function sizingGapClass(gap: number | null): string {
   if (gap === null) return 'text-muted-foreground';
-  if (gap > 0) return 'text-red-400';
-  if (gap < 0) return 'text-emerald-400';
+  if (gap > 0) return 'text-red-600 dark:text-red-400';
+  if (gap < 0) return 'text-emerald-600 dark:text-emerald-400';
   return 'text-muted-foreground';
 }
 

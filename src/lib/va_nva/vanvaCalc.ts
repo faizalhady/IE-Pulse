@@ -136,3 +136,102 @@ export function nvaHistogram(rows: VaNvaMetrics[]): { band: string; count: numbe
     lo,
   }));
 }
+
+// ─── HC sizing plan ──────────────────────────────────────────────────────────
+/**
+ * How many DL heads each workcell must lose or gain to sit at the target NVA %.
+ *
+ * ONE SYMMETRIC RULE, BOTH DIRECTIONS
+ *     nvaTarget = overallRound * target
+ *     delta     = nvaMfg - nvaTarget
+ *   delta > 0  ->  REDUCE  ceil(delta)   the workcell carries too much NVA
+ *   delta < 0  ->  ADD     ceil(-delta)  it sits under target and can absorb more
+ *
+ * WHY THE RESULT IS NOT EXACTLY THE TARGET, ON PURPOSE
+ *   `nvaTarget` is a share of TODAY's total, and removing NVA heads shrinks that
+ *   total — so a cut computed this way lands above the target, not on it. VA 5 +
+ *   NVA 5 cutting 3 leaves 2/7 = 28.6%, not 20%. Landing on the number exactly
+ *   would mean holding VA fixed and solving nvaNew = VA * t/(1-t), a bigger cut.
+ *   The workbook's version is kept deliberately so this page and the existing
+ *   tracker never disagree; `projectedRatio` below reports where it ACTUALLY
+ *   lands, so the gap is visible instead of assumed away.
+ *
+ * ROUNDING
+ *   Heads are whole. ceil() on the magnitude, so a reduction is never
+ *   under-stated and an addition is never over-promised. Summing the rounded
+ *   per-workcell figures therefore drifts from the plant-level number — both are
+ *   returned rather than picking one and hiding the difference.
+ */
+export interface SizingRow {
+  id: string;
+  workcell: string;
+  vaSizing: number;
+  nvaMfg: number;
+  overall: number;
+  nvaRatio: number | null;
+  nvaTarget: number;
+  /** Signed: positive = reduce, negative = add. Unrounded. */
+  delta: number;
+  /** Whole heads to remove (0 when the workcell is under target). */
+  reduce: number;
+  /** Whole heads that could be added (0 when the workcell is over target). */
+  add: number;
+}
+
+export interface SizingPlan {
+  rows: SizingRow[];
+  /** Plant as it stands. */
+  vaSizing: number;
+  nvaMfg: number;
+  overall: number;
+  nvaRatio: number;
+  /** Summed from the ROUNDED per-workcell figures — the actionable number. */
+  totalReduce: number;
+  totalAdd: number;
+  netChange: number;
+  /** Where the plant NVA % actually lands after the plan, which is not the
+   *  target — see the note above. */
+  projectedNva: number;
+  projectedOverall: number;
+  projectedRatio: number;
+  over: number;
+  under: number;
+}
+
+export function sizingPlan(rows: VaNvaMetrics[], target: number = NVA_TARGET): SizingPlan {
+  const rs = countable(rows).filter(r => r.nvaMfg !== null && r.overallRound !== null);
+  const out: SizingRow[] = rs.map(r => {
+    const overall = r.overallRound as number;
+    const nvaMfg = r.nvaMfg as number;
+    const nvaTarget = overall * target;
+    const delta = nvaMfg - nvaTarget;
+    return {
+      id: r.id, workcell: r.workcell,
+      vaSizing: r.vaSizingRound ?? 0,
+      nvaMfg, overall, nvaRatio: r.nvaRatio, nvaTarget, delta,
+      reduce: delta > 0 ? Math.ceil(delta) : 0,
+      add: delta < 0 ? Math.ceil(-delta) : 0,
+    };
+  // Worst first by NVA %, not by head gap: the table is read against the
+  // target column, and a 400-head workcell 2 points over would otherwise
+  // outrank a 10-head one at double the target.
+  }).sort((a, b) => (b.nvaRatio ?? -1) - (a.nvaRatio ?? -1));
+
+  const vaSizing = out.reduce((a, r) => a + r.vaSizing, 0);
+  const nvaMfg = out.reduce((a, r) => a + r.nvaMfg, 0);
+  const overall = vaSizing + nvaMfg;
+  const totalReduce = out.reduce((a, r) => a + r.reduce, 0);
+  const totalAdd = out.reduce((a, r) => a + r.add, 0);
+  const projectedNva = nvaMfg - totalReduce + totalAdd;
+  const projectedOverall = vaSizing + projectedNva;
+
+  return {
+    rows: out, vaSizing, nvaMfg, overall,
+    nvaRatio: overall ? nvaMfg / overall : 0,
+    totalReduce, totalAdd, netChange: totalReduce - totalAdd,
+    projectedNva, projectedOverall,
+    projectedRatio: projectedOverall ? projectedNva / projectedOverall : 0,
+    over: out.filter(r => r.reduce > 0).length,
+    under: out.filter(r => r.add > 0).length,
+  };
+}

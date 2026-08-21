@@ -59,22 +59,28 @@ import OLESmh from "@/pages/ole/OLESmh";
 import OleWorkcellReport from "@/pages/ole/OleWorkcellReport";
 import OleWowAnalysis from "@/pages/ole/OleWowAnalysis";
 import Plants from "@/pages/Plants";
-import PPQT2AWorkcell from "@/pages/ppqt/dash2/PPQT2AWorkcell";
-import PPQT2AWorkcells from "@/pages/ppqt/dash2/PPQT2AWorkcells";
-import PPQTAssemblyDetail from "@/pages/ppqt/PPQTAssemblyDetail";
-import PPQTConfig from "@/pages/ppqt/PPQTConfig";
-import PPQTHome from "@/pages/ppqt/PPQTHome";
-import PPQTProcessDetail from "@/pages/ppqt/PPQTProcessDetail";
-import PPQTSubWorkcenterProfile from "@/pages/ppqt/PPQTSubWorkcenterProfile";
-import PPQTWorkcellProfile from "@/pages/ppqt/PPQTWorkcellProfile";
-import PPQTWorkcells from "@/pages/ppqt/PPQTWorkcells";
+import PPQT4QReport from "@/pages/ppqt/PPQT4QReport";
+import PPQTLanding from "@/pages/ppqt/PPQTLanding";
+import PPQTWorkcell from "@/pages/ppqt/PPQTWorkcell";
+// Legacy PPQT (Wabtec-workbook model) — kept reachable at /ppqt-legacy, off the nav.
+import PPQT2AWorkcell from "@/pages/ppqt-legacy/dash2/PPQT2AWorkcell";
+import PPQT2AWorkcells from "@/pages/ppqt-legacy/dash2/PPQT2AWorkcells";
+import PPQTAssemblyDetail from "@/pages/ppqt-legacy/PPQTAssemblyDetail";
+import PPQTConfig from "@/pages/ppqt-legacy/PPQTConfig";
+import PPQTHome from "@/pages/ppqt-legacy/PPQTHome";
+import PPQTProcessDetail from "@/pages/ppqt-legacy/PPQTProcessDetail";
+import PPQTSubWorkcenterProfile from "@/pages/ppqt-legacy/PPQTSubWorkcenterProfile";
+import PPQTWorkcellProfile from "@/pages/ppqt-legacy/PPQTWorkcellProfile";
+import PPQTWorkcells from "@/pages/ppqt-legacy/PPQTWorkcells";
 import Reports from "@/pages/Reports";
 import ReportA from "@/pages/ReportA";
 import Settings from "@/pages/Settings";
+import VaNva4QReport from "@/pages/vanva/VaNva4QReport";
 import VaNvaHome from "@/pages/vanva/VaNvaHome";
 import VaNvaUpload from "@/pages/vanva/VaNvaUpload";
 import VaNvaWorkcellDetail from "@/pages/vanva/VaNvaWorkcellDetail";
-import VaNvaWorkcells from "@/pages/vanva/VaNvaWorkcells";
+import VaNvaSizing from "@/pages/vanva/VaNvaSizing";
+import VaNvaWorkcellSizing from "@/pages/vanva/VaNvaWorkcellSizing";
 import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -216,16 +222,22 @@ function AppShell() {
             </>}
 
             {includesApp('ppqt') && <>
-              <Route path="/ppqt/" element={<PPQT2AWorkcells />} />
-              <Route path="/ppqt/workcell" element={<PPQTWorkcells />} />
-              <Route path="/ppqt/workcell/:workcell" element={<PPQTWorkcellProfile />} />
-              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter" element={<PPQTSubWorkcenterProfile />} />
-              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process" element={<PPQTProcessDetail />} />
-              <Route path="/ppqt/workcell/:workcell/swc/:subWorkcenter/proc/:process/asm/:assembly" element={<PPQTAssemblyDetail />} />
-              <Route path="/ppqt/config" element={<PPQTConfig />} />
-              {/* Main dashboard — league table → tabbed workcell page (DASH / Report / Triage) */}
-              <Route path="/ppqt/dash2" element={<PPQTHome />} />
-              <Route path="/ppqt/dash2a/:workcell" element={<PPQT2AWorkcell />} />
+              {/* PPQT — EM-IE80-00003-B workbook model: landing list → workcell report (Summary / Stations / Assemblies / Inputs) */}
+              <Route path="/ppqt" element={<PPQTLanding />} />
+              {/* Static segment outranks /ppqt/:workcell in React Router 6, so 4q is safe here. */}
+              <Route path="/ppqt/4q" element={<PPQT4QReport />} />
+              <Route path="/ppqt/:workcell" element={<PPQTWorkcell />} />
+              <Route path="/ppqt/:workcell/:tab" element={<PPQTWorkcell />} />
+              {/* Legacy PPQT (Wabtec model, mart-computed) — off the nav, reachable by URL */}
+              <Route path="/ppqt-legacy" element={<PPQT2AWorkcells />} />
+              <Route path="/ppqt-legacy/workcell" element={<PPQTWorkcells />} />
+              <Route path="/ppqt-legacy/workcell/:workcell" element={<PPQTWorkcellProfile />} />
+              <Route path="/ppqt-legacy/workcell/:workcell/swc/:subWorkcenter" element={<PPQTSubWorkcenterProfile />} />
+              <Route path="/ppqt-legacy/workcell/:workcell/swc/:subWorkcenter/proc/:process" element={<PPQTProcessDetail />} />
+              <Route path="/ppqt-legacy/workcell/:workcell/swc/:subWorkcenter/proc/:process/asm/:assembly" element={<PPQTAssemblyDetail />} />
+              <Route path="/ppqt-legacy/config" element={<PPQTConfig />} />
+              <Route path="/ppqt-legacy/dash2" element={<PPQTHome />} />
+              <Route path="/ppqt-legacy/dash2a/:workcell" element={<PPQT2AWorkcell />} />
             </>}
 
             {includesApp('ipk') && <>
@@ -249,9 +261,11 @@ function AppShell() {
             </>}
 
             {includesApp('va-nva') && <>
-              <Route path="/va-nva" element={<VaNvaHome />} />
-              <Route path="/va-nva/workcells" element={<VaNvaWorkcells />} />
-              <Route path="/va-nva/wc/:id" element={<VaNvaWorkcellDetail />} />
+              <Route path="/va-nva" element={<VaNvaSizing />} />
+              <Route path="/va-nva/4q" element={<VaNva4QReport />} />
+              <Route path="/va-nva/analytics" element={<VaNvaHome />} />
+              <Route path="/va-nva/wc/:id" element={<VaNvaWorkcellSizing />} />
+              <Route path="/va-nva/wc/:id/detail" element={<VaNvaWorkcellDetail />} />
               <Route path="/va-nva/upload" element={<VaNvaUpload />} />
             </>}
 

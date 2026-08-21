@@ -145,6 +145,12 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/ietools\/ppqt\/api/, '/api/ppqt'),
         },
+        // Legacy PPQT (Wabtec-model pages at /ppqt-legacy) — mounted at /api/ppqt-legacy/*.
+        '/ietools/ppqt-legacy/api': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/ietools\/ppqt-legacy\/api/, '/api/ppqt-legacy'),
+        },
         // Who-am-I service (IIS, Windows Integrated Auth).
         //
         // ⚠️ This proxy returns 401 in dev and that is EXPECTED — do not "fix" it.

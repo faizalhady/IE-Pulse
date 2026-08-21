@@ -22,8 +22,9 @@ import { FourQPreview } from '@/components/shared/FourQPreview';
 import type { ActionItem } from '@/components/shared/ImprovementPlan';
 import { ImprovementEditor, ImprovementTable } from '@/components/shared/ImprovementPlan';
 import { ParetoChart, buildPareto } from '@/components/shared/ParetoChart';
+import { ReportDrawer } from '@/components/shared/ReportDrawer';
 import { ReportStartScreen } from '@/components/shared/ReportStartScreen';
-import { ScopePicker } from '@/components/shared/ScopePicker';
+import { ScopeFields } from '@/components/shared/ScopePicker';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -33,11 +34,11 @@ import { useSavedReport } from '@/hooks/shared/useSavedReport';
 import { dstatus, statusLabel } from '@/lib/cycle_time/cycleTimeConstants';
 import { savedReports } from '@/lib/shared/savedReportsApi';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Pencil, Save } from 'lucide-react';
+import { ChevronLeft, FileSpreadsheet, Loader2, Pencil, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  CompletionHeadline, NoHistoryYet, Q1Trend, Q4Stack,
+  CompletionHeadline, NoHistoryYet, Q1Trend, Q4Paynter,
   Quadrant, TARGET, buildQuadrantModel, lossColor,
 } from './CompletionFourQuadrant';
 
@@ -78,6 +79,12 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
   const [scopeOpen, setScopeOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
   const [scopeNote, setScopeNote] = useState('');
+  // The Settings tab edits a DRAFT and applies on "Update" — the history query
+  // refetches on every scope change, so live-applying would fire one per tick.
+  // The draft follows the applied scope whenever that changes (load, update).
+  const [scopeDraft, setScopeDraft] = useState<string[]>([]);
+  useEffect(() => { setScopeDraft(picked); }, [picked]);
+  const draftIsApplied = [...scopeDraft].sort().join('|') === [...picked].sort().join('|');
 
   // Scope comes from the demand report — same source as the Incompletion
   // Report, so the two can never offer different workcell lists.
@@ -200,10 +207,9 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
       title={title}
       brand="JABIL CYCLE TIME 4Q"
       headings={['First Quadrant - Completion Trend', 'Second Quadrant - Pareto of Negatives',
-        'Fourth Quadrant - The 100% View', 'Third Quadrant - Improvement Plan']}
-      bareQuadrants={[false, false, false, true]}
+        'Fourth Quadrant - Paynter Chart', 'Third Quadrant - Improvement Plan']}
       quadrants={[
-        <Q1Trend m={m} height={200} />,
+        <Q1Trend m={m} height="100%" />,
         /* Same three-chart arrangement as OLE's Q2 on the sheet: the
            distribution on the left, the two workcell breakdowns stacked right. */
         <div className="flex h-full min-h-0 gap-2">
@@ -219,7 +225,7 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
               fillHeight unit="Models" unitLabel="models" />
           </div>
         </div>,
-        <Q4Stack m={m} />,
+        <Q4Paynter m={m} isPrint />,
         <ImprovementTable actions={actions} issues={issues} isPrint />,
       ]}
     />
@@ -347,26 +353,11 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
                 placeholder={defaultReportTitle()} className="h-9 text-sm" />
             </div>
 
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Report scope
-            </Label>
-            <div className="mt-1.5 max-h-[26rem] space-y-4 overflow-y-auto pr-1">
-              <ScopePicker
-                plants={plants} byPlant={scope?.plants ?? {}}
-                picked={picked} onChange={setPicked} labelPlant={plantLabel}
-                gridClassName="grid-cols-2 md:grid-cols-3" />
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {picked.length || allWorkcells.length} workcell{(picked.length || allWorkcells.length) === 1 ? '' : 's'} selected
-                {picked.length === 0 && ' (all)'}
-              </span>
-              <button onClick={() => setPicked([])} disabled={!picked.length}
-                className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40">
-                Clear
-              </button>
-            </div>
+            <ScopeFields
+              plants={plants} byPlant={scope?.plants ?? {}}
+              picked={picked} onChange={setPicked} labelPlant={plantLabel}
+              allCount={allWorkcells.length} maxH="max-h-[26rem]"
+              gridClassName="grid-cols-2 md:grid-cols-3" />
 
             <Button className="mt-3 w-full"
               onClick={() => { setScopeOpen(false); setTab('editor'); }}>
@@ -379,7 +370,7 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
         {tab === 'editor' && (
           <>
             <div className="flex-1 overflow-y-auto p-8">
-              <div className="mx-auto max-w-5xl space-y-8 pb-16">
+              <div className="mx-auto max-w-5xl space-y-12 pb-16">
                 {scopeNote && (
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
                     {scopeNote}
@@ -394,11 +385,12 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
                   <>
                     <CompletionHeadline m={m} />
 
-                    <Quadrant n="Q1" title="Where we stand" sub={`Completion % by week, target ${TARGET}%`}>
+                    <Quadrant n="1" title="First Quadrant - Completion Trend" card
+                      sub={`Completion % by week, last 12 weeks, target ${TARGET}%`}>
                       <Q1Trend m={m} />
                     </Quadrant>
 
-                    <Quadrant n="Q2" title="Where it is going"
+                    <Quadrant n="2" title="Second Quadrant - Pareto of Negatives"
                       sub="Every negative by model count, then the top 3 workcells behind each of the two biggest. Demand only.">
                       <div className="space-y-2">
                         <ParetoChart title="Incomplete Models by Status (model count)" data={q2.dist}
@@ -413,38 +405,48 @@ export default function CycleTime4QReport({ embedded = false }: { embedded?: boo
                       </div>
                     </Quadrant>
 
-                    <Quadrant n="Q3" title="What we will do"
-                      sub="Corrective actions against the two biggest losses — the only part that is saved">
+                    <Quadrant n="3" title="Third Quadrant - Improvement Plan"
+                      sub="Corrective actions and ownership — the only part that is saved">
                       <ImprovementTable actions={actions} issues={issues} />
                     </Quadrant>
 
-                    <Quadrant n="Q4" title="The 100% view" sub="Complete plus every loss, back to 100%">
-                      <Q4Stack m={m} />
+                    <Quadrant n="4" title="Fourth Quadrant - Paynter Chart"
+                      sub="Share of demand units per verdict per week — the column sums to 100%">
+                      <Q4Paynter m={m} />
                     </Quadrant>
                   </>
                 )}
               </div>
             </div>
 
-            {/* ── Plan editor panel ──────────────────────────────────────────── */}
-            <div className={cn('z-10 flex flex-shrink-0 flex-col border-l border-border bg-card/95 shadow-xl backdrop-blur-sm transition-all duration-300',
-              rightOpen ? 'w-[460px]' : 'w-12')}>
-              <div className={cn('flex cursor-pointer items-center border-b border-border transition-colors hover:bg-muted/40',
-                rightOpen ? 'justify-between px-5' : 'justify-center')}
-                style={{ height: 52 }} onClick={() => setRightOpen(!rightOpen)}>
-                {rightOpen && <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Improvement Plan</span>}
-                <div className="rounded-md bg-muted p-1.5 text-muted-foreground">
-                  {rightOpen ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-                </div>
-              </div>
-              {rightOpen && (
-                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {/* ── Editor drawer: plan + settings, same shape as OLE's ─────────── */}
+            <ReportDrawer open={rightOpen} onToggle={() => setRightOpen(o => !o)} tabs={[
+              {
+                value: 'q3', label: 'Q3 Improvements', accent: 'data-[state=active]:border-emerald-500',
+                content: (
                   <ImprovementEditor
                     actions={actions} onChange={setActions} issues={issues}
                     blurb="Track corrective actions against the two biggest completion losses." />
-                </div>
-              )}
-            </div>
+                ),
+              },
+              {
+                // Same scope fields as the launch dialog — one component, so the
+                // two cannot drift. The title is edited in place in the header.
+                value: 'settings', label: 'Settings', end: true, accent: 'data-[state=active]:border-muted-foreground',
+                content: (
+                  <>
+                    <ScopeFields
+                      plants={plants} byPlant={scope?.plants ?? {}}
+                      picked={scopeDraft} onChange={setScopeDraft} labelPlant={plantLabel}
+                      allCount={allWorkcells.length} gridClassName="grid-cols-1 sm:grid-cols-2" />
+                    <Button className="mt-3 w-full" disabled={draftIsApplied}
+                      onClick={() => { setPicked(scopeDraft); setScopeNote(''); }}>
+                      Update Report Scope
+                    </Button>
+                  </>
+                ),
+              },
+            ]} />
           </>
         )}
       </div>

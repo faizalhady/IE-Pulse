@@ -2,7 +2,11 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}",
+    // streamdown (AI-chat markdown renderer) styles itself with Tailwind
+    // classes inside its dist - without this line they are purged and the
+    // markdown renders unstyled.
+    "./node_modules/streamdown/dist/*.js"],
   prefix: "",
   theme: {
     container: {

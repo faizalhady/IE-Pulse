@@ -22,7 +22,7 @@ import {
   PPQT_AREA_LABEL,
   PPQT_CT_SOURCE_BADGE,
   PPQT_CT_SOURCE_LABEL,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import {
   AlertCircle,
@@ -94,11 +94,11 @@ export default function PPQTAssemblyDetail() {
         <div className="px-6 py-3">
           <PPQTBreadcrumb
             items={[
-              { label: 'PPQT Dashboard', href: '/ppqt' },
-              { label: 'Workcells',      href: '/ppqt/workcell' },
-              { label: workcell.name,    href: `/ppqt/workcell/${encodeURIComponent(workcell.id)}`, workcellLogoKey: workcell.id },
-              { label: swc.name,         href: `/ppqt/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}` },
-              { label: process.name,     href: `/ppqt/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}/proc/${encodeURIComponent(process.id)}` },
+              { label: 'PPQT Dashboard', href: '/ppqt-legacy' },
+              { label: 'Workcells',      href: '/ppqt-legacy/workcell' },
+              { label: workcell.name,    href: `/ppqt-legacy/workcell/${encodeURIComponent(workcell.id)}`, workcellLogoKey: workcell.id },
+              { label: swc.name,         href: `/ppqt-legacy/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}` },
+              { label: process.name,     href: `/ppqt-legacy/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swc.id)}/proc/${encodeURIComponent(process.id)}` },
               { label: `${assembly.partNumber} / ${assembly.rev}` },
             ]}
           />

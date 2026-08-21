@@ -9,7 +9,7 @@
  * table with expand-in-place CT composition per assembly.
  */
 
-import { usePpqtEvidence } from '@/hooks/ppqt/usePpqtData';
+import { usePpqtEvidence } from '@/hooks/ppqt-legacy/usePpqtData';
 import {
   PPQT_AREA_BADGE,
   PPQT_CT_SOURCE_BADGE,
@@ -17,7 +17,7 @@ import {
   getPPQTStatus,
   PPQT_RESOURCE_COPY,
   type PPQTResourceMode,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';

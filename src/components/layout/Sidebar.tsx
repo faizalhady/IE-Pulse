@@ -5,7 +5,8 @@ import { useApp } from '@/context/AppContext';
 import { shortName, useCurrentUser } from '@/hooks/useCurrentUser';
 import { cn } from '@/lib/utils';
 import { useAccessLevel } from '@/hooks/useAccessLevel';
-import { Settings, Moon, PanelLeftClose, PanelLeftOpen,
+import { Settings,
+ Moon, PanelLeftClose, PanelLeftOpen,
  Sun
 } from 'lucide-react';
 import { useEffect, useState } from 'react';

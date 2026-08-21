@@ -54,10 +54,10 @@ export default function ChatWidget() {
       <Sheet open={open} onOpenChange={setOpen}>
         {/* Default Sheet caps at sm:max-w-sm — overridden: the chat needs
             room for tables. p-0 so the chat's own header owns the top. */}
-        <SheetContent side="right" className="w-[38vw] min-w-[420px] p-0 sm:max-w-none">
+        <SheetContent side="right" className="w-[70vw] min-w-[420px] p-0 sm:max-w-none">
           <SheetTitle className="sr-only">Ask the data</SheetTitle>
           <div className="h-full">
-            <CycleTimeChat />
+            <CycleTimeChat inDrawer />
           </div>
         </SheetContent>
       </Sheet>

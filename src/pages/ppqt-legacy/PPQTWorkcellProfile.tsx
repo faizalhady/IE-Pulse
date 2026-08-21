@@ -25,7 +25,7 @@ import {
   PPQT_STATUS_LABEL,
   PPQT_UTIL_BAR,
   PPQT_UTIL_TEXT,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle,
@@ -64,7 +64,7 @@ export default function PPQTWorkcellProfile() {
   const heroUtilWidth = Math.min(workcell.avgUtil, 100);
 
   const drillToSwc = (swcId: string) => {
-    navigate(`/ppqt/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swcId)}`);
+    navigate(`/ppqt-legacy/workcell/${encodeURIComponent(workcell.id)}/swc/${encodeURIComponent(swcId)}`);
   };
 
   return (
@@ -75,11 +75,11 @@ export default function PPQTWorkcellProfile() {
         <div className="px-6 py-3">
           <PPQTBreadcrumb
             items={[
-              { label: 'PPQT Dashboard', href: '/ppqt' },
-              { label: 'Workcells',      href: '/ppqt/workcell' },
+              { label: 'PPQT Dashboard', href: '/ppqt-legacy' },
+              { label: 'Workcells',      href: '/ppqt-legacy/workcell' },
               { label: workcell.name,    workcellLogoKey: workcell.id },
             ]}
-            backHref="/ppqt/workcell"
+            backHref="/ppqt-legacy/workcell"
           />
         </div>
       </div>

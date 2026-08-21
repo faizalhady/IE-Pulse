@@ -53,27 +53,42 @@ const TT_PROPS = {
   cursor: { fill: 'hsl(var(--muted-foreground) / 0.08)' },
 };
 
-/** Category labels wrap to two lines — "NVA Input" and "MFG Hour Lost" do not
- *  fit a bar's width on one. Anything past two lines is dropped rather than
- *  allowed to collide with the bars below. */
-const WrappedTick = ({ x, y, payload }: { x?: number; y?: number; payload?: { value?: unknown } }) => {
-  const words = String(payload?.value ?? '').split(' ');
+/**
+ * Category labels are workcell and loss names — "ARISTANETWORKS", "LAM MECH /
+ * EFEM" — and on the preview sheet a quadrant is half a screen wide. Flat
+ * labels ran into each other and printed as "ARISTANETWORKSMICRON".
+ *
+ * Slanted, so neighbours can never collide however long they are, and wrapped
+ * to two lines so a long name stays legible instead of running off the plot.
+ */
+const WRAP_AT = 14;
+
+function wrapLabel(value: string): string[] {
+  const words = value.split(' ');
   const lines: string[] = [];
   let cur = '';
   for (const w of words) {
-    if (cur && (cur + ' ' + w).length >= 9) { lines.push(cur); cur = w; }
+    if (cur && (cur + ' ' + w).length > WRAP_AT) { lines.push(cur); cur = w; }
     else cur = cur ? cur + ' ' + w : w;
   }
   if (cur) lines.push(cur);
-  return (
-    <g transform={`translate(${x},${(y ?? 0) + 2})`}>
-      {lines.slice(0, 2).map((line, i) => (
-        <text key={i} x={0} y={0} dy={i * 10} textAnchor="middle" fontSize={8.5}
-          fill="hsl(var(--muted-foreground))">{line}</text>
-      ))}
-    </g>
-  );
-};
+  // A single unbroken word longer than the wrap width has no space to break on.
+  return lines.length === 1 && lines[0].length > WRAP_AT + 4
+    ? [lines[0].slice(0, WRAP_AT + 3) + '…']
+    : lines.slice(0, 2);
+}
+
+/** Room for two slanted lines. Anything less and they clip at the frame edge. */
+const TICK_HEIGHT = 46;
+
+const AngledTick = ({ x, y, payload }: { x?: number; y?: number; payload?: { value?: unknown } }) => (
+  <g transform={`translate(${x},${(y ?? 0) + 4}) rotate(-35)`}>
+    {wrapLabel(String(payload?.value ?? '')).map((line, i) => (
+      <text key={i} x={0} y={0} dy={i * 9} textAnchor="end" fontSize={8.5}
+        fill="hsl(var(--muted-foreground))">{line}</text>
+    ))}
+  </g>
+);
 
 /** 24,800 → "24.8k". Bar labels have a bar's width to live in. */
 const compact = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0));
@@ -113,9 +128,10 @@ export function ParetoChart({
       </p>
       <div className={fillHeight ? 'flex-1 min-h-0' : ''} style={fillHeight ? undefined : { height }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 20, right: 30, left: 4, bottom: 4 }}>
+          <ComposedChart data={data} margin={{ top: 20, right: 30, left: 4, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={24} tick={<WrappedTick />} />
+            <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0}
+              height={TICK_HEIGHT} tick={<AngledTick />} />
             <YAxis
               yAxisId="left"
               // Headroom so the tallest bar's value label is not clipped.

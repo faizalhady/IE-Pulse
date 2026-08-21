@@ -8,9 +8,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  countable, nvaHistogram, plantTotals, reducibleDl, sweepTarget, withMetricsAll,
+  countable, nvaHistogram, plantTotals, reducibleDl, sizingPlan, sweepTarget, withMetricsAll,
 } from '@/lib/va_nva/vanvaCalc';
 import { SHEET1_ROWS } from '@/pages/vanva/mockVaNvaData';
+import type { VaNvaRow } from '@/pages/vanva/types';
 
 const rows = withMetricsAll(SHEET1_ROWS);
 const byId = (id: string) => rows.find(r => r.id === id)!;
@@ -79,5 +80,57 @@ describe('vanvaCalc — matches the workbook', () => {
     const hist = nvaHistogram(rows);
     const measuredCount = countable(rows).filter(r => r.nvaRatio !== null).length;
     expect(hist.reduce((s, b) => s + b.count, 0)).toBe(measuredCount);
+  });
+});
+
+describe('sizingPlan', () => {
+  const row = (id: string, va: number, nva: number): VaNvaRow => ({
+    id, workcell: id, role: 'workcell',
+    vaSizingRound: va, vaSizingDecimal: va, vaActual: va, crew: 1,
+    nvaPpqt: nva, nvaMfg: nva,
+  });
+
+  it('matches the worked example: VA 5 + NVA 5 at 20% reduces by 3', () => {
+    const p = sizingPlan(withMetricsAll([row('A', 5, 5)]), 0.2);
+    expect(p.rows[0].nvaTarget).toBe(2);      // 10 * 0.20
+    expect(p.rows[0].delta).toBe(3);          // 5 - 2
+    expect(p.rows[0].reduce).toBe(3);
+    expect(p.rows[0].add).toBe(0);
+  });
+
+  it('reports where the plan ACTUALLY lands, which is not the target', () => {
+    // The known consequence of taking the target as a share of TODAY's total:
+    // 5 VA + 2 NVA = 7, and 2/7 is 28.6%, not 20%. If this ever reads 20% the
+    // formula has been switched and the tracker will disagree with this page.
+    const p = sizingPlan(withMetricsAll([row('A', 5, 5)]), 0.2);
+    expect(p.projectedRatio).toBeCloseTo(2 / 7, 5);
+    expect(p.projectedRatio).not.toBeCloseTo(0.2, 3);
+  });
+
+  it('a workcell under target ADDS heads, it does not contribute 0', () => {
+    // VA 9 + NVA 1 = 10, target 2 -> delta -1, so it can absorb one more.
+    const p = sizingPlan(withMetricsAll([row('A', 9, 1)]), 0.2);
+    expect(p.rows[0].delta).toBe(-1);
+    expect(p.rows[0].reduce).toBe(0);
+    expect(p.rows[0].add).toBe(1);
+    expect(p.totalAdd).toBe(1);
+  });
+
+  it('rounds every head UP, in both directions', () => {
+    // VA 5 + NVA 4 = 9, target 1.8 -> delta 2.2 -> 3 heads, never 2.
+    const p = sizingPlan(withMetricsAll([row('A', 5, 4)]), 0.2);
+    expect(p.rows[0].delta).toBeCloseTo(2.2, 5);
+    expect(p.rows[0].reduce).toBe(3);
+  });
+
+  it('skips child and aggregate rows so nothing is counted twice', () => {
+    const rows: VaNvaRow[] = [
+      row('parent', 10, 10),
+      { ...row('kid', 4, 4), role: 'child', parentId: 'parent' },
+      { ...row('plan', 100, 100), role: 'aggregate' },
+    ];
+    const p = sizingPlan(withMetricsAll(rows), 0.2);
+    expect(p.rows).toHaveLength(1);
+    expect(p.rows[0].id).toBe('parent');
   });
 });

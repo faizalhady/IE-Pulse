@@ -17,8 +17,10 @@
  * it in would make an empty array ambiguous for everyone else.
  */
 
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 /** Tri-state tick. Exported because callers render their own rows beside the
  *  tree (Cycle Time has an "All" row above it) and those must match. */
@@ -111,6 +113,44 @@ export function ScopePicker({
           </div>
         );
       })}
+    </>
+  );
+}
+
+/**
+ * The scope block: label, tree, count, Clear. No chrome and no confirm button —
+ * the launch dialog and the editor's Settings tab both render this, so the two
+ * can never offer different fields. (OLE keeps its own copy; Cycle Time and
+ * VA/NVA share this one.)
+ *
+ * `allCount` is what "nothing picked" stands for where empty means everything.
+ * `children` go above the tree — VA/NVA puts its month and target there.
+ */
+export function ScopeFields({
+  plants, byPlant, picked, onChange, labelPlant, allCount,
+  maxH = 'max-h-[22rem]', gridClassName, children,
+}: ScopePickerProps & { allCount?: number; maxH?: string; children?: ReactNode }) {
+  const n = picked.length || allCount || 0;
+  const all = picked.length === 0 && !!allCount;
+  return (
+    <>
+      {children}
+      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Report scope
+      </Label>
+      <div className={cn('mt-1.5 space-y-4 overflow-y-auto pr-1', maxH)}>
+        <ScopePicker plants={plants} byPlant={byPlant} picked={picked} onChange={onChange}
+          labelPlant={labelPlant} gridClassName={gridClassName} />
+      </div>
+      <div className="mt-4 flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">
+          {n} workcell{n === 1 ? '' : 's'} selected{all && ' (all)'}
+        </span>
+        <button type="button" onClick={() => onChange([])} disabled={!picked.length}
+          className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40">
+          Clear
+        </button>
+      </div>
     </>
   );
 }

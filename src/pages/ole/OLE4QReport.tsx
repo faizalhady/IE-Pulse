@@ -8,12 +8,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MhDistributionRow, OleWeeklyResult, OleWorkcellConfig } from '@/lib/ole/oleApi';
 import { oleApi } from '@/lib/ole/oleApi';
+import { OLE_TARGET, OLE_WARNING } from '@/lib/ole/oleConstants';
 import type { SavedReportMeta } from '@/lib/shared/savedReportsApi';
 import { savedReports } from '@/lib/shared/savedReportsApi';
 import { useSavedReport } from '@/hooks/shared/useSavedReport';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { FourQPreview } from '@/components/shared/FourQPreview';
+import { BAND_BAD, BAND_GOOD, BAND_WARN, statusBands } from '@/components/shared/StatusBands';
 import { ParetoChart, buildPareto } from '@/components/shared/ParetoChart';
 import type { ActionItem } from '@/components/shared/ImprovementPlan';
 import { ImprovementEditor, ImprovementTable } from '@/components/shared/ImprovementPlan';
@@ -251,6 +253,12 @@ function Q1Chart({ trendData, fillHeight = false }: { trendData: TrendPoint[]; f
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={visible} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+          {/* OLE is a yield: high is good, so green sits on top. */}
+          {statusBands([
+            { from: 0, to: OLE_WARNING, color: BAND_BAD },
+            { from: OLE_WARNING, to: OLE_TARGET, color: BAND_WARN },
+            { from: OLE_TARGET, to: 100, color: BAND_GOOD },
+          ])}
           <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmtWeekLabel} />
           <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
           <Tooltip {...TT_PROPS} formatter={(v: number, n: string) => [`${Number(v).toFixed(1)}%`, n]} labelFormatter={fmtWeekLabel} />
@@ -477,11 +485,13 @@ function PaynterTable({ aggregateRows, weeklyRows, mhRows, isPrint = false }: {
     <div className={cn(isPrint ? 'w-full h-full overflow-hidden flex flex-col' : 'overflow-x-auto rounded-xl bg-card w-full h-full')}>
       <table className={cn('w-full text-left border-collapse table-fixed', isPrint ? 'h-full' : '', fs)}>
         <thead>
-          {isPrint && <tr><th colSpan={weekData.length + 2} className="text-center py-1 text-[10px] font-bold uppercase text-primary-foreground bg-primary border-0">Fourth Quadrant - Paynter Chart</th></tr>}
           <tr className="bg-primary text-primary-foreground uppercase tracking-wider">
             <th className={cn(ph, 'border border-primary/70 font-semibold', isPrint ? 'text-[9px] w-28' : 'sticky left-0 bg-primary z-10 w-36 max-w-[144px] text-[10px]')}>{isPrint ? 'Category' : 'Man Hrs Distribution'}</th>
             {weekData.map(w => <th key={w.week_label} className={cn(ph, 'border border-primary/70 text-right font-semibold')}>{fmtWeekLabel(w.week_label)}</th>)}
-            <th className={cn(ph, 'border border-primary/70 text-right font-bold bg-primary/80')}>Avg (4W)</th>
+            {/* table-fixed splits width evenly, and a negative average
+                ("-15.80%") is one glyph wider than any week cell — without an
+                explicit width the % sign gets clipped off. */}
+            <th className={cn(ph, 'border border-primary/70 text-right font-bold bg-primary/80', isPrint && 'w-14')}>Avg (4W)</th>
           </tr>
         </thead>
         <tbody>
@@ -695,7 +705,6 @@ export default function OLE4QReport() {
       title={title}
       headings={['First Quadrant - OLE Trend', 'Second Quadrant - Pareto Four Weeks',
                  'Fourth Quadrant - Paynter Chart', 'Third Quadrant - Improvement Plan']}
-      frameClassName={['', '', 'items-start', '']}
       quadrants={[
         <Q1Chart trendData={trendData} fillHeight />,
         <Q2Section aggregateRows={aggregateRows} weeklyRows={weeklyRows} mhRows={mhRows} compact

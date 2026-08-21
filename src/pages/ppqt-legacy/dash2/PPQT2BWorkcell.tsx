@@ -17,7 +17,7 @@
  * its numbers always match the other tabs. Evidence is fetched per expanded card.
  */
 
-import { usePpqtEvidence } from '@/hooks/ppqt/usePpqtData';
+import { usePpqtEvidence } from '@/hooks/ppqt-legacy/usePpqtData';
 import {
   PPQT_AREA_BADGE,
   PPQT_CT_SOURCE_BADGE,
@@ -27,7 +27,7 @@ import {
   getPPQTStatus,
   PPQT_RESOURCE_COPY,
   type PPQTResourceMode,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';

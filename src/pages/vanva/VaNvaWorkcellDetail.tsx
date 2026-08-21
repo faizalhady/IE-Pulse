@@ -20,6 +20,7 @@ import {
   sizingGapClass,
 } from '@/lib/va_nva/vanvaConstants';
 import { ChartCard, KpiTile, PanelCard, Swatches } from '@/pages/vanva/VaNvaChartKit';
+import { usePeriod } from '@/pages/vanva/VaNvaSizingKit';
 import type { VaNvaMetrics } from '@/pages/vanva/types';
 import {
   AlertTriangle, ArrowLeft, Scissors, Target, TrendingDown, Users,
@@ -36,7 +37,9 @@ const short = (n: string) => (n.length > 13 ? `${n.slice(0, 12)}…` : n);
 export default function VaNvaWorkcellDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { rows, dataset } = useVaNvaRows(NVA_TARGET);
+  // Month comes from ?m= so the hop from the sizing page lands on the same sheet.
+  const { dataset: ds, qs } = usePeriod();
+  const { rows, dataset } = useVaNvaRows(NVA_TARGET, ds?.id);
 
   const row = rows.find(r => r.id === decodeURIComponent(id));
   const children = rows.filter(r => r.parentId === row?.id);
@@ -46,7 +49,7 @@ export default function VaNvaWorkcellDetail() {
     return (
       <div className="p-10 text-center">
         <p className="text-sm text-muted-foreground">Workcell not found in {dataset?.filename ?? 'this dataset'}.</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('/va-nva/workcells')}>Back to workcells</Button>
+        <Button variant="outline" className="mt-4" onClick={() => navigate(`/va-nva${qs}`)}>Back to sizing</Button>
       </div>
     );
   }
@@ -91,18 +94,18 @@ export default function VaNvaWorkcellDetail() {
   return (
     <div className="relative">
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-6 py-3">
-        <button onClick={() => navigate('/va-nva/workcells')}
+        <button onClick={() => navigate(`/va-nva/wc/${encodeURIComponent(row.id)}${qs}`)}
           className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground mb-2">
-          <ArrowLeft className="h-3 w-3" /> Workcells
+          <ArrowLeft className="h-3 w-3" /> Sizing
         </button>
         <div className="flex items-center gap-3">
           {logo ? (
-            <div className="w-14 h-8 rounded border border-border bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
-              <img src={logo} alt={row.workcell} className="w-full h-full object-contain p-0.5" />
+            <div className="w-[4.25rem] h-10 rounded-md border border-border bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+              <img src={logo} alt={row.workcell} className="w-full h-full object-contain p-1" />
             </div>
           ) : (
-            <div className="w-14 h-8 rounded border border-border bg-muted flex items-center justify-center flex-shrink-0">
-              <span className="text-[10px] font-bold text-muted-foreground">{row.workcell.slice(0, 3).toUpperCase()}</span>
+            <div className="w-[4.25rem] h-10 rounded-md border border-border bg-muted flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-muted-foreground">{row.workcell.slice(0, 3).toUpperCase()}</span>
             </div>
           )}
           <div className="min-w-0">

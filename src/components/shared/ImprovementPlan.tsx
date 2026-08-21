@@ -116,13 +116,10 @@ export interface ImprovementTableProps {
   /** Loss categories, in priority order — they lead the grouping even when empty. */
   issues?: string[];
   isPrint?: boolean;
-  /** Banner shown above the header in print mode. */
-  printTitle?: string;
 }
 
-export function ImprovementTable({
-  actions, issues = [], isPrint = false, printTitle = 'Third Quadrant - Improvement Plan',
-}: ImprovementTableProps) {
+// The preview sheet's quadrant frame draws the banner — see FourQPreview.
+export function ImprovementTable({ actions, issues = [], isPrint = false }: ImprovementTableProps) {
   const sz = isPrint ? 'text-[10px]' : 'text-xs';
   const ph = isPrint ? 'px-1.5 py-1' : 'px-2 py-1.5';
   const pd = isPrint ? 'px-1.5 py-1.5' : 'px-2 py-2';
@@ -149,14 +146,9 @@ export function ImprovementTable({
   </>;
 
   return (
-    <div className={cn('overflow-x-auto rounded-xl w-full', !isPrint && 'bg-card')}>
-      <table className={cn('w-full text-left border-collapse', sz)}>
+    <div className={cn('w-full overflow-x-auto', isPrint ? 'h-full' : 'rounded-xl bg-card')}>
+      <table className={cn('w-full border-collapse text-left', sz, isPrint && 'h-full')}>
         <thead>
-          {isPrint && (
-            <tr><th colSpan={11} className="text-center py-1 text-[8px] font-bold uppercase text-primary-foreground bg-primary border-0">
-              {printTitle}
-            </th></tr>
-          )}
           <tr className="bg-primary text-primary-foreground uppercase">
             {COLS.map(c => (
               <th key={c.label} className={cn(ph, 'border border-primary/70 font-semibold leading-snug text-[8px]', c.th)}>
@@ -167,7 +159,7 @@ export function ImprovementTable({
         </thead>
         <tbody>
           {groups.length === 0 && ungrouped.length === 0
-            ? <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground text-xs italic">
+            ? <tr><td colSpan={11} className="px-3 py-8 text-center align-middle text-xs italic text-muted-foreground">
                 No actions added - use the editor panel to add corrective actions
               </td></tr>
             : <>

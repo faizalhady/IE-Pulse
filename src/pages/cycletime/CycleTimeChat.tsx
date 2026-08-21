@@ -26,6 +26,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { Streamdown } from 'streamdown';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
@@ -97,7 +98,44 @@ function turnWorkcell(t: Turn, names: string[], byKey: Map<string, string>): str
 interface Turn {
   role: 'user' | 'assistant';
   content: string;
-  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table' | 'intent'>;
+  meta?: Pick<ChatAnswer, 'calls' | 'sources' | 'elapsed_s' | 'error' | 'grounded' | 'sql' | 'lane' | 'table' | 'intent' | 'model'>;
+}
+
+/** Assistant markdown, streamed-safe. Streamdown styles incomplete blocks as
+ *  tokens arrive (bold is bold before the closing **), renders GFM tables, and
+ *  is hardened by default. The overrides keep our entity links alive inside
+ *  markdown text; table cells keep streamdown's own styling (links there come
+ *  from the structured meta.table instead). Headings are stepped down to
+ *  bubble scale — a chat answer with an h1 shouts. */
+function MdAnswer({ text, names, byKey, ctxWc }: {
+  text: string;
+  names: string[];
+  byKey: Map<string, string>;
+  ctxWc?: string;
+}) {
+  const wrap = (children: ReactNode): ReactNode => {
+    const one = (c: ReactNode, i: number): ReactNode =>
+      typeof c === 'string' ? <span key={i}>{linkify(c, names, byKey, ctxWc)}</span> : c;
+    return Array.isArray(children) ? children.map(one) : one(children, 0);
+  };
+  const mk = (Tag: keyof JSX.IntrinsicElements, cls?: string) =>
+    (props: { children?: ReactNode }) => <Tag className={cls}>{wrap(props.children)}</Tag>;
+  return (
+    <Streamdown
+      className="space-y-2 [&_table]:text-xs"
+      components={{
+        p: mk('p'),
+        li: mk('li', 'my-0.5'),
+        strong: mk('strong', 'font-semibold'),
+        em: mk('em'),
+        h1: mk('h3', 'mt-2 text-sm font-bold'),
+        h2: mk('h4', 'mt-2 text-sm font-semibold'),
+        h3: mk('h4', 'mt-1.5 text-[13px] font-semibold'),
+      }}
+    >
+      {text}
+    </Streamdown>
+  );
 }
 
 /** Where to go for the full picture — one deterministic suggestion per answer,
@@ -193,7 +231,7 @@ const EXAMPLES = [
   'Are we improving week on week?',
 ];
 
-export default function CycleTimeChat() {
+export default function CycleTimeChat({ inDrawer = false }: { inDrawer?: boolean }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -267,24 +305,30 @@ export default function CycleTimeChat() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-6 py-4">
+      {/* In the drawer the Sheet's X sits top-right, so the header slims down,
+          keeps clear of it (pr-12) and drops the tagline — a drawer needs a
+          label, not a landing page. */}
+      <div className={cn('border-b border-border', inDrawer ? 'px-4 py-3 pr-12' : 'px-6 py-4')}>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-bold">Ask the data</h1>
+          <h1 className={cn('font-bold', inDrawer ? 'text-base' : 'text-lg')}>Ask the data</h1>
           {health.data?.ok && (
             <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
               {health.data.model} · {health.data.tools.length} tools
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Answers come from the same marts these pages read. Every reply shows which one.
-        </p>
+        {!inDrawer && (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Answers come from the same marts these pages read. Every reply shows which one.
+          </p>
+        )}
       </div>
 
       {/* A dead model must say so. A spinner that never resolves is how someone
           concludes the whole module is broken. */}
       {down && (
-        <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+        <div className={cn(inDrawer ? 'mx-4' : 'mx-6',
+          'mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400')}>
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <div className="font-medium">The local model is not reachable.</div>
@@ -293,7 +337,7 @@ export default function CycleTimeChat() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-auto px-6 py-5">
+      <div className={cn('min-h-0 flex-1 space-y-4 overflow-auto py-5', inDrawer ? 'px-4' : 'px-6')}>
         {!turns.length && (
           <div className="mx-auto max-w-lg pt-8 text-center">
             <Bot className="mx-auto h-8 w-8 text-muted-foreground/50" />
@@ -322,8 +366,10 @@ export default function CycleTimeChat() {
             )}
             <div className={cn('min-w-0 max-w-[42rem] rounded-xl px-3.5 py-2.5 text-sm',
               t.role === 'user' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card')}>
-              <div className="whitespace-pre-wrap break-words">
-                {t.role === 'assistant' ? linkify(t.content, wcNames, byKey, ctxWc) : t.content}
+              <div className="break-words">
+                {t.role === 'assistant'
+                  ? <MdAnswer text={t.content} names={wcNames} byKey={byKey} ctxWc={ctxWc} />
+                  : <span className="whitespace-pre-wrap">{t.content}</span>}
               </div>
 
               {/* An ungrounded answer must not dress like a sourced one — the
@@ -366,7 +412,12 @@ export default function CycleTimeChat() {
                     </div>
                   ))}
                   {t.meta.sources.map((s, j) => <div key={`s${j}`}>source: {s}</div>)}
-                  {t.meta.elapsed_s > 0 && <div>{t.meta.elapsed_s}s</div>}
+                  {t.meta.elapsed_s > 0 && (
+                    <div>
+                      {t.meta.elapsed_s}s
+                      {t.meta.model && <span className="font-mono"> · {t.meta.model}</span>}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -386,11 +437,16 @@ export default function CycleTimeChat() {
             </div>
             <div className="min-w-0 max-w-[42rem] rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm">
               {live
-                ? <div className="whitespace-pre-wrap break-words">{live}</div>
+                ? <div className="break-words"><MdAnswer text={live} names={wcNames} byKey={byKey} /></div>
                 : (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {stage || 'reading the marts…'}
+                    <span>{stage || 'reading the marts…'}</span>
+                    {/* Which brain is on the request — the configured primary;
+                        the receipt under the answer names who ACTUALLY spoke. */}
+                    {health.data?.ok && (
+                      <span className="font-mono text-[10px] opacity-60">{health.data.model}</span>
+                    )}
                   </div>
                 )}
             </div>
@@ -399,7 +455,7 @@ export default function CycleTimeChat() {
         <div ref={endRef} />
       </div>
 
-      <div className="border-t border-border px-6 py-4">
+      <div className={cn('border-t border-border py-4', inDrawer ? 'px-4' : 'px-6')}>
         <div className="flex items-end gap-2">
           <textarea
             value={draft}

@@ -24,7 +24,7 @@ import {
   PPQT_CT_SOURCE_BADGE,
   PPQT_STATUS_BADGE,
   PPQT_STATUS_LABEL,
-} from '@/lib/ppqt/ppqtConstants';
+} from '@/lib/ppqt-legacy/ppqtConstants';
 import { PPQTProcess } from './types';
 import PPQTUtilisationBar from './PPQTUtilisationBar';
 

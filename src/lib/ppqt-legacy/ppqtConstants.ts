@@ -5,7 +5,7 @@
  * Mirrors the structure of oleConstants.ts to keep styling consistent across modules.
  */
 
-import { PPQTStatus, ProcessArea, CTSource } from '@/pages/ppqt/types';
+import { PPQTStatus, ProcessArea, CTSource } from '@/pages/ppqt-legacy/types';
 
 // ─── Utilisation thresholds ──────────────────────────────────────────────────
 // These drive the status (bottleneck / warning / healthy / idle) and the
