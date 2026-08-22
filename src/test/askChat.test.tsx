@@ -52,10 +52,31 @@ describe('Chat', () => {
     expect(assistant?.textContent).not.toContain('**');                 // bold consumed by the renderer
   });
 
-  it('folds the tool step under the answer, named after the tool', () => {
-    render(<Chat thread={thread} />);
-    expect(screen.getByText(/universe_query/)).toBeTruthy();
-    expect(screen.queryByText(/select count\(\*\) as n from v_workcell/)).toBeNull();     // folded
+  it('folds every tool step of an answer into ONE accordion, counted and named', () => {
+    const many = {
+      ...thread,
+      messages: [
+        thread.messages[0],
+        {
+          id: 'a2',
+          role: 'assistant' as const,
+          parts: [
+            { type: 'tool-universe_describe', toolCallId: 'c1', state: 'output-available', input: { view: 'v_workcell' }, output: { ok: true, rows: null, text: 'v_workcell …' } },
+            { type: 'tool-universe_query', toolCallId: 'c2', state: 'output-available', input: { sql: 'select 1' }, output: { ok: true, rows: 1, text: '{"rows":[]}' } },
+            { type: 'tool-universe_query', toolCallId: 'c3', state: 'output-available', input: { sql: 'select 2' }, output: { ok: true, rows: 1, text: '{"rows":[]}' } },
+            { type: 'text', text: 'Done.' },
+            { type: 'data-model', data: { label: 'chain: gemini-3.7-flash -> groq-gpt-oss-120b' } },
+          ],
+        },
+      ],
+    };
+    render(<Chat thread={many} />);
+    const headers = screen.getAllByRole('button', { expanded: false }).filter((b) => /3 steps/.test(b.textContent ?? ''));
+    expect(headers.length).toBe(1);                                                        // one accordion, not three cards
+    expect(headers[0].textContent).toMatch(/schema.*query/i);                              // names what it did
+    expect(screen.queryByText(/select 1/)).toBeNull();                                      // folded
+    // which model answered, beside the thumbs — the last slot that spoke
+    expect(screen.getByText(/answered by/i).textContent).toMatch(/groq-gpt-oss-120b/);
   });
 
   it('thumbs up posts +1 for that message', async () => {

@@ -33,15 +33,16 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input';
-import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput, type ToolPart } from '@/components/ai-elements/tool';
+import { ToolInput, type ToolPart } from '@/components/ai-elements/tool';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ASK_API, askApi, type StoredPart, type Thread } from '@/lib/ask/askApi';
 import { cn } from '@/lib/utils';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { MessageSquare, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ChevronDown, MessageSquare, ThumbsDown, ThumbsUp, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 export const EXAMPLES = [
@@ -185,33 +186,60 @@ function ChatMessage({ message, streaming }: { message: UIMessage; streaming: bo
         </MessageContent>
       ) : (
         <div className="flex w-full min-w-0 flex-col gap-3">
-          {message.parts.map((p, i) => {
-            if (p.type === 'text') {
-              return <MessageResponse key={i}>{p.text}</MessageResponse>;
-            }
-            if (p.type.startsWith('tool-')) {
-              const part = p as ToolPart;
-              return (
-                <Tool key={part.toolCallId ?? i} className="w-full">
-                  <ToolHeader
-                    type={part.type as never}
-                    state={part.state}
-                    title={`${TOOL_TITLES[part.type] ?? 'Tool'} · ${part.type.replace(/^tool-/, '')}`}
-                  />
-                  <ToolContent>
-                    <ToolInput input={part.input} />
-                    {part.state === 'output-available' && <ToolOutput output={<ToolText output={part.output} />} errorText={undefined} />}
-                  </ToolContent>
-                </Tool>
-              );
-            }
-            return null;
-          })}
-          {!streaming && <Feedback messageId={message.id} initial={feedbackOf(message)} />}
+          <ToolSteps parts={message.parts.filter((p) => p.type.startsWith('tool-')) as ToolPart[]} />
+          {message.parts.map((p, i) => (p.type === 'text' ? <MessageResponse key={i}>{p.text}</MessageResponse> : null))}
+          {!streaming && <Feedback messageId={message.id} initial={feedbackOf(message)} model={modelOf(message)} />}
         </div>
       )}
     </Message>
   );
+}
+
+/** Every tool step of one answer in ONE accordion: "3 steps · Looked up the schema, Ran a query ×2". */
+function ToolSteps({ parts }: { parts: ToolPart[] }) {
+  if (parts.length === 0) return null;
+  const done = parts.every((p) => p.state === 'output-available');
+  const counts = new Map<string, number>();
+  for (const p of parts) {
+    const t = TOOL_TITLES[p.type] ?? p.type.replace(/^tool-/, '');
+    counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  const summary = [...counts].map(([t, c]) => (c > 1 ? `${t} ×${c}` : t)).join(', ');
+  return (
+    <Collapsible className="group w-full rounded-md border">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm">
+        <span className="flex min-w-0 items-center gap-2">
+          <Wrench className="size-4 shrink-0 text-muted-foreground" />
+          <span className="font-medium">{parts.length} {parts.length === 1 ? 'step' : 'steps'}</span>
+          <span className="truncate text-muted-foreground">· {summary}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className={cn('text-xs', done ? 'text-emerald-600' : 'text-muted-foreground')}>{done ? 'Completed' : 'Running…'}</span>
+          <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t">
+        {parts.map((part, i) => (
+          <div key={part.toolCallId ?? i} className="border-b px-3 py-2 last:border-b-0">
+            <div className="mb-1 text-xs font-medium text-muted-foreground">
+              {i + 1}. {TOOL_TITLES[part.type] ?? 'Tool'} · {part.type.replace(/^tool-/, '')}
+            </div>
+            <ToolInput input={part.input} className="p-0" />
+            {part.state === 'output-available' && <ToolText output={part.output} />}
+          </div>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** "chain: gemini-3.7-flash -> groq-gpt-oss-120b" → the slot that wrote the answer (the last one). */
+function modelOf(message: UIMessage): { short: string; full: string } | null {
+  const part = message.parts.find((p) => p.type === 'data-model') as { data?: { label?: string } } | undefined;
+  const full = part?.data?.label ?? (message as unknown as { model?: string | null }).model ?? null;
+  if (!full) return null;
+  const short = full.replace(/^chain:\s*/, '').split('->').map((s) => s.trim()).filter(Boolean).pop() ?? full;
+  return { short, full };
 }
 
 /** The backend stores {ok, rows, text}; show the text the model saw. */
@@ -230,7 +258,7 @@ function feedbackOf(message: UIMessage): number | null {
   return m.feedback ?? null;
 }
 
-function Feedback({ messageId, initial }: { messageId: string; initial: number | null }) {
+function Feedback({ messageId, initial, model }: { messageId: string; initial: number | null; model: { short: string; full: string } | null }) {
   const [vote, setVote] = useState<number | null>(initial);
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState('');
@@ -262,6 +290,11 @@ function Feedback({ messageId, initial }: { messageId: string; initial: number |
         >
           <ThumbsDown className="size-4" />
         </MessageAction>
+        {model && (
+          <span className="ml-2 text-xs text-muted-foreground" title={model.full}>
+            answered by {model.short}
+          </span>
+        )}
       </MessageActions>
       {asking && (
         <div className="flex max-w-md flex-col gap-2 rounded-md border bg-muted/30 p-2">

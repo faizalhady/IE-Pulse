@@ -49,7 +49,23 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface ModelRow {
+  slot: string;
+  model: string;
+  provider: string;
+  key: 'yes' | 'MISSING' | '—';
+  calls: number;
+  tokens: number;
+  limits: { rpd: number | null; tpd: number | null };
+  usage_pct: number;
+  cooldown_s: number;
+  resets_at: string;
+  last_error: string;
+}
+
 export const askApi = {
+  /** The free-model chain: every slot, today's usage against its limit, when it resets. */
+  models: () => fetch(`${ASK_API}/chat/models`).then((r) => json<{ models: ModelRow[]; note: string }>(r)),
   threads: {
     list: () => fetch(`${ASK_API}/threads`).then((r) => json<ThreadSummary[]>(r)),
     get: (id: string) => fetch(`${ASK_API}/threads/${encodeURIComponent(id)}`).then((r) => json<Thread>(r)),

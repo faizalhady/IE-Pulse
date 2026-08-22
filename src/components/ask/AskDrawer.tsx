@@ -5,6 +5,7 @@
  */
 
 import { Chat } from '@/components/ask/Chat';
+import { ModelsPanel } from '@/components/ask/ModelsPanel';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { askApi } from '@/lib/ask/askApi';
@@ -43,6 +44,7 @@ export function AskDrawer() {
           <div className="flex items-center justify-between border-b px-4 py-3">
             <SheetTitle className="text-sm font-semibold">Ask the Jabil Universe</SheetTitle>
             <div className="flex items-center gap-1">
+              <ModelsPanel />
               <Button size="sm" variant="ghost" onClick={() => { setThreadId(null); setChatKey((k) => k + 1); }}>New chat</Button>
               <Button
                 size="sm"
