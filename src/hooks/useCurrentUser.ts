@@ -66,6 +66,12 @@ async function fetchUser(): Promise<CurrentUser> {
  *  token lives 60 minutes and tabs live much longer, so this is routine, not
  *  an error path. NTLM re-authenticates silently, so the user sees nothing. */
 export async function getAuthToken(force = false): Promise<string | null> {
+  // Dev only (stripped from prod builds): a token minted with the backend's own
+  // secret, set by hand in localStorage, when AD_GET is not reachable from localhost.
+  if (import.meta.env.DEV) {
+    const dev = localStorage.getItem('pulse_dev_token');
+    if (dev) return dev;
+  }
   if (force) cached = null;
   try {
     return (await fetchUser()).token;

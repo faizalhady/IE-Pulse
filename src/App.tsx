@@ -7,6 +7,8 @@ import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
+import AskPage from "@/pages/ask/AskPage";
+import { AskDrawer } from "@/components/ask/AskDrawer";
 import CycleTime4QReport from "@/pages/cycletime/CycleTime4QReport";
 import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
@@ -136,6 +138,7 @@ function AppShell() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
+      {includesApp('ask') && <AskDrawer />}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* <Header /> */}
         <main className="flex-1 overflow-y-auto">
@@ -175,6 +178,10 @@ function AppShell() {
               <Route path="/fsms/bays" element={<BayManagement />} />
             </>}
 
+            {includesApp('ask') && <>
+              <Route path="/ask" element={<AskPage />} />
+              <Route path="/ask/t/:threadId" element={<AskPage />} />
+            </>}
             {includesApp('cycle-time') && <>
               {/* /cycle-time/home is the landing page. */}
               <Route path="/cycle-time" element={<Navigate to="/cycle-time/home" replace />} />

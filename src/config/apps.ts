@@ -29,13 +29,15 @@ import {
   UploadCloud,
   UserCheck,
   Workflow,
-  Wrench
+  Wrench,
+  MessageSquare,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { createElement } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'va-nva' | 'machine-mover' | 'tools';
+export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'va-nva' | 'machine-mover' | 'tools' | 'ask';
 
 /** Bold "4Q" wordmark, drawn to the same 24×24 box as a lucide icon so it drops
  *  straight into `navItems` and inherits the sidebar's colour and sizing.
@@ -122,6 +124,21 @@ export const APPS: AppConfig[] = [
       // { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
       // { label: 'API Test', to: '/ole-mart-api', icon: Database },
       { label: '4Q Generator', to: '/ole/4q', icon: FourQ },
+    ],
+  },
+  {
+    // Ask — the chatbot over the Jabil Universe (plant data in plain English).
+    // Pilot: the backend's UNIVERSE_CHAT_USERS list decides who may use it.
+    id: 'ask',
+    label: 'Ask',
+    description: 'Ask the Jabil Universe — plant data in plain English',
+    icon: MessageSquare,
+    color: 'text-violet-500',
+    iconBg: 'bg-violet-500/15',
+    basename: '/ietools/ask',
+    category: 'Analytics',
+    navItems: [
+      { label: 'New chat', to: '/ask', icon: MessageSquarePlus },
     ],
   },
   {
