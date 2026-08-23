@@ -14,6 +14,7 @@ const APP_BASENAMES: Record<string, string> = {
   ebuild: '/ietools/ebuild/',
   iebaseline: '/ietools/iebaseline/',
   'cycle-time': '/ietools/cycle-time/',
+  ask: '/ietools/ask/',
   ppqt: '/ietools/ppqt/',
   ipk: '/ietools/ipkk/',
   lbr: '/ietools/lbr/',
@@ -47,6 +48,7 @@ const APP_PUBLIC: Record<string, string[]> = {
  * Apps not listed keep the default in index.html.
  */
 const APP_TITLES: Record<string, string> = {
+  ask: 'Ask — IE Pulse',
   ole: 'OLE - IE Tools',
 };
 
@@ -140,6 +142,12 @@ export default defineConfig(({ command, mode }) => {
           rewrite: (p) => p.replace(/^\/ietools\/cycle-time\/api/, '/api/cycle-time'),
         },
         // PPQT module — same backend, mounted at /api/ppqt/*.
+        // Ask — the universe chat; same backend, /api/universe/* on it.
+        '/ietools/ask/api': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/ietools\/ask\/api/, '/api'),
+        },
         '/ietools/ppqt/api': {
           target: 'http://localhost:8000',
           changeOrigin: true,

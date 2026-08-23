@@ -1,15 +1,18 @@
+import { Suspense, lazy, useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
-import { BUILD_BASENAME, CHAT_ENABLED, includesApp } from "@/lib/buildContext";
+import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
+// Ask (the Jabil Universe chat) ships in the core build only. Lazy chunks: a build that
+// never enables it never loads the AI SDK, streamdown and shiki either.
+const AskPage = lazy(() => import("@/pages/ask/AskPage"));
+const AskDrawer = lazy(() => import("@/components/ask/AskDrawer").then((m) => ({ default: m.AskDrawer })));
 import CycleTime4QReport from "@/pages/cycletime/CycleTime4QReport";
-import CycleTimeChat from "@/pages/cycletime/CycleTimeChat";
-import ChatWidget from "@/components/cycletime/ChatWidget";
 import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
 import IncompletionReportDetail from "@/pages/cycletime/IncompletionReportDetail";
@@ -84,7 +87,6 @@ import VaNvaWorkcellSizing from "@/pages/vanva/VaNvaWorkcellSizing";
 import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import MapPage from "./pages/MapPage";
 import DowntimeManagement from "./pages/ole/DowntimeManagement";
@@ -135,16 +137,10 @@ function AppShell() {
       prefetchOleData();
     }
   }, [pathname]);
-  // The floating chat bubble lives on every cycle-time page except the
-  // full chat page itself — a bubble that opens the page you are on is noise.
-  const showChatBubble = CHAT_ENABLED
-    && includesApp('cycle-time')
-    && pathname.startsWith('/cycle-time')
-    && pathname !== '/cycle-time/ask';
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      {showChatBubble && <ChatWidget />}
+      {includesApp('ask') && <Suspense fallback={null}><AskDrawer /></Suspense>}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* <Header /> */}
         <main className="flex-1 overflow-y-auto">
@@ -184,6 +180,10 @@ function AppShell() {
               <Route path="/fsms/bays" element={<BayManagement />} />
             </>}
 
+            {includesApp('ask') && <>
+              <Route path="/ask" element={<Suspense fallback={null}><AskPage /></Suspense>} />
+              <Route path="/ask/t/:threadId" element={<Suspense fallback={null}><AskPage /></Suspense>} />
+            </>}
             {includesApp('cycle-time') && <>
               {/* /cycle-time/home is the landing page. */}
               <Route path="/cycle-time" element={<Navigate to="/cycle-time/home" replace />} />
@@ -200,7 +200,6 @@ function AppShell() {
               <Route path="/cycle-time/models/:customer" element={<RedirectWorkcell />} />
               <Route path="/cycle-time/completion" element={<DemandCompletionReport />} />
               <Route path="/cycle-time/4q" element={<CycleTime4QReport />} />
-              {CHAT_ENABLED && <Route path="/cycle-time/ask" element={<CycleTimeChat />} />}
               <Route path="/cycle-time/incompletion" element={<IncompletionReport />} />
               <Route path="/cycle-time/incompletion/:customer" element={<IncompletionReportDetail />} />
               <Route path="/cycle-time/plant-runners" element={<PlantRunnerDashboard />} />

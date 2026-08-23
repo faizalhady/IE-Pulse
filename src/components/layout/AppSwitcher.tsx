@@ -16,7 +16,9 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /** Modules that are live/in-production. Everything else gets a "not live" warning. */
-const LIVE_APPS = new Set<AppId>(['ole', 'cycle-time']);
+/** Green pulsing badge = the module runs on real data. Amber = prototype / mock.
+ *  PPQT and VA/NVA joined on 2026-08-24. Exported so the layout test can pin it. */
+export const LIVE_APPS = new Set<AppId>(['ole', 'cycle-time', 'ppqt', 'va-nva']);
 
 interface AppSwitcherProps {
   collapsed: boolean;

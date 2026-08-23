@@ -175,3 +175,13 @@
   box-shadow: none !important;
   border-radius: 0 !important;
 }
+
+/* Ask chat — Streamdown renders a table inside a tinted, bordered wrapper (with its
+   copy / download / fullscreen toolbar). Faiz: the tint looks odd — the wrapper is
+   transparent and flat; the table keeps its own border. */
+[data-streamdown="table-wrapper"] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}

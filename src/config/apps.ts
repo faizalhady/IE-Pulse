@@ -29,15 +29,15 @@ import {
   UploadCloud,
   UserCheck,
   Workflow,
-  Wrench
+  Wrench,
+  MessageSquare,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { createElement } from 'react';
-// From buildFlags, NOT buildContext: buildContext imports APPS from this file,
-// and importing it back here is a cycle that white-screens the app.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'va-nva' | 'machine-mover' | 'tools';
+export type AppId = 'pulse' | 'ole' | 'fsms' | 'ebuild' | 'iebaseline' | 'cycle-time' | 'ppqt' | 'lbr' | 'ipk' | 'va-nva' | 'machine-mover' | 'tools' | 'ask';
 
 /** Bold "4Q" wordmark, drawn to the same 24×24 box as a lucide icon so it drops
  *  straight into `navItems` and inherits the sidebar's colour and sizing.
@@ -84,24 +84,6 @@ export interface AppConfig {
 
 export const APPS: AppConfig[] = [
   {
-    id: 'pulse',
-    label: 'IE Pulse',
-    description: 'Production monitoring dashboard',
-    icon: Activity,
-    color: 'text-blue-500',
-    iconBg: 'bg-blue-500/15',
-    basename: '/ietools/pulse',
-    category: 'Analytics',
-    navItems: [
-      { label: 'Overview', to: '/pulse/overview', icon: Home },
-      { label: 'Plants / Layouts', to: '/pulse/plants', icon: MapPin },
-      { label: 'Workcells', to: '/pulse/workcells', icon: Factory },
-      { label: 'Reports', to: '/pulse/reports', icon: LineChart },
-      { label: 'Report A', to: '/pulse/report-a', icon: Gauge },
-      { label: 'Documents', to: '/pulse/documents', icon: FileText },
-    ],
-  },
-  {
     id: 'ole',
     label: 'OLE',
     description: 'Overall line efficiency analytics',
@@ -137,9 +119,6 @@ export const APPS: AppConfig[] = [
     category: 'Analytics',
     navItems: [
       { label: 'Home', to: '/cycle-time/home', icon: Home },
-      // The chat lives in the floating drawer (ChatWidget) now — no nav item.
-      // The /cycle-time/ask route stays registered (direct URL still works)
-      // and the whole surface still vanishes when CHAT_ENABLED is off.
       // Every (workcell, MES step) couple in the plant. The workcell page's
       // Processes tab is this same table locked to one workcell — same
       // component, so the two can never disagree about a step's mapping.
@@ -185,6 +164,24 @@ export const APPS: AppConfig[] = [
     ],
   },
   {
+    id: 'va-nva',
+    label: 'VA / NVA',
+    description: 'Value-add vs non-value-add direct labour',
+    icon: Scale,
+    color: 'text-teal-500',
+    iconBg: 'bg-teal-500/15',
+    basename: '/ietools/va-nva',
+    category: 'Analytics',
+    // Workcell pages are reached by clicking a row on the sizing page, so the
+    // sidebar only carries always-valid static routes — same as IPK/LBR.
+    navItems: [
+      { label: 'HC Sizing', to: '/va-nva', icon: Users },
+      { label: 'Analytics', to: '/va-nva/analytics', icon: LayoutDashboard },
+      { label: 'Upload', to: '/va-nva/upload', icon: UploadCloud },
+      { label: '4Q Report', to: '/va-nva/4q', icon: FourQ },
+    ],
+  },
+  {
     id: 'lbr',
     label: 'LBR',
     description: 'Line Balance Rate — workload balance across stations',
@@ -219,21 +216,36 @@ export const APPS: AppConfig[] = [
     ],
   },
   {
-    id: 'va-nva',
-    label: 'VA / NVA',
-    description: 'Value-add vs non-value-add direct labour',
-    icon: Scale,
-    color: 'text-teal-500',
-    iconBg: 'bg-teal-500/15',
-    basename: '/ietools/va-nva',
-    category: 'Analytics',
-    // Workcell pages are reached by clicking a row on the sizing page, so the
-    // sidebar only carries always-valid static routes — same as IPK/LBR.
+    id: 'pulse',
+    label: 'IE Pulse',
+    description: 'Production monitoring dashboard',
+    icon: Activity,
+    color: 'text-blue-500',
+    iconBg: 'bg-blue-500/15',
+    basename: '/ietools/pulse',
+    category: 'Platform',
     navItems: [
-      { label: 'HC Sizing', to: '/va-nva', icon: Users },
-      { label: 'Analytics', to: '/va-nva/analytics', icon: LayoutDashboard },
-      { label: 'Upload', to: '/va-nva/upload', icon: UploadCloud },
-      { label: '4Q Report', to: '/va-nva/4q', icon: FourQ },
+      { label: 'Overview', to: '/pulse/overview', icon: Home },
+      { label: 'Plants / Layouts', to: '/pulse/plants', icon: MapPin },
+      { label: 'Workcells', to: '/pulse/workcells', icon: Factory },
+      { label: 'Reports', to: '/pulse/reports', icon: LineChart },
+      { label: 'Report A', to: '/pulse/report-a', icon: Gauge },
+      { label: 'Documents', to: '/pulse/documents', icon: FileText },
+    ],
+  },
+  {
+    // Ask — the chatbot over the Jabil Universe (plant data in plain English).
+    // Pilot: the backend's UNIVERSE_CHAT_USERS list decides who may use it.
+    id: 'ask',
+    label: 'Ask',
+    description: 'Ask the Jabil Universe — plant data in plain English',
+    icon: MessageSquare,
+    color: 'text-violet-500',
+    iconBg: 'bg-violet-500/15',
+    basename: '/ietools/ask',
+    category: 'Platform',
+    navItems: [
+      { label: 'New chat', to: '/ask', icon: MessageSquarePlus },
     ],
   },
   {
