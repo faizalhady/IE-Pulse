@@ -1,3 +1,4 @@
+import { Suspense, lazy, useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,8 +8,10 @@ import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
 import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
-import AskPage from "@/pages/ask/AskPage";
-import { AskDrawer } from "@/components/ask/AskDrawer";
+// Ask (the Jabil Universe chat) ships in the core build only. Lazy chunks: a build that
+// never enables it never loads the AI SDK, streamdown and shiki either.
+const AskPage = lazy(() => import("@/pages/ask/AskPage"));
+const AskDrawer = lazy(() => import("@/components/ask/AskDrawer").then((m) => ({ default: m.AskDrawer })));
 import CycleTime4QReport from "@/pages/cycletime/CycleTime4QReport";
 import DemandCompletionReport from "@/pages/cycletime/DemandCompletionReport";
 import IncompletionReport from "@/pages/cycletime/IncompletionReport";
@@ -84,7 +87,6 @@ import VaNvaWorkcellSizing from "@/pages/vanva/VaNvaWorkcellSizing";
 import WorkcellsTable from "@/pages/WorkcellsTable";
 import WorkcellView from "@/pages/WorkcellView";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import MapPage from "./pages/MapPage";
 import DowntimeManagement from "./pages/ole/DowntimeManagement";
@@ -138,7 +140,7 @@ function AppShell() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      {includesApp('ask') && <AskDrawer />}
+      {includesApp('ask') && <Suspense fallback={null}><AskDrawer /></Suspense>}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* <Header /> */}
         <main className="flex-1 overflow-y-auto">
@@ -179,8 +181,8 @@ function AppShell() {
             </>}
 
             {includesApp('ask') && <>
-              <Route path="/ask" element={<AskPage />} />
-              <Route path="/ask/t/:threadId" element={<AskPage />} />
+              <Route path="/ask" element={<Suspense fallback={null}><AskPage /></Suspense>} />
+              <Route path="/ask/t/:threadId" element={<Suspense fallback={null}><AskPage /></Suspense>} />
             </>}
             {includesApp('cycle-time') && <>
               {/* /cycle-time/home is the landing page. */}

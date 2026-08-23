@@ -84,24 +84,6 @@ export interface AppConfig {
 
 export const APPS: AppConfig[] = [
   {
-    id: 'pulse',
-    label: 'IE Pulse',
-    description: 'Production monitoring dashboard',
-    icon: Activity,
-    color: 'text-blue-500',
-    iconBg: 'bg-blue-500/15',
-    basename: '/ietools/pulse',
-    category: 'Analytics',
-    navItems: [
-      { label: 'Overview', to: '/pulse/overview', icon: Home },
-      { label: 'Plants / Layouts', to: '/pulse/plants', icon: MapPin },
-      { label: 'Workcells', to: '/pulse/workcells', icon: Factory },
-      { label: 'Reports', to: '/pulse/reports', icon: LineChart },
-      { label: 'Report A', to: '/pulse/report-a', icon: Gauge },
-      { label: 'Documents', to: '/pulse/documents', icon: FileText },
-    ],
-  },
-  {
     id: 'ole',
     label: 'OLE',
     description: 'Overall line efficiency analytics',
@@ -124,21 +106,6 @@ export const APPS: AppConfig[] = [
       // { label: 'WC Transfer Man-Hour', to: '/ole/transfer', icon: Users },
       // { label: 'API Test', to: '/ole-mart-api', icon: Database },
       { label: '4Q Generator', to: '/ole/4q', icon: FourQ },
-    ],
-  },
-  {
-    // Ask — the chatbot over the Jabil Universe (plant data in plain English).
-    // Pilot: the backend's UNIVERSE_CHAT_USERS list decides who may use it.
-    id: 'ask',
-    label: 'Ask',
-    description: 'Ask the Jabil Universe — plant data in plain English',
-    icon: MessageSquare,
-    color: 'text-violet-500',
-    iconBg: 'bg-violet-500/15',
-    basename: '/ietools/ask',
-    category: 'Analytics',
-    navItems: [
-      { label: 'New chat', to: '/ask', icon: MessageSquarePlus },
     ],
   },
   {
@@ -197,6 +164,24 @@ export const APPS: AppConfig[] = [
     ],
   },
   {
+    id: 'va-nva',
+    label: 'VA / NVA',
+    description: 'Value-add vs non-value-add direct labour',
+    icon: Scale,
+    color: 'text-teal-500',
+    iconBg: 'bg-teal-500/15',
+    basename: '/ietools/va-nva',
+    category: 'Analytics',
+    // Workcell pages are reached by clicking a row on the sizing page, so the
+    // sidebar only carries always-valid static routes — same as IPK/LBR.
+    navItems: [
+      { label: 'HC Sizing', to: '/va-nva', icon: Users },
+      { label: 'Analytics', to: '/va-nva/analytics', icon: LayoutDashboard },
+      { label: 'Upload', to: '/va-nva/upload', icon: UploadCloud },
+      { label: '4Q Report', to: '/va-nva/4q', icon: FourQ },
+    ],
+  },
+  {
     id: 'lbr',
     label: 'LBR',
     description: 'Line Balance Rate — workload balance across stations',
@@ -231,21 +216,36 @@ export const APPS: AppConfig[] = [
     ],
   },
   {
-    id: 'va-nva',
-    label: 'VA / NVA',
-    description: 'Value-add vs non-value-add direct labour',
-    icon: Scale,
-    color: 'text-teal-500',
-    iconBg: 'bg-teal-500/15',
-    basename: '/ietools/va-nva',
-    category: 'Analytics',
-    // Workcell pages are reached by clicking a row on the sizing page, so the
-    // sidebar only carries always-valid static routes — same as IPK/LBR.
+    id: 'pulse',
+    label: 'IE Pulse',
+    description: 'Production monitoring dashboard',
+    icon: Activity,
+    color: 'text-blue-500',
+    iconBg: 'bg-blue-500/15',
+    basename: '/ietools/pulse',
+    category: 'Platform',
     navItems: [
-      { label: 'HC Sizing', to: '/va-nva', icon: Users },
-      { label: 'Analytics', to: '/va-nva/analytics', icon: LayoutDashboard },
-      { label: 'Upload', to: '/va-nva/upload', icon: UploadCloud },
-      { label: '4Q Report', to: '/va-nva/4q', icon: FourQ },
+      { label: 'Overview', to: '/pulse/overview', icon: Home },
+      { label: 'Plants / Layouts', to: '/pulse/plants', icon: MapPin },
+      { label: 'Workcells', to: '/pulse/workcells', icon: Factory },
+      { label: 'Reports', to: '/pulse/reports', icon: LineChart },
+      { label: 'Report A', to: '/pulse/report-a', icon: Gauge },
+      { label: 'Documents', to: '/pulse/documents', icon: FileText },
+    ],
+  },
+  {
+    // Ask — the chatbot over the Jabil Universe (plant data in plain English).
+    // Pilot: the backend's UNIVERSE_CHAT_USERS list decides who may use it.
+    id: 'ask',
+    label: 'Ask',
+    description: 'Ask the Jabil Universe — plant data in plain English',
+    icon: MessageSquare,
+    color: 'text-violet-500',
+    iconBg: 'bg-violet-500/15',
+    basename: '/ietools/ask',
+    category: 'Platform',
+    navItems: [
+      { label: 'New chat', to: '/ask', icon: MessageSquarePlus },
     ],
   },
   {
