@@ -37,6 +37,7 @@ export default function AskPage() {
   });
 
   const forbidden = threads.error && /403|pilot/i.test(String(threads.error));
+  const signedOut = threads.error && /401|sign-in/i.test(String(threads.error));
 
   // The Chat remounts only when the user opens another chat or starts a new one — never
   // when a first question creates its thread (the URL updates, the stream keeps flowing).
@@ -60,6 +61,7 @@ export default function AskPage() {
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {threads.isLoading && <p className="px-2 py-2 text-xs text-muted-foreground">Loading…</p>}
           {forbidden && <p className="px-2 py-2 text-xs text-muted-foreground">The chat is in pilot — ask Faiz for access.</p>}
+          {signedOut && <p className="px-2 py-2 text-xs text-muted-foreground">Sign-in required — connect to the Jabil network (VPN), then refresh.</p>}
           {(threads.data ?? []).map((t) => (
             <ThreadRow
               key={t.id}

@@ -57,6 +57,16 @@ const TOOL_TITLES: Record<string, string> = {
   'tool-universe_define': 'Looked up a definition',
 };
 
+/** The backend answers errors as {"detail": "..."}; a person should read a sentence. */
+function humanError(e: Error): string {
+  const raw = e.message || '';
+  let detail = raw;
+  try { detail = (JSON.parse(raw) as { detail?: string }).detail ?? raw; } catch { /* plain text */ }
+  if (/sign-in required|sign-in expired/i.test(detail)) return 'Sign-in required — connect to the Jabil network (VPN), then refresh.';
+  if (/pilot/i.test(detail)) return detail;
+  return detail || 'The request failed.';
+}
+
 /** Stored parts are already UIMessage parts; only the typing differs. */
 function toUIMessages(thread: Thread | null): UIMessage[] {
   return (thread?.messages ?? []).map((m) => ({ id: m.id, role: m.role, parts: m.parts as unknown as UIMessage['parts'] }));
@@ -147,7 +157,7 @@ export function Chat({ thread, onThreadCreated, compact, className }: ChatProps)
           )}
           {error && (
             <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {error.message || 'The request failed.'}
+              {humanError(error)}
             </div>
           )}
         </ConversationContent>

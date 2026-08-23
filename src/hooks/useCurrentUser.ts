@@ -32,10 +32,32 @@ interface ApiUserInfo {
 
 let cached: CurrentUser | null = null;
 let inflight: Promise<CurrentUser> | null = null;
+/** When AD_GET last failed. A failure is remembered for a minute so that 40 API calls
+ *  do not fire 40 login attempts (off the VPN the name does not even resolve). */
+let failedAt = 0;
+const FAIL_MEMORY_MS = 60_000;
+
+/** DEV builds only: off the Jabil network the backend mints the token itself
+ *  (api/routers/dev_auth.py, present only when PULSE_DEV_NTID is set there).
+ *  Any proxied API prefix reaches it; the ask proxy maps /ietools/ask/api → /api. */
+const DEV_TOKEN_URL = '/ietools/ask/api/dev/token';
+
+async function devUser(): Promise<CurrentUser | null> {
+  if (!import.meta.env.DEV) return null;
+  try {
+    const res = await fetch(DEV_TOKEN_URL);
+    if (!res.ok) return null;
+    const d = (await res.json()) as { ntid: string; token: string; fullName?: string };
+    return { ntid: d.ntid, token: d.token, fullName: d.fullName ?? `Dev (${d.ntid})`, email: null, department: null, jobTitle: null, location: null };
+  } catch {
+    return null;
+  }
+}
 
 async function fetchUser(): Promise<CurrentUser> {
   if (cached) return cached;
   if (inflight) return inflight;
+  if (Date.now() - failedAt < FAIL_MEMORY_MS) throw new Error('User info unavailable (recent failure)');
   inflight = fetch(USER_INFO_URL, { credentials: 'include' })
     .then((res) => {
       if (!res.ok) throw new Error(`User info ${res.status}`);
@@ -54,8 +76,22 @@ async function fetchUser(): Promise<CurrentUser> {
       cached = user;
       return user;
     })
+    .catch(async (e: unknown) => {
+      const dev = await devUser();
+      if (dev) {
+        cached = dev;
+        return dev;
+      }
+      failedAt = Date.now();
+      throw e;
+    })
     .finally(() => { inflight = null; });
   return inflight;
+}
+
+/** The identity the app currently holds, if any — no network. */
+export function peekUser(): CurrentUser | null {
+  return cached;
 }
 
 /** The signed token, or null if identity could not be established. Awaits the
@@ -66,12 +102,6 @@ async function fetchUser(): Promise<CurrentUser> {
  *  token lives 60 minutes and tabs live much longer, so this is routine, not
  *  an error path. NTLM re-authenticates silently, so the user sees nothing. */
 export async function getAuthToken(force = false): Promise<string | null> {
-  // Dev only (stripped from prod builds): a token minted with the backend's own
-  // secret, set by hand in localStorage, when AD_GET is not reachable from localhost.
-  if (import.meta.env.DEV) {
-    const dev = localStorage.getItem('pulse_dev_token');
-    if (dev) return dev;
-  }
   if (force) cached = null;
   try {
     return (await fetchUser()).token;
@@ -97,7 +127,7 @@ export function installAuthFetch(): void {
   // both. AD_GET's own paths are excluded - they use Windows credentials, and
   // calling back into fetchUser() would recurse.
   const isBackendCall = (url: string) =>
-    url.includes('/api/') && !url.includes('/userinfo/') && !url.includes('/hc/');
+    url.includes('/api/') && !url.includes('/userinfo/') && !url.includes('/hc/') && !url.includes('/api/dev/');   // the dev token call must not wait for itself
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input
