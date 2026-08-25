@@ -1242,9 +1242,13 @@ export const cycleTimeApi = {
     status: () => get<CycleTimeRefreshStatus>('/refresh/status'),
   },
   completion: {
-    /** Per-model completion summary (all top-runners), optionally filtered. */
-    list: (customer?: string, status?: string) =>
-      get<CompletionSummary>('/completion', { customer, status }),
+    /** Per-model completion summary (all top-runners), optionally filtered.
+     *
+     *  `fields` trims the row to the columns the caller actually reads. The full
+     *  payload is 16MB; PlantRunnerDashboard builds a lookup out of five columns
+     *  and was downloading all of it. customer/assembly are always returned. */
+    list: (customer?: string, status?: string, fields?: string) =>
+      get<CompletionSummary>('/completion', { customer, status, fields }),
     /** Demand-ranked completion: what we are building and about to build. */
     demand: (params?: { plants?: string; workcells?: string; status?: string;
                         limit?: number; scope?: 'planned' | 'active' | 'all' }) =>

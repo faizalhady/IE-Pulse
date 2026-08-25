@@ -182,7 +182,9 @@ const ACCESSORS: Record<SortKey, (m: Row) => string | number | null> = {
   lbr:      m => m.lbr ?? null,
   ipk:      m => m.ipk_trolleys ?? null,
   next:     m => m.next_build ?? null,
-  last:     m => m.last_build ?? null,
+  // Sort on the SAME value the cell renders, or the column sorts by a date the
+  // reader cannot see. last_run (what MES scanned) wins over last_build (a plan).
+  last:     m => m.last_run ?? m.last_build ?? null,
 };
 
 /** The workcenter picker from CycleTimeFilters, made to serve two lists.
@@ -754,7 +756,16 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
                     : m.in_progress ? <span className="text-emerald-600 dark:text-emerald-400">Building</span>
                     : '—'}
                 </span>
-                <span className="tabular-nums text-muted-foreground">{fmtDate(m.last_build)}</span>
+                {/* `last_build` comes from the DEMAND frame, so a model with no
+                    forward demand had a dash here even though #21 knows exactly
+                    when it last ran. `last_run` is the scan itself — actual
+                    production, not a plan — so it wins, and last_build is only
+                    the fallback for something planned but never yet built. */}
+                <span className="tabular-nums text-muted-foreground"
+                      title={m.last_run ? `Last seen in MES production on ${m.last_run}`
+                                        : 'From the demand plan — MES has no production record'}>
+                  {fmtDate(m.last_run ?? m.last_build)}
+                </span>
 
                 {locked && (
                   <span className="text-center">

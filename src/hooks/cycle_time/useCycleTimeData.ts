@@ -114,8 +114,10 @@ export function useCycleTimePlantRunners(top = 50, plants = 3, mode: 'historical
 /** Completion-status summary for all top-runners (one fetch → lookup by customer+assembly). */
 export function useCycleTimeCompletion() {
   return useQuery({
-    queryKey: [...ctKeys.all, 'completion'] as const,
-    queryFn:  () => cycleTimeApi.completion.list(),
+    // Only the columns the lookup reads. 16MB -> 4.9MB, 941ms -> 388ms warm.
+    queryKey: [...ctKeys.all, 'completion', 'slim'] as const,
+    queryFn:  () => cycleTimeApi.completion.list(undefined, undefined,
+                                                 'status,lbr,ipk_trolleys'),
     staleTime: 30 * 60_000,
   });
 }
