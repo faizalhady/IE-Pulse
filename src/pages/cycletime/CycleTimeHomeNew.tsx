@@ -225,7 +225,6 @@ function CoverageTab() {
    *  headline saying something else. */
   const tv = (name: string) => t[colOf(name)] ?? 0;
   const scopeTotal = t[S.total] ?? 0;
-  const outOfScope = (t.models ?? 0) - scopeTotal;
   // NO BUILD FOUND = not_built + everything else the comparison could not
   // decide. Derived by subtraction, so the three tiles ALWAYS reconcile to the
   // scope's has_ct — a hand-summed version drifts the day a new verdict is added.
@@ -250,10 +249,12 @@ function CoverageTab() {
           Scoping to what actually ran turns the headline from "84% unchecked"
           into "36% of what we build has never been timed" — same data, a
           question with an owner. */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { k: 'total', label: S.label === 'All models' ? 'Models' : S.label, tone: '',
-            v: scopeTotal,
+          // The tile names the scope it is counting. A bare "Models" made the
+          // headline read the same in all three scopes while the number moved.
+          { k: 'total', label: scope === 'all' ? 'All Models' : `${S.label} Models`,
+            tone: '', v: scopeTotal,
             sub: scope === 'active' ? `active since ${sinceLabel}`
                : scope === 'planned' ? 'planner 13wk + eDash 4wk'
                : 'every model that exists',
@@ -264,15 +265,6 @@ function CoverageTab() {
             hint: 'IEDB carries the model but nobody has timed it — an IE task' },
           { k: 'not_iedb', label: 'Not in IEDB', tone: TONE.not_in_iedb, pct: true,
             hint: 'IEDB has never heard of it. We build it and it does not exist in the system — it has to be created before it can be timed' },
-          // The remainder always reconciles to the whole universe, whichever
-          // scope is picked, so a scoped headline can never read as the total.
-          { k: '_rest', label: scope === 'all' ? 'All models' : 'Out of scope',
-            tone: 'text-muted-foreground',
-            v: scope === 'all' ? (t.models ?? 0) : outOfScope,
-            sub: scope === 'all' ? 'the whole universe' : 'still stored, not shown',
-            hint: scope === 'all'
-              ? 'Every model across IEDB, MES and demand'
-              : `Not in the ${S.label} scope. Counted, kept, queryable — just not the priority` },
         ].map(c => {
           const v = c.v ?? tv(c.k);
           return (
