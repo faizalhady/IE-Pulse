@@ -219,12 +219,17 @@ function CoverageTab() {
   const since = data.active_since ?? '2024-09-01';
   const sinceLabel = new Date(since + 'T00:00:00')
     .toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-  const dormant = (t.models ?? 0) - (t.active ?? 0);
+  /** A scoped total off the summary, e.g. tv('has_ct') -> totals.active_has_ct.
+   *  The cards used to be hardwired to active_* while the table below them
+   *  followed the toggle, so switching scope moved the table and left the
+   *  headline saying something else. */
+  const tv = (name: string) => t[colOf(name)] ?? 0;
+  const scopeTotal = t[S.total] ?? 0;
+  const outOfScope = (t.models ?? 0) - scopeTotal;
   // Everything the check reached that is not complete/partial/no-build. Derived
-  // by subtraction so the four tiles ALWAYS reconcile to `active_has_ct` — a
+  // by subtraction so the four tiles ALWAYS reconcile to the scope's has_ct — a
   // hand-summed version drifts the day a new verdict is added.
-  const other = (t.active_has_ct ?? 0) - (t.active_complete ?? 0)
-              - (t.active_incomplete ?? 0) - (t.active_not_built ?? 0);
+  const other = tv('has_ct') - tv('complete') - tv('incomplete') - tv('not_built');
   const head = (label: string, k: SortKey, cls = 'justify-end') => (
     <SortHeader label={label} active={sort?.key === k} dir={sort?.dir}
                 onClick={() => toggle(k)} className={cls} />
@@ -241,28 +246,37 @@ function CoverageTab() {
           question with an owner. */}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {[
-          { k: 'active', label: 'All models', tone: '',
-            sub: `active since ${sinceLabel}`,
-            hint: `MES saw it run on or after ${since}, or it is on the planner / eDash forward list` },
-          { k: 'active_has_ct', label: 'With cycle time', tone: TONE.complete, pct: true,
+          { k: 'total', label: S.label === 'All models' ? 'Models' : S.label, tone: '',
+            v: scopeTotal,
+            sub: scope === 'active' ? `active since ${sinceLabel}`
+               : scope === 'planned' ? 'planner 13wk + eDash 4wk'
+               : 'every model that exists',
+            hint: S.hint },
+          { k: 'has_ct', label: 'With cycle time', tone: TONE.complete, pct: true,
             hint: 'IEDB has priced it, so the comparison can decide something' },
-          { k: 'active_no_ct', label: 'No cycle time', tone: TONE.no_cycle_time, pct: true,
+          { k: 'no_ct', label: 'No cycle time', tone: TONE.no_cycle_time, pct: true,
             hint: 'IEDB carries the model but nobody has timed it — an IE task' },
-          { k: 'active_not_iedb', label: 'Not in IEDB', tone: TONE.not_in_iedb, pct: true,
+          { k: 'not_iedb', label: 'Not in IEDB', tone: TONE.not_in_iedb, pct: true,
             hint: 'IEDB has never heard of it. We build it and it does not exist in the system — it has to be created before it can be timed' },
-          { k: '_dormant', label: 'Dormant', tone: 'text-muted-foreground', v: dormant,
-            sub: 'still stored, not shown',
-            hint: `No MES production since ${since} and not on the forward list. Counted, kept, queryable — just not the priority` },
+          // The remainder always reconciles to the whole universe, whichever
+          // scope is picked, so a scoped headline can never read as the total.
+          { k: '_rest', label: scope === 'all' ? 'All models' : 'Out of scope',
+            tone: 'text-muted-foreground',
+            v: scope === 'all' ? (t.models ?? 0) : outOfScope,
+            sub: scope === 'all' ? 'the whole universe' : 'still stored, not shown',
+            hint: scope === 'all'
+              ? 'Every model across IEDB, MES and demand'
+              : `Not in the ${S.label} scope. Counted, kept, queryable — just not the priority` },
         ].map(c => {
-          const v = c.v ?? t[c.k];
+          const v = c.v ?? tv(c.k);
           return (
             <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
               <div className={cn('text-xl font-semibold tabular-nums', c.tone)}>{n(v)}</div>
               {c.sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{c.sub}</div>}
-              {c.pct && (t.active ?? 0) > 0 && (
+              {c.pct && scopeTotal > 0 && (
                 <div className="mt-0.5 text-[10px] text-muted-foreground">
-                  {Math.round((v / t.active) * 100)}% of active
+                  {Math.round((v / scopeTotal) * 100)}% of {S.label.toLowerCase()}
                 </div>
               )}
             </div>
@@ -281,20 +295,23 @@ function CoverageTab() {
           against a pool of every model IEDB ever priced. */}
       <div className="text-[11px] text-muted-foreground">
         Below: the{' '}
-        <span className="font-medium text-foreground">{n(t.active_has_ct)}</span>{' '}
-        active models IEDB has a cycle time for, compared step by step against
-        what MES actually ran — every day for 3 years across 39 workcells. The
-        other <span className="font-medium text-foreground">{n(t.active_no_ct)}</span>{' '}
-        active models have no cycle time to check.
+        <span className="font-medium text-foreground">{n(tv('has_ct'))}</span>{' '}
+        {S.label.toLowerCase()} models IEDB has a cycle time for, compared step by
+        step against what MES actually ran — every day for 3 years across 39
+        workcells. The other{' '}
+        <span className="font-medium text-foreground">
+          {n(tv('no_ct') + tv('not_iedb'))}
+        </span>{' '}
+        have no cycle time to check.
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { k: 'complete', label: 'Complete', tone: TONE.complete, v: t.active_complete,
+          { k: 'complete', label: 'Complete', tone: TONE.complete, v: tv('complete'),
             hint: 'Every step the floor ran is named in IEDB and has a cycle time' },
-          { k: 'partial', label: 'Partial', tone: TONE.incomplete, v: t.active_incomplete,
+          { k: 'partial', label: 'Partial', tone: TONE.incomplete, v: tv('incomplete'),
             hint: 'Built recently, but a step is missing a cycle time or our naming '
                 + 'bridge could not identify it. This is the fix list' },
-          { k: 'nobuild', label: 'No build found', tone: 'text-muted-foreground', v: t.active_not_built,
+          { k: 'nobuild', label: 'No build found', tone: 'text-muted-foreground', v: tv('not_built'),
             hint: 'On the forward list but MES has no production for it in 3 years — '
                 + 'planned, not yet built' },
           { k: 'other', label: 'Other', tone: 'text-muted-foreground', v: other,
@@ -304,9 +321,9 @@ function CoverageTab() {
           <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
             <div className={cn('text-xl font-semibold tabular-nums', c.tone)}>{n(c.v)}</div>
-            {(t.active_has_ct ?? 0) > 0 && (
+            {tv('has_ct') > 0 && (
               <div className="mt-0.5 text-[10px] text-muted-foreground">
-                {Math.round((c.v / t.active_has_ct) * 100)}% of timed
+                {Math.round((c.v / tv('has_ct')) * 100)}% of timed
               </div>
             )}
           </div>
