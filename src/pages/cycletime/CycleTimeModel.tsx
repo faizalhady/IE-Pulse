@@ -25,6 +25,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Search } from 'lucide-react';
 
 import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
+import { ExportButton } from '@/components/shared/ExportButton';
+import type { ExportColumn } from '@/lib/cycle_time/exportTable';
 import { cn } from '@/lib/utils';
 import { cycleTimeApi } from '@/lib/cycle_time/cycleTimeApi';
 import {
@@ -199,6 +201,18 @@ export default function CycleTimeModel() {
  *   Collapsing them into one grey message is how "the BOM tab is broken" gets
  *   reported for a model whose BOM genuinely does not exist.
  */
+/** BOM lines as MES holds them. Kept loose on the value types — this table is
+ *  rendered straight from the API rows, so the export mirrors it rather than
+ *  re-deriving anything. */
+const BOM_COLS: ExportColumn<Record<string, unknown>>[] = [
+  { key: 'material',    header: 'Material',     width: 22, get: r => r.material ?? '' },
+  { key: 'description', header: 'Description',  width: 46, get: r => r.description ?? '' },
+  { key: 'qty',         header: 'Qty',          width: 10, numFmt: '#,##0.###', get: r => r.qty ?? null },
+  { key: 'uom',         header: 'UOM',          width: 9,  get: r => r.uom ?? '' },
+  { key: 'ref_des',     header: 'Ref des',      width: 30, get: r => r.ref_des ?? '' },
+  { key: 'item_no',     header: 'Item no',      width: 11, get: r => r.item_no ?? null },
+];
+
 function BomTab({ q }: { q: ReturnType<typeof useCycleTimeBom> }) {
   const { data, isLoading, error } = q;
   const [find, setFind] = useState('');
@@ -283,6 +297,21 @@ function BomTab({ q }: { q: ReturnType<typeof useCycleTimeBom> }) {
             className="w-56 rounded-md border border-border bg-background py-1 pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground"
           />
         </label>
+        {/* `rows` is the filtered list the table draws next. */}
+        <ExportButton
+          rows={rows}
+          columns={BOM_COLS}
+          filename={`bom_${data.assembly ?? 'model'}`}
+          sheetName="BOM"
+          title={`BOM — ${data.assembly ?? ''}${data.revision ? ` rev ${data.revision}` : ''}`}
+          subtitle={[
+            data.revision_matched === false && data.requested_revision
+              ? `MES has no rev ${data.requested_revision} — showing ${data.revision}` : '',
+            find.trim() ? `Filtered by "${find.trim()}"` : '',
+          ].filter(Boolean).join(' · ')}
+          scopeNote={rows.length !== (data.materials?.length ?? 0)
+            ? `filtered from ${(data.materials?.length ?? 0).toLocaleString()}` : undefined}
+        />
       </div>
 
       <table className="w-full text-xs">
@@ -324,6 +353,27 @@ function BomTab({ q }: { q: ReturnType<typeof useCycleTimeBom> }) {
 }
 
 /** The IEDB cycle times themselves, per step, for every routing this model has. */
+/** The IEDB route as stored: one row per step, in route order. mach/imt/hand
+ *  go out as raw seconds so the reader can do their own arithmetic in Excel —
+ *  the same reason the original pivoted export does it. */
+const STEP_COLS: ExportColumn<Record<string, unknown>>[] = [
+  { key: 'revision',       header: 'Rev',        width: 10, get: r => r.revision ?? '' },
+  { key: 'sub_workcenter', header: 'Line',       width: 26, get: r => r.sub_workcenter ?? '' },
+  { key: 'step_order',     header: 'Order',      width: 9,  numFmt: '#,##0', get: r => r.step_order ?? null },
+  { key: 'alias',          header: 'Alias',      width: 18, get: r => r.alias ?? '' },
+  { key: 'process',        header: 'Process',    width: 30, get: r => r.process ?? '' },
+  { key: 'mach',           header: 'Mach (s)',   width: 11, numFmt: '#,##0.00', get: r => r.mach ?? null },
+  { key: 'imt',            header: 'IMT (s)',    width: 11, numFmt: '#,##0.00', get: r => r.imt ?? null },
+  { key: 'hand',           header: 'Hand (s)',   width: 11, numFmt: '#,##0.00', get: r => r.hand ?? null },
+  { key: 'lct',            header: 'LCT (s)',    width: 11, numFmt: '#,##0.00', get: r => r.lct ?? null },
+  { key: 'hc',             header: 'HC',         width: 8,  numFmt: '#,##0.##', get: r => r.hc ?? null },
+  { key: 'cap',            header: 'Cap',        width: 8,  numFmt: '#,##0', get: r => r.cap ?? null },
+  { key: 'sampling',       header: 'S %',        width: 8,  numFmt: '#,##0.#', get: r => r.sampling ?? null },
+  { key: 'fpy',            header: 'FPY',        width: 9,  numFmt: '#,##0.##', get: r => r.fpy ?? null },
+  { key: 'updated_on',     header: 'Updated',    width: 13,
+    get: r => (r.updated_on ? String(r.updated_on).slice(0, 10) : '') },
+];
+
 function CycleTimeTab({ q, revision }: {
   q: ReturnType<typeof useCycleTimeAssemblyBuilds>; revision: string | null;
 }) {
@@ -363,6 +413,22 @@ function CycleTimeTab({ q, revision }: {
 
   return (
     <div className="space-y-3 overflow-x-auto p-4">
+      <div className="flex items-center">
+        {/* `sorted` is the route in IEDB's own step order — the same sequence
+            the table shows, because a route read out of sequence is unusable. */}
+        <ExportButton
+          className="ml-auto"
+          rows={sorted as unknown as Record<string, unknown>[]}
+          columns={STEP_COLS}
+          filename="cycle_time_steps"
+          sheetName="Cycle time"
+          title="Cycle Time — Route steps"
+          subtitle={revision ? `Revision ${revision}` : 'All revisions'}
+          scopeNote={rows.length !== all.length
+            ? `filtered from ${all.length.toLocaleString()}` : undefined}
+        />
+      </div>
+
       {/* Legend: which colour is which line, and how many steps each holds. */}
       {shadeOf.size > 1 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">

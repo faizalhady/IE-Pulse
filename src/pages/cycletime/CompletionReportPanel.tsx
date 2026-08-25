@@ -25,6 +25,8 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { ExportButton } from '@/components/shared/ExportButton';
+import type { ExportColumn } from '@/lib/cycle_time/exportTable';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { cycleTimeApi, type CompletionReportRow } from '@/lib/cycle_time/cycleTimeApi';
@@ -41,6 +43,26 @@ const STATUS: Record<string, string> = {
 
 const n = (v: number | null | undefined) =>
   v === null || v === undefined ? '' : Number(v).toLocaleString();
+
+/** Mirrors the report table. The three gap columns stay separate on purpose:
+ *  missing_ct and not_in_route are IEDB's gaps, unmapped is OURS, and folding
+ *  them together blames IEDB for our own naming holes. */
+const REPORT_COLS: ExportColumn<CompletionReportRow>[] = [
+  { key: 'assembly',         header: 'Model',           width: 24 },
+  { key: 'status',           header: 'Status',          width: 15 },
+  { key: 'why',              header: 'Why',             width: 44 },
+  { key: 'planner_units',    header: 'Planner units',   width: 14, numFmt: '#,##0' },
+  { key: 'edash_units',      header: 'eDash units',     width: 13, numFmt: '#,##0' },
+  { key: 'mes_steps',        header: 'MES steps',       width: 12, numFmt: '#,##0' },
+  { key: 'matched',          header: 'Matched',         width: 11, numFmt: '#,##0' },
+  { key: 'missing_ct',       header: 'Missing CT (IEDB)',   width: 17, numFmt: '#,##0' },
+  { key: 'not_in_route',     header: 'Not in route (IEDB)', width: 18, numFmt: '#,##0' },
+  { key: 'unmapped',         header: 'Unmapped (ours)', width: 15, numFmt: '#,##0' },
+  { key: 'gap',              header: 'Gap',             width: 10, numFmt: '#,##0' },
+  { key: 'iedb_route_steps', header: 'IEDB route steps', width: 16, numFmt: '#,##0' },
+  { key: 'upcoming_build',   header: 'Upcoming build',  width: 15 },
+  { key: 'last_build',       header: 'Last build',      width: 13 },
+];
 
 export function CompletionReportPanel({ workcell }: { workcell: string }) {
   const [filter, setFilter] = useState('');
@@ -130,8 +152,25 @@ export function CompletionReportPanel({ workcell }: { workcell: string }) {
         ))}
       </div>
 
-      <Input placeholder="find a model…" value={filter}
-             onChange={(e) => setFilter(e.target.value)} className="max-w-xs" />
+      <div className="flex items-center gap-2">
+        <Input placeholder="find a model…" value={filter}
+               onChange={(e) => setFilter(e.target.value)} className="max-w-xs" />
+        {/* `rows` is post status-pick and post search — the file matches the table. */}
+        <ExportButton
+          className="ml-auto"
+          rows={rows}
+          columns={REPORT_COLS}
+          filename="cycle_time_incompletion"
+          sheetName="Incompletion"
+          title="Cycle Time — Incompletion Report"
+          subtitle={[
+            status ? `Status: ${status}` : 'All statuses',
+            filter.trim() ? `Search: "${filter.trim()}"` : '',
+          ].filter(Boolean).join(' · ')}
+          scopeNote={rows.length !== (data?.rows?.length ?? 0)
+            ? `filtered from ${(data?.rows?.length ?? 0).toLocaleString()}` : undefined}
+        />
+      </div>
 
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full text-sm">

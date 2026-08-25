@@ -67,11 +67,16 @@ export function ExportButton<T>({
   return (
     <>
       <Button
-        variant="outline" size="sm" disabled={empty}
+        size="sm" disabled={empty}
         onClick={() => { setErr(null); setOpen(true); }}
         title={empty ? 'Nothing to export in the current view'
                      : `Export these ${rows.length.toLocaleString()} rows to Excel`}
-        className={cn('h-8 gap-1.5 px-2.5 text-xs', className)}
+        className={cn(
+          'h-8 gap-1.5 px-2.5 text-xs',
+          // Same blue as the confirm action in the dialog, so the button and
+          // the thing it opens read as one gesture.
+          'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-600/40',
+          className)}
       >
         Export
         <Download className="h-3.5 w-3.5" />
