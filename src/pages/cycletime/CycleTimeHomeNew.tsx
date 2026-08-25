@@ -107,24 +107,53 @@ type SortKey = keyof UniverseWorkcell;
 
 /** Mirrors the on-screen columns, in the same order. Kept beside the table so
  *  adding a column to one and forgetting the other is visible in one diff. */
-const COVERAGE_COLS: ExportColumn<UniverseWorkcell>[] = [
-  { key: 'workcell',           header: 'Workcell',        width: 26 },
-  { key: 'plant',              header: 'Plant',           width: 14 },
-  { key: 'active',             header: 'Active',          width: 10, numFmt: '#,##0' },
-  { key: 'active_has_ct',      header: 'With cycle time', width: 15, numFmt: '#,##0' },
-  { key: 'active_no_ct',       header: 'No cycle time',   width: 14, numFmt: '#,##0' },
-  { key: 'active_not_iedb',    header: 'Not in IEDB',     width: 13, numFmt: '#,##0' },
-  { key: 'active_complete',    header: 'Complete',        width: 11, numFmt: '#,##0' },
-  { key: 'active_incomplete',  header: 'Partial',         width: 11, numFmt: '#,##0' },
-  { key: 'active_not_built',   header: 'No build found',  width: 14, numFmt: '#,##0' },
-  { key: 'pct_complete',       header: '% complete of timed', width: 18, numFmt: '0.0',
-    get: w => (w.active_has_ct ? ((w.active_complete ?? 0) / w.active_has_ct) * 100 : null) },
-  { key: 'models',             header: 'All models (incl. dormant)', width: 22, numFmt: '#,##0' },
-];
+/** Built per scope, because the sheet has to say what the screen said. A fixed
+ *  active_* spec would export Active numbers under a header saying Planned. */
+function coverageColumns(pre: string, totalKey: string, label: string):
+    ExportColumn<UniverseWorkcell>[] {
+  // The un-prefixed ("all") set spells two buckets differently.
+  const k = (name: string) => (pre ? `${pre}${name}`
+    : name === 'not_iedb' ? 'not_in_iedb'
+    : name === 'no_ct' ? 'no_cycle_time' : name);
+  const num = (w: UniverseWorkcell, name: string) =>
+    (w as unknown as Record<string, number | null | undefined>)[k(name)] ?? null;
+  return [
+    { key: 'workcell', header: 'Workcell', width: 26 },
+    { key: 'plant',    header: 'Plant',    width: 14 },
+    { key: totalKey,   header: label,      width: 12, numFmt: '#,##0',
+      get: w => (w as unknown as Record<string, number | null>)[totalKey] ?? null },
+    { key: 'has_ct_s',     header: 'With cycle time', width: 15, numFmt: '#,##0', get: w => num(w, 'has_ct') },
+    { key: 'no_ct_s',      header: 'No cycle time',   width: 14, numFmt: '#,##0', get: w => num(w, 'no_ct') },
+    { key: 'not_iedb_s',   header: 'Not in IEDB',     width: 13, numFmt: '#,##0', get: w => num(w, 'not_iedb') },
+    { key: 'complete_s',   header: 'Complete',        width: 11, numFmt: '#,##0', get: w => num(w, 'complete') },
+    { key: 'incomplete_s', header: 'Partial',         width: 11, numFmt: '#,##0', get: w => num(w, 'incomplete') },
+    { key: 'not_built_s',  header: 'No build found',  width: 14, numFmt: '#,##0', get: w => num(w, 'not_built') },
+    { key: 'pct_s', header: '% complete of timed', width: 18, numFmt: '0.0',
+      get: w => { const h = Number(num(w, 'has_ct') ?? 0);
+                  return h ? (Number(num(w, 'complete') ?? 0) / h) * 100 : null; } },
+    { key: 'models', header: 'All models (incl. dormant)', width: 22, numFmt: '#,##0' },
+  ];
+}
+
+/** The three scopes, and the column prefix each reads. `all` has no prefix -
+ *  those are the original whole-pool columns, which is why it maps to ''. */
+const SCOPES = [
+  { key: 'planned', label: 'Planned', pre: 'planned_', total: 'planned',
+    hint: 'On the planner 13-week list or the eDash 4-week projection' },
+  { key: 'active',  label: 'Active',  pre: 'active_',  total: 'active',
+    hint: 'Ran in MES since Sep 2024, or planned. What the plant is actually building' },
+  { key: 'all',     label: 'All models', pre: '',      total: 'models',
+    hint: 'Every model that exists, including ones nobody has built in years' },
+] as const;
+type ScopeKey = typeof SCOPES[number]['key'];
 
 function CoverageTab() {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
+  // Active by default — the same default the workcell page and the cards use.
+  // Three screens disagreeing about what "a model" means is what this whole
+  // rebuild was fixing.
+  const [scope, setScope] = useState<ScopeKey>('active');
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['ct-universe-summary'],
     queryFn: () => cycleTimeApi.universe.summary(),
@@ -137,18 +166,41 @@ function CoverageTab() {
     return s ? r.filter(w => w.workcell.toLowerCase().includes(s)) : r;
   }, [data, q]);
 
+  const S = SCOPES.find(x => x.key === scope)!;
+  const coverageCols = useMemo(
+    () => coverageColumns(S.pre, S.total, S.label), [S.pre, S.total, S.label]);
+  /** Column key for the current scope, e.g. 'has_ct' -> 'active_has_ct'. */
+  const f = (name: string) => (`${S.pre}${name}`) as SortKey;
+  /** Value of a scoped column for one workcell row. */
+  const v = (w: UniverseWorkcell, name: string) =>
+    (w as unknown as Record<string, number | null | undefined>)[f(name)] ?? 0;
+  const totalOf = (w: UniverseWorkcell) =>
+    (w as unknown as Record<string, number | null | undefined>)[S.total] ?? 0;
+
   const ACCESSORS = useMemo(() => {
-    const keys: SortKey[] = ['workcell', 'models', 'active', 'active_has_ct',
-      'active_no_ct', 'active_not_iedb', 'active_complete', 'active_incomplete', 'active_not_built',
-      'in_iedb', 'built_24mo', 'in_demand', 'graded', 'ungraded', 'pct_graded',
-      'complete', 'incomplete', 'no_cycle_time', 'not_in_iedb', 'not_built',
-      'cannot_check', 'pct_complete_of_graded'];
-    return Object.fromEntries(keys.map(k => [k, (w: UniverseWorkcell) => w[k] ?? null])) as
+    // Every scope's columns, so a sort survives switching scope.
+    const scoped = SCOPES.flatMap(sc => [sc.total,
+      `${sc.pre}has_ct`, `${sc.pre}no_ct`, `${sc.pre}not_iedb`,
+      `${sc.pre}complete`, `${sc.pre}incomplete`, `${sc.pre}not_built`]);
+    const keys = ['workcell', 'plant', 'models', 'in_iedb', 'built_24mo', 'in_demand',
+      'graded', 'ungraded', 'pct_graded', 'pct_complete_of_graded',
+      ...new Set(scoped)] as SortKey[];
+    return Object.fromEntries(keys.map(k => [k, (w: UniverseWorkcell) =>
+      (w as unknown as Record<string, string | number | null>)[k] ?? null])) as
       Record<SortKey, (w: UniverseWorkcell) => string | number | null>;
   }, []);
 
   const { sorted, sort, toggle } = useSortable<UniverseWorkcell, SortKey>(
     rows, ACCESSORS, { key: 'active', dir: 'desc' });
+
+  // The un-prefixed set spells two buckets differently — `not_in_iedb` and
+  // `no_cycle_time` where the scoped ones use `not_iedb` / `no_ct`. Map here so
+  // the table body can ask for one name and get the right column in every scope.
+  const colOf = (name: string) => (S.pre ? `${S.pre}${name}`
+    : name === 'not_iedb' ? 'not_in_iedb'
+    : name === 'no_ct' ? 'no_cycle_time' : name);
+  const val = (w: UniverseWorkcell, name: string) =>
+    (w as unknown as Record<string, number | null | undefined>)[colOf(name)] ?? 0;
 
   if (isLoading) {
     return <div className="flex h-64 items-center justify-center">
@@ -269,17 +321,33 @@ function CoverageTab() {
         </div>
         <span className="text-xs text-muted-foreground">{sorted.length} workcells</span>
 
-        {/* Far right of the filter row. Exports `sorted` — the rows the table is
-            about to draw, so the search box narrows the file too. */}
+        {/* Same three scopes, same order, same default as the workcell page.
+            The table used to be fixed to Active while that page could switch,
+            so the two screens answered "how many models" differently. */}
+        <div className="ml-auto flex items-center rounded-lg border bg-card p-0.5">
+          {SCOPES.map(sc => (
+            <button key={sc.key} onClick={() => setScope(sc.key)} title={sc.hint}
+              className={cn('rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
+                scope === sc.key ? 'bg-primary text-primary-foreground'
+                                 : 'text-muted-foreground hover:text-foreground')}>
+              {sc.label}
+              <span className="ml-1 tabular-nums opacity-70">
+                {n(t[sc.total])}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Exports `sorted` — the rows the table is about to draw, so the search
+            box and the scope both narrow the file. */}
         <ExportButton
-          className="ml-auto"
           rows={sorted}
-          columns={COVERAGE_COLS}
+          columns={coverageCols}
           filename="cycle_time_coverage"
           sheetName="Coverage"
           title="Cycle Time — Workcell Coverage"
-          subtitle={`Active scope: ran since ${sinceLabel} or on the planner / eDash forward list.`
-            + ` ${n(t.active)} active models across ${sorted.length} workcells.`
+          subtitle={`Scope: ${S.label} — ${S.hint}.`
+            + ` ${n(t[S.total])} models across ${sorted.length} workcells.`
             + (q.trim() ? ` Filtered by "${q.trim()}".` : '')}
           scopeNote={q.trim() ? `filtered from ${(data.workcells ?? []).length}` : undefined}
         />
@@ -294,14 +362,14 @@ function CoverageTab() {
               cards above it read 5,783 for the same workcell — the page argued
               with itself. `models` is still here, last and muted, because the
               dormant count has to stay reconcilable. */}
-          {head('Active', 'active')}
-          {head('Has CT', 'active_has_ct')}
-          {head('No CT', 'active_no_ct')}
-          {head('Not in IEDB', 'active_not_iedb')}
+          {head(S.label === 'All models' ? 'Models' : S.label, S.total as SortKey)}
+          {head('Has CT', colOf('has_ct') as SortKey)}
+          {head('No CT', colOf('no_ct') as SortKey)}
+          {head('Not in IEDB', colOf('not_iedb') as SortKey)}
           <div className="text-center">Split</div>
-          {head('Complete', 'active_complete')}
-          {head('Partial', 'active_incomplete')}
-          {head('No build', 'active_not_built')}
+          {head('Complete', colOf('complete') as SortKey)}
+          {head('Partial', colOf('incomplete') as SortKey)}
+          {head('No build', colOf('not_built') as SortKey)}
           {head('Coverage', 'pct_complete_of_graded')}
           {head('All models', 'models')}
         </div>
@@ -333,21 +401,20 @@ function CoverageTab() {
                 </span>
               </span>
             </span>
-            <span className="text-right font-medium tabular-nums">{n(w.active)}</span>
-            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.active_has_ct)}</span>
-            <span className={cn('text-right tabular-nums', TONE.no_cycle_time)}>{n(w.active_no_ct)}</span>
-            <span className={cn('text-right tabular-nums', TONE.not_in_iedb)}>{n(w.active_not_iedb)}</span>
+            <span className="text-right font-medium tabular-nums">{n(totalOf(w))}</span>
+            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(val(w, 'has_ct'))}</span>
+            <span className={cn('text-right tabular-nums', TONE.no_cycle_time)}>{n(val(w, 'no_ct'))}</span>
+            <span className={cn('text-right tabular-nums', TONE.not_in_iedb)}>{n(val(w, 'not_iedb'))}</span>
             <span className="px-1">
-              <Buckets has={w.active_has_ct ?? 0} no={w.active_no_ct ?? 0}
-                       absent={w.active_not_iedb ?? 0} />
+              <Buckets has={val(w, 'has_ct')} no={val(w, 'no_ct')} absent={val(w, 'not_iedb')} />
             </span>
-            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.active_complete)}</span>
-            <span className={cn('text-right tabular-nums', TONE.incomplete)}>{n(w.active_incomplete)}</span>
-            <span className={cn('text-right tabular-nums', TONE.not_built)}>{n(w.active_not_built)}</span>
-            {/* Complete as a share of what is TIMED and ACTIVE — the only
-                denominator on this row that the reader can see. */}
-            <Bar pct={(w.active_has_ct ?? 0) > 0
-                      ? ((w.active_complete ?? 0) / (w.active_has_ct as number)) * 100 : null}
+            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(val(w, 'complete'))}</span>
+            <span className={cn('text-right tabular-nums', TONE.incomplete)}>{n(val(w, 'incomplete'))}</span>
+            <span className={cn('text-right tabular-nums', TONE.not_built)}>{n(val(w, 'not_built'))}</span>
+            {/* Complete as a share of what is TIMED in the CURRENT scope — the
+                only denominator on this row the reader can actually see. */}
+            <Bar pct={val(w, 'has_ct') > 0
+                      ? (val(w, 'complete') / val(w, 'has_ct')) * 100 : null}
                  tone="bg-emerald-500" />
             <span className="text-right tabular-nums text-muted-foreground" title="Every model incl. dormant">
               {n(w.models)}

@@ -299,7 +299,7 @@ function BomTab({ q }: { q: ReturnType<typeof useCycleTimeBom> }) {
         </label>
         {/* `rows` is the filtered list the table draws next. */}
         <ExportButton
-          rows={rows}
+          rows={rows as unknown as Record<string, unknown>[]}
           columns={BOM_COLS}
           filename={`bom_${data.assembly ?? 'model'}`}
           sheetName="BOM"
