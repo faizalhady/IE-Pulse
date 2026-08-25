@@ -53,7 +53,7 @@ import DemandCompletionReport from './DemandCompletionReport';
 // workcell column went cavernous, and the right-hand columns fell off the edge.
 // min-w now matches what the tracks actually need.
 const GRID =
-  'minmax(13rem,1.4fr) 4.75rem  5rem 5rem 5.5rem 7rem  5rem 5.5rem  4.75rem 5.25rem 4.75rem 5.5rem';
+  'minmax(13rem,1.4fr) 5rem  5.25rem 5rem 5.75rem 6.5rem  5.25rem 5rem 5.5rem 5rem  5.75rem';
 
 const n = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : Number(v).toLocaleString();
@@ -119,15 +119,17 @@ function CoverageTab() {
   }, [data, q]);
 
   const ACCESSORS = useMemo(() => {
-    const keys: SortKey[] = ['workcell', 'models', 'in_iedb', 'built_24mo', 'in_demand',
-      'graded', 'ungraded', 'pct_graded', 'complete', 'incomplete', 'no_cycle_time',
-      'not_in_iedb', 'not_built', 'cannot_check', 'pct_complete_of_graded'];
+    const keys: SortKey[] = ['workcell', 'models', 'active', 'active_has_ct',
+      'active_no_ct', 'active_not_iedb', 'active_complete', 'active_incomplete', 'active_not_built',
+      'in_iedb', 'built_24mo', 'in_demand', 'graded', 'ungraded', 'pct_graded',
+      'complete', 'incomplete', 'no_cycle_time', 'not_in_iedb', 'not_built',
+      'cannot_check', 'pct_complete_of_graded'];
     return Object.fromEntries(keys.map(k => [k, (w: UniverseWorkcell) => w[k] ?? null])) as
       Record<SortKey, (w: UniverseWorkcell) => string | number | null>;
   }, []);
 
   const { sorted, sort, toggle } = useSortable<UniverseWorkcell, SortKey>(
-    rows, ACCESSORS, { key: 'models', dir: 'desc' });
+    rows, ACCESSORS, { key: 'active', dir: 'desc' });
 
   if (isLoading) {
     return <div className="flex h-64 items-center justify-center">
@@ -140,10 +142,18 @@ function CoverageTab() {
   }
 
   const t = data.totals;
-  // The remainder of the timed set: MES had no production to compare against in
-  // the window. Derived by subtraction so the four cards ALWAYS reconcile — a
-  // hand-summed version would drift the day a new verdict is added.
-  const noRecentBuild = (t.has_ct ?? 0) - (t.complete ?? 0) - (t.incomplete ?? 0);
+  // ACTIVE is the scope now: MES saw it run since `active_since`, or it is on
+  // the forward list. Dormant models are still counted in `models` and still
+  // queryable — the page just stops leading with them.
+  const since = data.active_since ?? '2024-09-01';
+  const sinceLabel = new Date(since + 'T00:00:00')
+    .toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  const dormant = (t.models ?? 0) - (t.active ?? 0);
+  // Everything the check reached that is not complete/partial/no-build. Derived
+  // by subtraction so the four tiles ALWAYS reconcile to `active_has_ct` — a
+  // hand-summed version drifts the day a new verdict is added.
+  const other = (t.active_has_ct ?? 0) - (t.active_complete ?? 0)
+              - (t.active_incomplete ?? 0) - (t.active_not_built ?? 0);
   const head = (label: string, k: SortKey, cls = 'justify-end') => (
     <SortHeader label={label} active={sort?.key === k} dir={sort?.dir}
                 onClick={() => toggle(k)} className={cls} />
@@ -152,72 +162,80 @@ function CoverageTab() {
   return (
     <div className="h-full space-y-4 overflow-auto p-4 md:p-6">
 
-      {/* THE THREE BUCKETS lead, because they are known for every model. The
-          completion tiles below them are a share of the ~10% we have checked,
-          and putting those first invited reading them as a share of everything. */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {/* ROW 1 — the ACTIVE pool and how much of it IEDB has timed.
+          This used to lead with all 58,000 models, most of which the factory has
+          not built in years, so the page opened on a number nobody could act on.
+          Scoping to what actually ran turns the headline from "84% unchecked"
+          into "36% of what we build has never been timed" — same data, a
+          question with an owner. */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {[
-          { k: 'models', label: 'Models', hint: 'Every model, deduped across IEDB, MES and demand' },
-          { k: 'has_ct', label: 'Has cycle time', hint: 'IEDB has priced it' },
-          { k: 'no_ct', label: 'No cycle time', hint: 'In IEDB, nobody timed it — an IE task' },
-          { k: 'not_iedb', label: 'Not in IEDB', hint: 'IEDB has never heard of it — create it first' },
-        ].map(c => (
-          <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
-            <div className={cn('text-xl font-semibold tabular-nums',
-              c.k === 'has_ct' && TONE.complete, c.k === 'no_ct' && TONE.no_cycle_time,
-              c.k === 'not_iedb' && TONE.not_in_iedb)}>
-              {n(t[c.k])}
+          { k: 'active', label: 'All models', tone: '',
+            sub: `active since ${sinceLabel}`,
+            hint: `MES saw it run on or after ${since}, or it is on the planner / eDash forward list` },
+          { k: 'active_has_ct', label: 'With cycle time', tone: TONE.complete, pct: true,
+            hint: 'IEDB has priced it, so the comparison can decide something' },
+          { k: 'active_no_ct', label: 'No cycle time', tone: TONE.no_cycle_time, pct: true,
+            hint: 'IEDB carries the model but nobody has timed it — an IE task' },
+          { k: 'active_not_iedb', label: 'Not in IEDB', tone: TONE.not_in_iedb, pct: true,
+            hint: 'IEDB has never heard of it. We build it and it does not exist in the system — it has to be created before it can be timed' },
+          { k: '_dormant', label: 'Dormant', tone: 'text-muted-foreground', v: dormant,
+            sub: 'still stored, not shown',
+            hint: `No MES production since ${since} and not on the forward list. Counted, kept, queryable — just not the priority` },
+        ].map(c => {
+          const v = c.v ?? t[c.k];
+          return (
+            <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
+              <div className={cn('text-xl font-semibold tabular-nums', c.tone)}>{n(v)}</div>
+              {c.sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{c.sub}</div>}
+              {c.pct && (t.active ?? 0) > 0 && (
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  {Math.round((v / t.active) * 100)}% of active
+                </div>
+              )}
             </div>
-            {c.k !== 'models' && t.models > 0 && (
-              <div className="mt-0.5 text-[10px] text-muted-foreground">
-                {Math.round((t[c.k] / t.models) * 100)}% of all models
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Second row: ONE population — the models IEDB has a cycle time for —
-          split into what the check found. Everything here is a share of
-          `has_ct`, and the three outcomes add back up to it exactly.
+      {/* ROW 2 — ONE population: the ACTIVE models IEDB has timed. Every tile
+          here is a share of `active_has_ct`, and the four add back up to it
+          exactly (the fourth is derived by subtraction for that reason).
 
-          It used to mix populations: "Checked" counted 42,177 models (the timed
-          ones plus 2,718 untimed ones graded by earlier demand-scoped runs)
-          while "Complete" counted only timed ones, so the percentages were
-          against a denominator that was not on the card. `not_in_iedb` is left
-          out on purpose — only 205 of the 39,459 land there, and every one is a
-          disagreement between assembly_catalog and raw.parquet, not a real
-          state. They sit inside "No recent build" with the rest.
-
-          "No recent build" is NOT "dead". The check window is 120 days, so a
-          model last built six months ago counts here. That is why it is the
-          biggest number on the page, and why the label says recent. */}
+          "No build found" is 0.8% now, where the old "No recent build" card was
+          84%. Nothing was hidden: a model can no longer be called active unless
+          MES saw it run, so "active but never built" is close to impossible by
+          construction. The old card was an artefact of checking a 120-day window
+          against a pool of every model IEDB ever priced. */}
       <div className="text-[11px] text-muted-foreground">
         Below: the{' '}
-        <span className="font-medium text-foreground">{n(t.has_ct)}</span>{' '}
-        models IEDB has a cycle time for. All of them have been checked against
-        MES. The other {n(t.models - t.has_ct)} have no cycle time to check.
+        <span className="font-medium text-foreground">{n(t.active_has_ct)}</span>{' '}
+        active models IEDB has a cycle time for, compared step by step against
+        what MES actually ran — every day for 3 years across 39 workcells. The
+        other <span className="font-medium text-foreground">{n(t.active_no_ct)}</span>{' '}
+        active models have no cycle time to check.
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { k: 'ct', label: 'Cycle times checked', tone: '', v: t.has_ct, pct: false,
-            hint: 'Every model IEDB has priced, compared step by step against what MES actually ran' },
-          { k: 'complete', label: 'Complete', tone: TONE.complete, v: t.complete, pct: true,
+          { k: 'complete', label: 'Complete', tone: TONE.complete, v: t.active_complete,
             hint: 'Every step the floor ran is named in IEDB and has a cycle time' },
-          { k: 'partial', label: 'Partial', tone: TONE.incomplete, v: t.incomplete, pct: true,
+          { k: 'partial', label: 'Partial', tone: TONE.incomplete, v: t.active_incomplete,
             hint: 'Built recently, but a step is missing a cycle time or our naming '
                 + 'bridge could not identify it. This is the fix list' },
-          { k: 'nomes', label: 'No recent build', tone: 'text-muted-foreground', v: noRecentBuild, pct: true,
-            hint: 'MES found no production in the last 120 days, so there was nothing to '
-                + 'compare the cycle time against. Not dead — just not running lately' },
+          { k: 'nobuild', label: 'No build found', tone: 'text-muted-foreground', v: t.active_not_built,
+            hint: 'On the forward list but MES has no production for it in 3 years — '
+                + 'planned, not yet built' },
+          { k: 'other', label: 'Other', tone: 'text-muted-foreground', v: other,
+            hint: 'Not in the IEDB catalogue, or the workcell is not on MES so no '
+                + 'scan will ever come. Shown so the four tiles reconcile' },
         ].map(c => (
           <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
             <div className={cn('text-xl font-semibold tabular-nums', c.tone)}>{n(c.v)}</div>
-            {c.pct && t.has_ct > 0 && (
+            {(t.active_has_ct ?? 0) > 0 && (
               <div className="mt-0.5 text-[10px] text-muted-foreground">
-                {Math.round((c.v / t.has_ct) * 100)}% of timed models
+                {Math.round((c.v / t.active_has_ct) * 100)}% of timed
               </div>
             )}
           </div>
@@ -237,19 +255,21 @@ function CoverageTab() {
         <div className="grid min-w-[78rem] items-center gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
              style={{ gridTemplateColumns: GRID }}>
           {head('Workcell', 'workcell', 'justify-start')}
-          {head('Models', 'models')}
-          {/* THE THREE BUCKETS. 100% coverage, straight from IEDB. */}
-          {head('Has CT', 'has_ct')}
-          {head('No CT', 'no_ct')}
-          {head('Not in IEDB', 'not_iedb')}
+          {/* EVERY column left of "All models" is the ACTIVE scope. The table
+              used to lead with the full pool, so KEYSIGHT read 24,080 while the
+              cards above it read 5,783 for the same workcell — the page argued
+              with itself. `models` is still here, last and muted, because the
+              dormant count has to stay reconcilable. */}
+          {head('Active', 'active')}
+          {head('Has CT', 'active_has_ct')}
+          {head('No CT', 'active_no_ct')}
+          {head('Not in IEDB', 'active_not_iedb')}
           <div className="text-center">Split</div>
-          {/* Everything right of here is a share of what we CHECKED, not of all. */}
-          {head('Checked', 'graded')}
-          {head('Coverage', 'pct_graded')}
-          {head('Complete', 'complete')}
-          {head('Incomplete', 'incomplete')}
-          {head('Unbuilt', 'not_built')}
-          {head('Built 24mo', 'built_24mo')}
+          {head('Complete', 'active_complete')}
+          {head('Partial', 'active_incomplete')}
+          {head('No build', 'active_not_built')}
+          {head('Coverage', 'pct_complete_of_graded')}
+          {head('All models', 'models')}
         </div>
 
         {sorted.map(w => (
@@ -279,17 +299,25 @@ function CoverageTab() {
                 </span>
               </span>
             </span>
-            <span className="text-right font-medium tabular-nums">{n(w.models)}</span>
-            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.has_ct)}</span>
-            <span className={cn('text-right tabular-nums', TONE.no_cycle_time)}>{n(w.no_ct)}</span>
-            <span className={cn('text-right tabular-nums', TONE.not_in_iedb)}>{n(w.not_iedb)}</span>
-            <span className="px-1"><Buckets has={w.has_ct} no={w.no_ct} absent={w.not_iedb} /></span>
-            <span className="text-right tabular-nums">{n(w.graded)}</span>
-            <Bar pct={w.pct_graded} tone="bg-sky-500" />
-            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.complete)}</span>
-            <span className={cn('text-right tabular-nums', TONE.incomplete)}>{n(w.incomplete)}</span>
-            <span className={cn('text-right tabular-nums', TONE.not_built)}>{n(w.not_built)}</span>
-            <span className="text-right tabular-nums text-muted-foreground">{n(w.built_24mo)}</span>
+            <span className="text-right font-medium tabular-nums">{n(w.active)}</span>
+            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.active_has_ct)}</span>
+            <span className={cn('text-right tabular-nums', TONE.no_cycle_time)}>{n(w.active_no_ct)}</span>
+            <span className={cn('text-right tabular-nums', TONE.not_in_iedb)}>{n(w.active_not_iedb)}</span>
+            <span className="px-1">
+              <Buckets has={w.active_has_ct ?? 0} no={w.active_no_ct ?? 0}
+                       absent={w.active_not_iedb ?? 0} />
+            </span>
+            <span className={cn('text-right tabular-nums', TONE.complete)}>{n(w.active_complete)}</span>
+            <span className={cn('text-right tabular-nums', TONE.incomplete)}>{n(w.active_incomplete)}</span>
+            <span className={cn('text-right tabular-nums', TONE.not_built)}>{n(w.active_not_built)}</span>
+            {/* Complete as a share of what is TIMED and ACTIVE — the only
+                denominator on this row that the reader can see. */}
+            <Bar pct={(w.active_has_ct ?? 0) > 0
+                      ? ((w.active_complete ?? 0) / (w.active_has_ct as number)) * 100 : null}
+                 tone="bg-emerald-500" />
+            <span className="text-right tabular-nums text-muted-foreground" title="Every model incl. dormant">
+              {n(w.models)}
+            </span>
           </button>
         ))}
       </div>

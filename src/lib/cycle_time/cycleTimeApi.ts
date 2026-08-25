@@ -609,6 +609,20 @@ export interface DemandCompletionModel {
   ipk_trolleys?: number | null;
   bottleneck_ct?: number | null;
   station_count?: number | null;
+  /** ACTIVE — MES saw it run since `active_since`, OR it is on the forward list.
+   *  Decided server-side from the same day cache the verdicts use, so a row can
+   *  never read "active" here and "no production" in its verdict. Planned-but-
+   *  never-run counts as active: the scan cannot know a model ordered for next
+   *  month. */
+  active?: boolean | null;
+  /** What MES actually saw, ISO `YYYY-MM-DD`. `last_run` reaches three years
+   *  back, so anything rendering it MUST show the year — a bare "6 Aug" could
+   *  be any of three years. */
+  first_run?: string | null;
+  last_run?: string | null;
+  /** Distinct days this model was scanned, and units built, over the window. */
+  days_run?: number | null;
+  units_built?: number | null;
 }
 
 export interface DemandCompletionScope {
@@ -623,6 +637,16 @@ export interface DemandCompletionResponse {
   as_of: string | null;
   /** Models in the demand list before filtering. */
   total: number;
+  /** Rows matching the workcell/plant/status filters BEFORE `active_only` trims
+   *  them, and how many of those are active. Sent so the scope switch can label
+   *  "All models 24,080" without fetching 24,080 rows it will not draw. */
+  total_all?: number;
+  total_active?: number;
+  total_planned?: number;
+  /** Which scope THIS payload was trimmed to. Not `scope` — that key is the
+   *  plant/workcell picker. */
+  scope_applied?: 'planned' | 'active' | 'all';
+  active_since?: string;
   /** Models after filtering. */
   count: number;
   counts: Record<string, number>;
@@ -932,6 +956,19 @@ export interface UniverseWorkcell {
   not_in_iedb: number;
   not_built: number;
   cannot_check: number;
+  /** THE ACTIVE SCOPE — MES saw it run since `active_since`, or it is on the
+   *  forward list. These are what the table and cards show; the un-prefixed
+   *  fields above stay for the "all models" reconciliation column. */
+  active?: number;
+  active_has_ct?: number;
+  active_no_ct?: number;
+  /** Active, and IEDB has never heard of it. Split out from `active_no_ct`
+   *  because the two have different owners: no_ct is "IE never timed it",
+   *  not_iedb is "somebody has to create it in IEDB first". */
+  active_not_iedb?: number;
+  active_complete?: number;
+  active_incomplete?: number;
+  active_not_built?: number;
   /** IEDB's OWN assembly count for this workcell, from its CustomerStatus report.
    *  DIFFERENT UNIT to `in_iedb`: IEDB counts assembly+revision, we count models
    *  with revisions collapsed — so ours is expected to be smaller. Comparing the
@@ -953,9 +990,26 @@ export interface UniverseModelRow {
   units: number | null;
   next_build: string | null;
   last_build: string | null;
+  /** ACTIVE — MES saw it run since `active_since`, or it is on the forward list.
+   *  Decided server-side from the same day cache the verdicts use, so a row can
+   *  never read "active" here and "no production" in its verdict. */
+  active?: boolean | null;
+  /** What MES actually saw, ISO `YYYY-MM-DD`. `last_run` can be years back, so
+   *  anything rendering it MUST show the year. */
+  first_run?: string | null;
+  last_run?: string | null;
+  days_run?: number | null;
+  units_built?: number | null;
+}
+export interface UniverseWorkcellKpi {
+  active: number; active_has_ct: number; active_no_ct: number; active_not_iedb: number;
+  active_complete: number; active_incomplete: number; active_not_built: number;
+  all_models: number;
 }
 export interface UniverseWorkcellModels {
   workcell: string; models: number; rows: UniverseModelRow[];
+  kpi?: UniverseWorkcellKpi;
+  active_since?: string;
 }
 
 /** One IEDB process, BOTH of its names. The alias is the identifier and what
@@ -975,6 +1029,10 @@ export interface UniverseSummary {
   workcells: UniverseWorkcell[];
   statuses: string[];
   totals: Record<string, number>;
+  /** The line between active and dormant, ISO date. Comes from the backend
+   *  (config.CT_ACTIVE_SINCE) so the page never hardcodes a date that later
+   *  drifts from whatever the scope was actually computed with. */
+  active_since?: string;
   freshness: CompletionReportFreshness[];
   /** Rows deliberately not counted as models, and why. Surfaced rather than
    *  filtered silently — 1,813 MES job records vanishing with no trace is how a
@@ -1188,7 +1246,8 @@ export const cycleTimeApi = {
     list: (customer?: string, status?: string) =>
       get<CompletionSummary>('/completion', { customer, status }),
     /** Demand-ranked completion: what we are building and about to build. */
-    demand: (params?: { plants?: string; workcells?: string; status?: string; limit?: number }) =>
+    demand: (params?: { plants?: string; workcells?: string; status?: string;
+                        limit?: number; scope?: 'planned' | 'active' | 'all' }) =>
       get<DemandCompletionResponse>('/completion/demand', params),
     /** Weekly trend + loss breakdown — the 4Q view. */
     history: (params?: { plants?: string; workcells?: string; weeks?: number }) =>

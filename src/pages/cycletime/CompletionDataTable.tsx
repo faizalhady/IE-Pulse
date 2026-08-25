@@ -144,11 +144,15 @@ function YesNo({ v, yes, no }: { v?: boolean | null; yes: string; no: string }) 
   );
 }
 
-/** "6 Aug" — the year is noise when everything sits inside a 13-week window. */
+/** "6 Aug 2024". The year used to be dropped as noise, which was true while
+ *  every date sat inside a 13-week demand window. The Active scope broke that:
+ *  `last_run` reaches three years back, so "6 Aug" could mean any of three
+ *  years and the reader cannot tell which. */
 function fmtDate(v?: string | null): string {
   if (!v) return '—';
   const d = new Date(v);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return isNaN(d.getTime()) ? '—'
+    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** LBR is a balance target, not a percentage of something — 85%+ is healthy. */
@@ -256,9 +260,33 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
 }) {
   // Scoped when locked. `data.total` and the workcell picker are `!locked`-only,
   // so nothing on this page reads a number that scoping would change.
-  const { data, isLoading, error } = useCycleTimeCompletionDemand(lockedWorkcell);
+  // ACTIVE is the default: what the plant is actually building. "All models"
+  // still exists because the dormant count has to stay reachable — it just
+  // stopped being the thing the page opens on.
+  // PLANNED is the default scope AND the first paint. See the staged fetch below.
+  const [scopeMode, setScopeMode] = useState<'demand' | 'active' | 'all'>('demand');
+
+  // ── STAGED FETCH ────────────────────────────────────────────────────────
+  // Three requests, each waiting on the one before it. Planned is 490KB and
+  // paints in ~0.3s; active (3.8MB) and all (15.5MB) arrive behind it while the
+  // reader is already working. Loading `all` up front cost 4.5s of blank screen
+  // to draw a 712-row default.
+  //
+  // Unlocked (the global report) skips the staging: it has a workcell picker
+  // that changes constantly, so one full payload beats re-fetching per pick.
+  const wc = lockedWorkcell;
+  const qPlanned = useCycleTimeCompletionDemand(wc, 'planned', !!wc);
+  const qActive  = useCycleTimeCompletionDemand(wc, 'active', !!wc && qPlanned.isSuccess);
+  const qAll     = useCycleTimeCompletionDemand(wc, 'all', wc ? qActive.isSuccess : true);
+
+  // Always read from the WIDEST payload in hand and narrow it client-side.
+  // all ⊇ active ⊇ planned, so filtering a superset is exact; the only cost of a
+  // not-yet-arrived stage is that a wider scope briefly shows the narrower set,
+  // which the dot on the button labels rather than hides.
+  const data = qAll.data ?? qActive.data ?? qPlanned.data;
+  const isLoading = !data && (wc ? qPlanned.isLoading : qAll.isLoading);
+  const error = (wc ? qPlanned.error : qAll.error) ?? null;
   const locked = !!lockedWorkcell;
-  const [scopeMode, setScopeMode] = useState<'demand' | 'all'>('demand');
   // Always offered. The payload holds all three tiers now — demand, graded, and
   // every model that merely exists — so "which of them am I looking at?" is a
   // question every call site has to be able to answer, not just the workcell page.
@@ -381,16 +409,57 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
     return r;
   }, [enriched, lockedWorkcell, picked, qDebounced, stageFilter]);
 
-  const scopeCounts = useMemo(() => ({
-    demand: inScope.reduce((n, m) => n + (m.has_demand ? 1 : 0), 0),
-    all: inScope.length,
-  }), [inScope]);
+  // Every payload carries all three totals, so the switch labels itself off the
+  // FIRST small response — the buttons never render blank while the wider scopes
+  // are still in flight. Server totals are pre-filter, so once the reader
+  // narrows with the search box or the stage picker we count the rows in hand
+  // instead, or the labels would contradict the table.
+  const narrowed = !!qDebounced.trim() || stageFilter.length > 0 || !!picked;
+  const scopeCounts = useMemo(() => {
+    const local = {
+      demand: inScope.reduce((n, m) => n + (m.has_demand ? 1 : 0), 0),
+      active: inScope.reduce((n, m) => n + (m.active || m.has_demand ? 1 : 0), 0),
+      all: inScope.length,
+    };
+    if (narrowed || !wc) return local;
+    return {
+      demand: data?.total_planned ?? local.demand,
+      active: data?.total_active ?? local.active,
+      all: data?.total_all ?? local.all,
+    };
+  }, [inScope, narrowed, wc, data?.total_planned, data?.total_active, data?.total_all]);
 
   // The payload is demand UNION graded UNION every model that exists, so
   // "Planned" has to filter or both sides of the toggle render the same rows.
-  const scopedRows = useMemo(
-    () => (scopeMode === 'demand' ? inScope.filter(m => m.has_demand) : inScope),
-    [inScope, scopeMode]);
+  const scopedRows = useMemo(() => {
+    if (scopeMode === 'demand') return inScope.filter(m => m.has_demand);
+    // `|| has_demand` on purpose: a model ordered for next month has not run
+    // yet, so the scan cannot know it. Planned IS active.
+    if (scopeMode === 'active') return inScope.filter(m => m.active || m.has_demand);
+    return inScope;
+  }, [inScope, scopeMode]);
+
+  /** The workcell's headline, computed from `scopedRows` — the exact rows the
+   *  table is about to draw. Deriving it from a second request is how the
+   *  landing page ended up claiming 24,080 models while its own cards said
+   *  5,783 for the same workcell. Cards and table read one array. */
+  const kpi = useMemo(() => {
+    let hasCt = 0, noCt = 0, notIedb = 0, complete = 0, partial = 0, noBuild = 0;
+    for (const m of scopedRows) {
+      if (!m.has_cycle_time) {
+        // Two different owners, so two different tiles: IEDB carries it and
+        // nobody timed it, versus IEDB has never heard of it at all.
+        if (m.in_iedb) noCt++; else notIedb++;
+        continue;
+      }
+      hasCt++;
+      const st = dstatus(m);
+      if (st === 'complete') complete++;
+      else if (st === 'incomplete') partial++;
+      else if (st === 'not_built') noBuild++;
+    }
+    return { total: scopedRows.length, hasCt, noCt, notIedb, complete, partial, noBuild };
+  }, [scopedRows]);
 
   const rows = useMemo(() => {
     if (!statusFilter.length) return scopedRows;
@@ -527,25 +596,67 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
           <div className="ml-auto flex items-center rounded-lg border bg-card p-0.5">
             {([
               ['demand', 'Planned', 'Ordered in the next 13 weeks — the planner window UNION the MES projection'],
-              ['all', 'All models', 'Every model that exists, from IEDB, MES and demand combined — the same total the Coverage page reports'],
+              ['active', 'Active', 'MES saw it run since Sep 2024, or it is planned. What the plant is actually building — the default scope of this module'],
+              ['all', 'All models', 'Every model that exists incl. dormant ones nobody has built in years. The denominator, not the working list'],
             ] as const).map(([k, label, hint]) => (
               <button key={k} onClick={() => setScopeMode(k)} title={hint}
                 className={cn('rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
                   scopeMode === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
                 {label}
-                {/* Counted from the rows in hand. It used to come from a second
-                    request, so the number and the table could disagree. */}
                 <span className="ml-1 tabular-nums opacity-70">{scopeCounts[k].toLocaleString()}</span>
+                {/* This scope's rows are still in flight. The count is right (it
+                    comes from the server) but the table shows a narrower set
+                    until it lands — say so rather than let the number and the
+                    rows disagree in silence. */}
+                {((k === 'active' && !qActive.data && !qAll.data) ||
+                  (k === 'all' && !qAll.data)) && (
+                  <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current opacity-50"
+                        title="still loading — showing a narrower set until it arrives" />
+                )}
               </button>
             ))}
           </div>
         )}
       </div>
 
+      {/* Same six numbers as the landing page, for one workcell. They follow the
+          scope switch, so what the cards claim is always what the table shows —
+          not a fixed scope that disagrees the moment you toggle. */}
+      {locked && (
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-7">
+          {([
+            ['Models', kpi.total, '', `Every model in the current scope (${scopeMode === 'all' ? 'all, incl. dormant' : scopeMode === 'active' ? 'active' : 'planned'})`],
+            ['With cycle time', kpi.hasCt, 'text-emerald-600 dark:text-emerald-400', 'IEDB has priced it, so the comparison can decide something'],
+            ['No cycle time', kpi.noCt, 'text-amber-600 dark:text-amber-400', 'IEDB carries the model but nobody has timed it — an IE task'],
+            ['Not in IEDB', kpi.notIedb, 'text-rose-600 dark:text-rose-400', 'IEDB has never heard of it. It must be created before it can be timed'],
+            ['Complete', kpi.complete, 'text-emerald-600 dark:text-emerald-400', 'Every step the floor ran is named in IEDB and has a cycle time'],
+            ['Partial', kpi.partial, 'text-orange-600 dark:text-orange-400', 'A step is missing a cycle time, or the naming bridge could not identify it'],
+            ['No build found', kpi.noBuild, 'text-muted-foreground', 'MES has no production for it in the 3-year window'],
+          ] as const).map(([label, v, tone, hint]) => (
+            <div key={label} className="rounded-xl border bg-card p-2.5" title={hint}>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+              <div className={cn('text-lg font-semibold tabular-nums', tone)}>
+                {v.toLocaleString()}
+              </div>
+              {label !== 'Models' && kpi.total > 0 && (
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  {Math.round((v / (label === 'With cycle time' || label === 'No cycle time'
+                    || label === 'Not in IEDB' ? kpi.total : Math.max(kpi.hasCt, 1))) * 100)}%
+                  {label === 'With cycle time' || label === 'No cycle time'
+                    || label === 'Not in IEDB' ? ' of scope' : ' of timed'}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="text-xs text-muted-foreground">
         {sorted.length.toLocaleString()} model{sorted.length === 1 ? '' : 's'}
         {!locked && sorted.length !== data.total && <> of {data.total.toLocaleString()}</>}
-        {locked && (scopeMode === 'all' ? ' owned by this workcell' : ' in demand for this workcell')}
+        {locked && (scopeMode === 'all' ? ' owned by this workcell'
+                    : scopeMode === 'active' ? ' active in this workcell'
+                    : ' in demand for this workcell')}
       </div>
 
       {/* ── Table ────────────────────────────────────────────────────────── */}

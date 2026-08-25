@@ -7,7 +7,6 @@ import { AppProvider, useApp } from "@/context/AppContext";
 import { prefetchOleData } from "@/hooks/ole/useOleData";
 import { BUILD_BASENAME, includesApp } from "@/lib/buildContext";
 import BayDetail from "@/pages/BayDetail";
-import CycleTimeWorkcells from "@/pages/cycletime/CycleTimeWorkcells";
 // Ask (the Jabil Universe chat) ships in the core build only. Lazy chunks: a build that
 // never enables it never loads the AI SDK, streamdown and shiki either.
 const AskPage = lazy(() => import("@/pages/ask/AskPage"));
@@ -187,7 +186,13 @@ function AppShell() {
             {includesApp('cycle-time') && <>
               {/* /cycle-time/home is the landing page. */}
               <Route path="/cycle-time" element={<Navigate to="/cycle-time/home" replace />} />
-              <Route path="/cycle-time/workcells" element={<CycleTimeWorkcells />} />
+              {/* RETIRED 2026-08-26. The old landing page, superseded by
+                  /cycle-time/home. Its nav entry was already commented out in
+                  config/apps.ts, so it was only reachable by a bookmark — and it
+                  reads the pre-active-scope numbers, which now disagree with
+                  every other screen. Redirect, not delete: a stale bookmark
+                  should land somewhere current, not 404. */}
+              <Route path="/cycle-time/workcells" element={<Navigate to="/cycle-time/home" replace />} />
 
               {/* The OLD workcell page is gone. Not merely unlinked — routed to
                   a redirect, because unlinking leaves it alive at a URL that is

@@ -80,7 +80,7 @@ export default function CycleTimeWorkcell() {
         <div className="flex items-center gap-3 min-w-0">
           {/* Back to league table */}
           <button
-            onClick={() => navigate('/cycle-time/workcells')}
+            onClick={() => navigate('/cycle-time/home')}
             title="All workcells"
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
           >

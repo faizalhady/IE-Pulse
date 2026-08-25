@@ -124,7 +124,17 @@ export function useCycleTimeCompletion() {
  *  Filtering is done client-side from one payload: the whole list is ~3.9k rows
  *  and the picker changes constantly, so re-fetching per selection would be far
  *  more traffic than sending it once. */
-export function useCycleTimeCompletionDemand(workcell?: string) {
+export type DemandScope = 'planned' | 'active' | 'all';
+
+/** `scope` picks how much of the workcell to send; `enabled` staggers the calls.
+ *
+ *  The workcell page fires all three: planned renders the page (326ms / 490KB
+ *  for KEYSIGHT), then active and all fetch in the background while the reader
+ *  is already browsing. Waiting for `all` before first paint cost 4.5s and
+ *  15.5MB to draw a table whose default scope is 712 rows. */
+export function useCycleTimeCompletionDemand(
+  workcell?: string, scope: DemandScope = 'all', enabled = true,
+) {
   // Unscoped is 43,020 models / 24.8 MB of JSON, and the global report needs it
   // that way — its picker changes constantly and re-fetching per selection is
   // far more traffic than sending it once. A LOCKED workcell page has no picker:
@@ -134,8 +144,16 @@ export function useCycleTimeCompletionDemand(workcell?: string) {
   // The key carries the scope, so the locked page and the global report hold
   // separate cache entries and neither can serve the other the wrong rows.
   return useQuery({
-    queryKey: [...ctKeys.all, 'completionDemand', workcell ?? ''] as const,
-    queryFn:  () => cycleTimeApi.completion.demand(workcell ? { workcells: workcell } : undefined),
+    // `activeOnly` is part of the key: the two scopes are different row sets and
+    // one must never be served from the other's cache entry. KEYSIGHT scoped is
+    // 3.8MB against 15.5MB unscoped, so the default page load asks for the small
+    // one and only pays for the rest if the reader switches to "All models".
+    queryKey: [...ctKeys.all, 'completionDemand', workcell ?? '', scope] as const,
+    queryFn:  () => cycleTimeApi.completion.demand({
+      ...(workcell ? { workcells: workcell } : {}),
+      ...(scope !== 'all' ? { scope } : {}),
+    }),
+    enabled,
     staleTime: 30 * 60_000,
   });
 }
