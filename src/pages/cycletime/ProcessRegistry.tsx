@@ -39,11 +39,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cycleTimeApi, type RegistryQuestion } from '@/lib/cycle_time/cycleTimeApi';
+import { ExportButton } from '@/components/shared/ExportButton';
+import type { ExportColumn } from '@/lib/cycle_time/exportTable';
 import { cn } from '@/lib/utils';
 
 import ProcessTable from './ProcessTable';
 
 /** "FVT#2(1035) HLA#3(7)" → [{key:'FVT#2', n:1035}, …] */
+/** The unanswered-step queue: what MES calls a step, how often it shows up, and
+ *  what the bridge guessed. Exported so the naming decisions can be made in a
+ *  spreadsheet with the people who know the floor, then typed back in. */
+const QUESTION_COLS: ExportColumn<RegistryQuestion>[] = [
+  { key: 'mes_step',       header: 'MES step name', width: 34 },
+  { key: 'workcell',       header: 'Workcell',      width: 22 },
+  { key: 'bay',            header: 'Bay',           width: 14 },
+  { key: 'models',         header: 'Models',        width: 10, numFmt: '#,##0' },
+  { key: 'scans',          header: 'Scans',         width: 12, numFmt: '#,##0' },
+  { key: 'suggestion',     header: 'Suggested alias', width: 26 },
+  { key: 'confidence',     header: 'Match on',      width: 18 },
+  { key: 'candidates',     header: 'Other candidates', width: 30,
+    get: q => (q.candidates ?? []).join(' · ') },
+  { key: 'scanned_before', header: 'Scanned before', width: 30 },
+  { key: 'scanned_after',  header: 'Scanned after',  width: 30 },
+  { key: 'prior_answer',   header: 'Prior answer',   width: 16 },
+  { key: 'prior_alias',    header: 'Prior alias',    width: 20 },
+];
+
 function parseNeighbours(s: string) {
   return (s || '').split(/\s+/).filter(Boolean).map((tok) => {
     const m = tok.match(/^(.*?)\((\d+)\)$/);
@@ -137,6 +158,19 @@ function QuestionsList({ workcell }: { workcell: string }) {
         <span className="text-xs text-muted-foreground">
           {shown.length} of {questions.length} unanswered
         </span>
+        {/* `shown` is the filtered list, so the file matches the screen. */}
+        <ExportButton
+          className="ml-auto"
+          rows={shown}
+          columns={QUESTION_COLS}
+          filename={`process_registry_${workcell || 'all'}`}
+          sheetName="Unanswered steps"
+          title={`Process Registry — ${workcell || 'all workcells'}`}
+          subtitle={`${shown.length} of ${questions.length} unanswered step names`
+            + (filter.trim() ? ` · filtered by "${filter.trim()}"` : '')}
+          scopeNote={shown.length !== questions.length
+            ? `filtered from ${questions.length}` : undefined}
+        />
       </div>
 
       {picked.size > 0 && (

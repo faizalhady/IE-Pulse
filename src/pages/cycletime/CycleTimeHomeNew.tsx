@@ -41,6 +41,8 @@ import { useSortable } from '@/hooks/shared/useSortable';
 import { cycleTimeApi, type UniverseWorkcell } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { ExportButton } from '@/components/shared/ExportButton';
+import type { ExportColumn } from '@/lib/cycle_time/exportTable';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
 import { UnderlineTabs } from '@/components/shared/UnderlineTabs';
 import DemandCompletionReport from './DemandCompletionReport';
@@ -102,6 +104,23 @@ function Bar({ pct, tone }: { pct: number | null; tone: string }) {
 }
 
 type SortKey = keyof UniverseWorkcell;
+
+/** Mirrors the on-screen columns, in the same order. Kept beside the table so
+ *  adding a column to one and forgetting the other is visible in one diff. */
+const COVERAGE_COLS: ExportColumn<UniverseWorkcell>[] = [
+  { key: 'workcell',           header: 'Workcell',        width: 26 },
+  { key: 'plant',              header: 'Plant',           width: 14 },
+  { key: 'active',             header: 'Active',          width: 10, numFmt: '#,##0' },
+  { key: 'active_has_ct',      header: 'With cycle time', width: 15, numFmt: '#,##0' },
+  { key: 'active_no_ct',       header: 'No cycle time',   width: 14, numFmt: '#,##0' },
+  { key: 'active_not_iedb',    header: 'Not in IEDB',     width: 13, numFmt: '#,##0' },
+  { key: 'active_complete',    header: 'Complete',        width: 11, numFmt: '#,##0' },
+  { key: 'active_incomplete',  header: 'Partial',         width: 11, numFmt: '#,##0' },
+  { key: 'active_not_built',   header: 'No build found',  width: 14, numFmt: '#,##0' },
+  { key: 'pct_complete',       header: '% complete of timed', width: 18, numFmt: '0.0',
+    get: w => (w.active_has_ct ? ((w.active_complete ?? 0) / w.active_has_ct) * 100 : null) },
+  { key: 'models',             header: 'All models (incl. dormant)', width: 22, numFmt: '#,##0' },
+];
 
 function CoverageTab() {
   const navigate = useNavigate();
@@ -249,6 +268,21 @@ function CoverageTab() {
                  className="h-8 w-56 pl-8 text-xs" />
         </div>
         <span className="text-xs text-muted-foreground">{sorted.length} workcells</span>
+
+        {/* Far right of the filter row. Exports `sorted` — the rows the table is
+            about to draw, so the search box narrows the file too. */}
+        <ExportButton
+          className="ml-auto"
+          rows={sorted}
+          columns={COVERAGE_COLS}
+          filename="cycle_time_coverage"
+          sheetName="Coverage"
+          title="Cycle Time — Workcell Coverage"
+          subtitle={`Active scope: ran since ${sinceLabel} or on the planner / eDash forward list.`
+            + ` ${n(t.active)} active models across ${sorted.length} workcells.`
+            + (q.trim() ? ` Filtered by "${q.trim()}".` : '')}
+          scopeNote={q.trim() ? `filtered from ${(data.workcells ?? []).length}` : undefined}
+        />
       </div>
 
       <div className="overflow-x-auto rounded-xl border bg-card">

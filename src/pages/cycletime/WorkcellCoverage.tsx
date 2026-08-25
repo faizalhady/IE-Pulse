@@ -31,6 +31,8 @@ import { Input } from '@/components/ui/input';
 import { SortHeader } from '@/components/shared/SortHeader';
 import { useSortable } from '@/hooks/shared/useSortable';
 import { cycleTimeApi, type UniverseWorkcell } from '@/lib/cycle_time/cycleTimeApi';
+import { ExportButton } from '@/components/shared/ExportButton';
+import type { ExportColumn } from '@/lib/cycle_time/exportTable';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 
@@ -41,6 +43,21 @@ const n = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : Number(v).toLocaleString();
 
 /** Same colours the Report tab uses, so a status means one thing platform-wide. */
+/** Same shape as the landing page's table — this page renders the identical
+ *  summary, so the export has to agree with it column for column. */
+const COVERAGE_COLS: ExportColumn<UniverseWorkcell>[] = [
+  { key: 'workcell',          header: 'Workcell',        width: 26 },
+  { key: 'plant',             header: 'Plant',           width: 14 },
+  { key: 'active',            header: 'Active',          width: 10, numFmt: '#,##0' },
+  { key: 'active_has_ct',     header: 'With cycle time', width: 15, numFmt: '#,##0' },
+  { key: 'active_no_ct',      header: 'No cycle time',   width: 14, numFmt: '#,##0' },
+  { key: 'active_not_iedb',   header: 'Not in IEDB',     width: 13, numFmt: '#,##0' },
+  { key: 'active_complete',   header: 'Complete',        width: 11, numFmt: '#,##0' },
+  { key: 'active_incomplete', header: 'Partial',         width: 11, numFmt: '#,##0' },
+  { key: 'active_not_built',  header: 'No build found',  width: 14, numFmt: '#,##0' },
+  { key: 'models',            header: 'All models (incl. dormant)', width: 22, numFmt: '#,##0' },
+];
+
 const TONE: Record<string, string> = {
   complete: 'text-emerald-600 dark:text-emerald-400',
   incomplete: 'text-amber-700 dark:text-amber-400',
@@ -215,6 +232,16 @@ export default function WorkcellCoverage() {
                  className="h-8 w-56 pl-8 text-xs" />
         </div>
         <span className="text-xs text-muted-foreground">{sorted.length} workcells</span>
+        <ExportButton
+          className="ml-auto"
+          rows={sorted}
+          columns={COVERAGE_COLS}
+          filename="cycle_time_coverage"
+          sheetName="Coverage"
+          title="Cycle Time — Workcell Coverage"
+          subtitle={`${sorted.length} workcells`
+            + (q.trim() ? ` · filtered by "${q.trim()}"` : '')}
+        />
       </div>
 
       <div className="overflow-x-auto rounded-xl border bg-card">

@@ -34,6 +34,8 @@ import type { CycleTimeAssemblyListRow, DemandCompletionModel } from '@/lib/cycl
 // ONE vocabulary, shared with the 4Q — see cycleTimeConstants. These used to be
 // declared here AND in CompletionFourQuadrant, and had already drifted apart.
 import { REASON_LABEL, STATUS_META, STATUS_ORDER, dstatus } from '@/lib/cycle_time/cycleTimeConstants';
+import { ExportButton } from '@/components/shared/ExportButton';
+import type { ExportColumn } from '@/lib/cycle_time/exportTable';
 import { cn } from '@/lib/utils';
 import { ArrowUpRight, Check, ChevronDown, ChevronsUpDown, Loader2, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -154,6 +156,40 @@ function fmtDate(v?: string | null): string {
   return isNaN(d.getTime()) ? '—'
     : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+/** Mirrors the on-screen columns. `get` is used wherever the cell shows a
+ *  derived value, so the sheet says what the screen said — not the raw field.
+ *  Last build follows the same rule as the cell: the #21 scan wins, the plan is
+ *  the fallback. */
+const MODEL_COLS: ExportColumn<Row>[] = [
+  { key: 'customer',    header: 'Workcell',     width: 24 },
+  { key: 'plant',       header: 'Plant',        width: 12 },
+  { key: 'assembly',    header: 'Model',        width: 24 },
+  { key: 'status',      header: 'Status',       width: 15, get: m => dstatus(m) },
+  { key: 'has_cycle_time', header: 'Has cycle time', width: 14,
+    get: m => (m.has_cycle_time ? 'Yes' : 'No'), align: 'center' },
+  { key: 'in_iedb',     header: 'In IEDB',      width: 10,
+    get: m => (m.in_iedb == null ? '' : m.in_iedb ? 'Yes' : 'No'), align: 'center' },
+  { key: 'active',      header: 'Active',       width: 9,
+    get: m => (m.active ? 'Yes' : 'No'), align: 'center' },
+  { key: 'units',       header: 'Demand units', width: 13, numFmt: '#,##0' },
+  { key: 'next_build',  header: 'Next build',   width: 13,
+    get: m => (m.next_build ? String(m.next_build).slice(0, 10) : '') },
+  { key: 'last_build',  header: 'Last build',   width: 13,
+    get: m => { const v = m.last_run ?? m.last_build; return v ? String(v).slice(0, 10) : ''; } },
+  { key: 'last_source', header: 'Last build from', width: 15,
+    get: m => (m.last_run ? 'MES scan' : m.last_build ? 'Plan' : '') },
+  { key: 'days_run',    header: 'Days seen',    width: 11, numFmt: '#,##0' },
+  { key: 'units_built', header: 'Units built',  width: 14, numFmt: '#,##0' },
+  { key: 'expected',    header: 'Steps expected', width: 14, numFmt: '#,##0' },
+  { key: 'present',     header: 'Steps present',  width: 13, numFmt: '#,##0' },
+  { key: 'coverage',    header: 'Coverage %',   width: 12, numFmt: '0.0' },
+  { key: 'no_ct',       header: 'Steps no CT',  width: 12, numFmt: '#,##0' },
+  { key: 'unmapped',    header: 'Steps unmapped', width: 14, numFmt: '#,##0' },
+  { key: 'lbr',         header: 'LBR %',        width: 10, numFmt: '0.0' },
+  { key: 'ipk_trolleys', header: 'IPK trolleys', width: 13, numFmt: '#,##0' },
+  { key: 'smh',         header: 'SMH',          width: 10, numFmt: '#,##0.00' },
+];
 
 /** LBR is a balance target, not a percentage of something — 85%+ is healthy. */
 const LBR_TARGET = 85;
@@ -653,12 +689,35 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
         </div>
       )}
 
-      <div className="text-xs text-muted-foreground">
-        {sorted.length.toLocaleString()} model{sorted.length === 1 ? '' : 's'}
-        {!locked && sorted.length !== data.total && <> of {data.total.toLocaleString()}</>}
-        {locked && (scopeMode === 'all' ? ' owned by this workcell'
-                    : scopeMode === 'active' ? ' active in this workcell'
-                    : ' in demand for this workcell')}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>
+          {sorted.length.toLocaleString()} model{sorted.length === 1 ? '' : 's'}
+          {!locked && sorted.length !== data.total && <> of {data.total.toLocaleString()}</>}
+          {locked && (scopeMode === 'all' ? ' owned by this workcell'
+                      : scopeMode === 'active' ? ' active in this workcell'
+                      : ' in demand for this workcell')}
+        </span>
+
+        {/* `sorted` is the post-filter, post-sort array the table draws next,
+            so the file matches the screen exactly. */}
+        <ExportButton
+          className="ml-auto"
+          rows={sorted}
+          columns={MODEL_COLS}
+          filename={locked ? `cycle_time_${wcKey(lockedWorkcell ?? '')}` : 'cycle_time_models'}
+          sheetName="Models"
+          title={locked ? `Cycle Time — ${lockedWorkcell}` : 'Cycle Time — Models'}
+          subtitle={[
+            `Scope: ${scopeMode === 'all' ? 'all models incl. dormant'
+              : scopeMode === 'active' ? 'active (ran since Sep 2024 or planned)'
+              : 'planned (13-week planner + eDash forward)'}`,
+            statusFilter.length ? `Status: ${statusFilter.join(', ')}` : '',
+            stageFilter.length ? `Workcenter: ${stageFilter.join('+')}` : '',
+            qDebounced.trim() ? `Search: "${qDebounced.trim()}"` : '',
+          ].filter(Boolean).join(' · ')}
+          scopeNote={sorted.length !== scopeCounts.all
+            ? `filtered from ${scopeCounts.all.toLocaleString()}` : undefined}
+        />
       </div>
 
       {/* ── Table ────────────────────────────────────────────────────────── */}
@@ -736,7 +795,19 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
                 className="absolute left-0 top-0 grid w-full cursor-pointer items-center gap-2 border-b px-4 text-left text-xs hover:bg-muted/30 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary"
                 style={{ gridTemplateColumns: grid, height: ROW_H, transform: `translateY(${v.start}px)` }}>
                 <span className="tabular-nums text-muted-foreground">{v.index + 1}</span>
-                {!locked && <span className="truncate font-medium" title={m.customer}>{m.customer}</span>}
+                {/* The WORKCELL navigates to its own page, the same way the
+                    model name navigates to the model. stopPropagation keeps the
+                    row's drawer handler from firing on the way past. */}
+                {!locked && (
+                  <Link
+                    to={`/cycle-time/${encodeURIComponent(m.customer)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    title={`Open ${m.customer}`}
+                    className="truncate font-medium underline-offset-2 transition-colors hover:text-primary hover:underline focus-visible:text-primary focus-visible:underline focus:outline-none"
+                  >
+                    {m.customer}
+                  </Link>
+                )}
                 {/* The model NAME navigates; the rest of the row opens the drawer.
                     stopPropagation keeps the row handler from firing too, so a
                     click on the name does one thing rather than both. */}
