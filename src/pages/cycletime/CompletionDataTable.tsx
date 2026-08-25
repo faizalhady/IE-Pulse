@@ -496,7 +496,14 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
       else if (st === 'incomplete') partial++;
       else if (st === 'not_built') noBuild++;
     }
-    return { total: scopedRows.length, hasCt, noCt, notIedb, complete, partial, noBuild };
+    // Same bucket as the landing page: no_build absorbs every verdict the
+    // comparison could not decide, so has_ct = complete + partial + noBuild
+    // exactly. Two screens showing a different "No build found" for the same
+    // workcell is the drift this rebuild exists to stop.
+    return { total: scopedRows.length, hasCt, noCt, notIedb, complete, partial,
+             noBuild: hasCt - complete - partial,
+             /** The part of noBuild that genuinely has no MES production. */
+             trulyNoBuild: noBuild };
   }, [scopedRows]);
 
   const rows = useMemo(() => {
@@ -669,7 +676,10 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
             ['Not in IEDB', kpi.notIedb, 'text-rose-600 dark:text-rose-400', 'IEDB has never heard of it. It must be created before it can be timed'],
             ['Complete', kpi.complete, 'text-emerald-600 dark:text-emerald-400', 'Every step the floor ran is named in IEDB and has a cycle time'],
             ['Partial', kpi.partial, 'text-orange-600 dark:text-orange-400', 'A step is missing a cycle time, or the naming bridge could not identify it'],
-            ['No build found', kpi.noBuild, 'text-muted-foreground', 'MES has no production for it in the 3-year window'],
+            ['No build found', kpi.noBuild, 'text-muted-foreground',
+              `Nothing to compare against. ${kpi.trulyNoBuild.toLocaleString()} have no MES `
+              + `production in the window; the remaining ${(kpi.noBuild - kpi.trulyNoBuild).toLocaleString()} `
+              + 'could not be decided — not in the IEDB catalogue, workcell not on MES, or no verdict yet'],
           ] as const).map(([label, v, tone, hint]) => (
             <div key={label} className="rounded-xl border bg-card p-2.5" title={hint}>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>

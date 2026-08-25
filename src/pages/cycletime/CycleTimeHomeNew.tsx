@@ -226,10 +226,16 @@ function CoverageTab() {
   const tv = (name: string) => t[colOf(name)] ?? 0;
   const scopeTotal = t[S.total] ?? 0;
   const outOfScope = (t.models ?? 0) - scopeTotal;
-  // Everything the check reached that is not complete/partial/no-build. Derived
-  // by subtraction so the four tiles ALWAYS reconcile to the scope's has_ct — a
-  // hand-summed version drifts the day a new verdict is added.
-  const other = tv('has_ct') - tv('complete') - tv('incomplete') - tv('not_built');
+  // NO BUILD FOUND = not_built + everything else the comparison could not
+  // decide. Derived by subtraction, so the three tiles ALWAYS reconcile to the
+  // scope's has_ct — a hand-summed version drifts the day a new verdict is added.
+  //
+  // The tail it absorbs is small and mixed: models the catalogue and raw.parquet
+  // disagree about, workcells that are not on MES at all, and a handful with no
+  // verdict yet. They were their own "Other" tile, which bought a question at
+  // every readout and answered nothing anyone could act on. The tooltip still
+  // spells out the split so the number is never a black box to whoever asks.
+  const noBuild = tv('has_ct') - tv('complete') - tv('incomplete');
   const head = (label: string, k: SortKey, cls = 'justify-end') => (
     <SortHeader label={label} active={sort?.key === k} dir={sort?.dir}
                 onClick={() => toggle(k)} className={cls} />
@@ -304,19 +310,18 @@ function CoverageTab() {
         </span>{' '}
         have no cycle time to check.
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { k: 'complete', label: 'Complete', tone: TONE.complete, v: tv('complete'),
             hint: 'Every step the floor ran is named in IEDB and has a cycle time' },
           { k: 'partial', label: 'Partial', tone: TONE.incomplete, v: tv('incomplete'),
             hint: 'Built recently, but a step is missing a cycle time or our naming '
                 + 'bridge could not identify it. This is the fix list' },
-          { k: 'nobuild', label: 'No build found', tone: 'text-muted-foreground', v: tv('not_built'),
-            hint: 'On the forward list but MES has no production for it in 3 years — '
-                + 'planned, not yet built' },
-          { k: 'other', label: 'Other', tone: 'text-muted-foreground', v: other,
-            hint: 'Not in the IEDB catalogue, or the workcell is not on MES so no '
-                + 'scan will ever come. Shown so the four tiles reconcile' },
+          { k: 'nobuild', label: 'No build found', tone: 'text-muted-foreground', v: noBuild,
+            hint: `Nothing to compare against. ${n(tv('not_built'))} have no MES production `
+                + `in the window; the remaining ${n(noBuild - tv('not_built'))} could not be `
+                + 'decided — the catalogue and the cycle-time mart disagree about them, their '
+                + 'workcell is not on MES, or no verdict has been reached yet' },
         ].map(c => (
           <div key={c.k} className="rounded-xl border bg-card p-3" title={c.hint}>
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{c.label}</div>
