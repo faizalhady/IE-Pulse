@@ -41,6 +41,7 @@ import { useSortable } from '@/hooks/shared/useSortable';
 import { cycleTimeApi, type UniverseWorkcell } from '@/lib/cycle_time/cycleTimeApi';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { useCycleTimeCompletionDemand } from '@/hooks/cycle_time/useCycleTimeData';
 import { ExportButton } from '@/components/shared/ExportButton';
 import type { ExportColumn } from '@/lib/cycle_time/exportTable';
 import { getWorkcellLogo, getWorkcellLogoBg } from '@/lib/ole/oleConstants';
@@ -466,6 +467,25 @@ const TABS = [
 
 export default function CycleTimeHomeNew() {
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('coverage');
+
+  // ── SEQUENTIAL PREFETCH ─────────────────────────────────────────────────
+  // Coverage is 24KB / ~20ms. Report is 40MB, ~1.9s of server time plus the
+  // transfer and a 40MB JSON parse in the browser - so clicking Report used to
+  // buy several seconds of blank tab, every time, on a page whose first tab was
+  // already sitting there doing nothing.
+  //
+  // Fire it as soon as Coverage has landed. It warms the SAME react-query key
+  // DemandCompletionReport reads (workcell '', scope 'all'), so by the time the
+  // tab is clicked the data is already in cache and the switch is instant.
+  // Deliberately AFTER coverage, not alongside: 40MB in parallel would starve
+  // the request the user is actually looking at.
+  const coverage = useQuery({
+    queryKey: ['ct-universe-summary'],
+    queryFn: () => cycleTimeApi.universe.summary(),
+    staleTime: 1000 * 60 * 10,
+  });
+  useCycleTimeCompletionDemand(undefined, 'all', coverage.isSuccess);
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="flex-shrink-0 border-b border-border bg-background px-4 pt-4 md:px-6">
