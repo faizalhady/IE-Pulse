@@ -22,13 +22,17 @@ import { useState } from 'react';
 
 import ProcessTable from './ProcessTable';
 
+/** Scanned first, and the default. Configured is 72,692 couples of which 67,394
+ *  have never been scanned, so opening on it meant opening on 93% noise. Scanned
+ *  is the work list — the same reasoning that made Active the default everywhere
+ *  else in this module. */
 const SCOPES: { key: ProcessScope; label: string; hint: string }[] = [
-  { key: 'configured', label: 'Configured', hint: 'Every step on a MES route — 72,692 couples, most never scanned' },
   { key: 'scanned', label: 'Scanned', hint: 'Steps MES actually recorded a scan on — 5,344 couples. The work list.' },
+  { key: 'configured', label: 'Configured', hint: 'Every step on a MES route — 72,692 couples, most never scanned' },
 ];
 
 export default function ProcessesGlobal() {
-  const [scope, setScope] = useState<ProcessScope>('configured');
+  const [scope, setScope] = useState<ProcessScope>('scanned');
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -40,23 +44,28 @@ export default function ProcessesGlobal() {
             tick several and answer them together.
           </p>
         </div>
-        <div className="flex rounded-md border p-0.5">
-          {SCOPES.map((s) => (
-            <button key={s.key} type="button" onClick={() => setScope(s.key)} title={s.hint}
-              className={cn('rounded px-3 py-1 text-xs font-medium transition-colors',
-                scope === s.key ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted')}>
-              {s.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="min-h-0 flex-1">
         {/* keyed on scope: the two lists have different filters, sort and
             selection, and carrying one over to the other shows a selection the
             new list does not contain. */}
-        <ProcessTable key={scope} scope={scope} />
+        <ProcessTable
+          key={scope}
+          scope={scope}
+          scopeToggle={
+            <div className="flex items-center rounded-lg border bg-card p-0.5">
+              {SCOPES.map((s) => (
+                <button key={s.key} type="button" onClick={() => setScope(s.key)} title={s.hint}
+                  className={cn('rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    scope === s.key ? 'bg-primary text-primary-foreground'
+                                    : 'text-muted-foreground hover:text-foreground')}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          }
+        />
       </div>
     </div>
   );
