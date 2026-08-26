@@ -484,7 +484,10 @@ export default function CycleTimeHomeNew() {
     queryFn: () => cycleTimeApi.universe.summary(),
     staleTime: 1000 * 60 * 10,
   });
-  useCycleTimeCompletionDemand(undefined, 'all', coverage.isSuccess);
+  // Warm the report's FIRST stage (2.9MB), not the whole 40MB. The tab stages
+  // active and all itself once mounted, so this buys an instant switch without
+  // making every reader who never opens Report pay for the full set.
+  useCycleTimeCompletionDemand(undefined, 'planned', coverage.isSuccess);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">

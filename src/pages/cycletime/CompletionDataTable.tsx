@@ -310,20 +310,23 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
   // reader is already working. Loading `all` up front cost 4.5s of blank screen
   // to draw a 712-row default.
   //
-  // Unlocked (the global report) skips the staging: it has a workcell picker
-  // that changes constantly, so one full payload beats re-fetching per pick.
+  // The GLOBAL report stages too. It used to take the whole 40MB up front
+  // because its workcell picker changes constantly and re-fetching per pick
+  // would be worse - but the picker filters CLIENT-side out of whatever is in
+  // hand, so it never needed the full set to start. Unfiltered: planned 2.9MB,
+  // active 11.1MB, all 40.3MB. First paint is now the 2.9MB.
   const wc = lockedWorkcell;
-  const qPlanned = useCycleTimeCompletionDemand(wc, 'planned', !!wc);
-  const qActive  = useCycleTimeCompletionDemand(wc, 'active', !!wc && qPlanned.isSuccess);
-  const qAll     = useCycleTimeCompletionDemand(wc, 'all', wc ? qActive.isSuccess : true);
+  const qPlanned = useCycleTimeCompletionDemand(wc, 'planned', true);
+  const qActive  = useCycleTimeCompletionDemand(wc, 'active', qPlanned.isSuccess);
+  const qAll     = useCycleTimeCompletionDemand(wc, 'all', qActive.isSuccess);
 
   // Always read from the WIDEST payload in hand and narrow it client-side.
   // all ⊇ active ⊇ planned, so filtering a superset is exact; the only cost of a
   // not-yet-arrived stage is that a wider scope briefly shows the narrower set,
   // which the dot on the button labels rather than hides.
   const data = qAll.data ?? qActive.data ?? qPlanned.data;
-  const isLoading = !data && (wc ? qPlanned.isLoading : qAll.isLoading);
-  const error = (wc ? qPlanned.error : qAll.error) ?? null;
+  const isLoading = !data && qPlanned.isLoading;
+  const error = qPlanned.error ?? null;
   const locked = !!lockedWorkcell;
   // Always offered. The payload holds all three tiers now — demand, graded, and
   // every model that merely exists — so "which of them am I looking at?" is a
@@ -459,7 +462,10 @@ export default function CompletionDataTable({ lockedWorkcell, universeToggle }: 
       active: inScope.reduce((n, m) => n + (m.active || m.has_demand ? 1 : 0), 0),
       all: inScope.length,
     };
-    if (narrowed || !wc) return local;
+    // Server totals are pre-filter. Once the reader narrows - search box, stage
+    // picker, or the workcell picker on the global report - count the rows in
+    // hand instead, or the labels contradict the table.
+    if (narrowed) return local;
     return {
       demand: data?.total_planned ?? local.demand,
       active: data?.total_active ?? local.active,
